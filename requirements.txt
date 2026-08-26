@@ -1,0 +1,8 @@
+# NEURAL GOLD v3.2 — Belmo Phase 1
+python-telegram-bot==21.7
+aiohttp==3.10.5
+SQLAlchemy==2.0.35
+python-dotenv==1.0.1
+fastapi==0.115.0
+uvicorn==0.30.6
+whop-sdk
