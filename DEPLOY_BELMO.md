@@ -61,3 +61,12 @@ is configured.
   persistent database before scaling paid production.
 - The included `whop_webhook.py` is Phase 2 groundwork; it is not required
   for Phase 1 manual verification.
+
+
+## Phase 1 runtime hardening
+
+- Python is pinned to 3.12 via `.python-version` for reproducible Belmo builds.
+- Whop SDK is intentionally excluded from Phase 1 requirements because the Whop
+  webhook endpoint is Phase 2 and is not imported by the running FastAPI app.
+- `aiohttp` is pinned to a current release compatible with Belmo's supported
+  Python runtimes.

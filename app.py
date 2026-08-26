@@ -33,12 +33,15 @@ async def lifespan(app: FastAPI):
 
     if BELMO_PUBLIC_URL:
         webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
-        await telegram_app.bot.set_webhook(
-            url=webhook_url,
-            secret_token=TELEGRAM_WEBHOOK_SECRET or None,
-            drop_pending_updates=True,
-        )
-        logger.info("Telegram webhook configured: %s", webhook_url)
+        try:
+            await telegram_app.bot.set_webhook(
+                url=webhook_url,
+                secret_token=TELEGRAM_WEBHOOK_SECRET or None,
+                drop_pending_updates=True,
+            )
+            logger.info("Telegram webhook configured: %s", webhook_url)
+        except Exception:
+            logger.exception("Telegram webhook registration failed: %s", webhook_url)
     else:
         logger.warning("BELMO_PUBLIC_URL is not set; webhook registration skipped.")
 
