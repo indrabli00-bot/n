@@ -945,23 +945,18 @@ async def post_init(application: Application) -> None:
 
 def setup_logging() -> None:
     log_level = getattr(logging, LOG_LEVEL.upper(), logging.INFO)
-    log_dir = os.path.dirname(LOG_FILE)
-    if log_dir:
-        os.makedirs(log_dir, exist_ok=True)
+
     root = logging.getLogger()
     root.setLevel(log_level)
+
     if not root.handlers:
-        fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
-        fh.setLevel(log_level)
-        fh.setFormatter(logging.Formatter(LOG_FORMAT))
-        root.addHandler(fh)
         sh = logging.StreamHandler(sys.stdout)
         sh.setLevel(log_level)
         sh.setFormatter(logging.Formatter(LOG_FORMAT))
         root.addHandler(sh)
+
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("telegram").setLevel(logging.WARNING)
-
 
 def build_application() -> Application:
     """Build the Telegram application for Belmo webhook processing."""
