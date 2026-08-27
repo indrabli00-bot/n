@@ -117,6 +117,15 @@ def get_order_by_payment(payment_id: str) -> dict | None:
         return dict(row) if row else None
 
 
+def get_order_by_membership(membership_id: str) -> dict | None:
+    with database.engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT * FROM whop_orders WHERE membership_id = :membership_id"),
+            {"membership_id": membership_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
 def claim_webhook(event_id: str, event_type: str, payment_id: str | None = None) -> bool:
     """Atomically claim an event for processing, while allowing failed events to retry."""
     now = _now()
