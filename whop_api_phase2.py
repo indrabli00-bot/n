@@ -2,20 +2,27 @@
 from __future__ import annotations
 
 import uuid
+
 import aiohttp
 
 import whop_storage
 from config import BELMO_PUBLIC_URL, WHOP_API_KEY, WHOP_COMPANY_ID
 
 WHOP_API_BASE = "https://api.whop.com/api/v1"
-PLAN_IDS = {7: "plan_ksl11weFJ0z41", 14: "plan_Yc1JnCIP8jgII", 30: "plan_JDgh0geRuoSFX"}
+PLAN_IDS = {
+    7: "plan_ksl11weFJ0z41",
+    14: "plan_Yc1JnCIP8jgII",
+    30: "plan_JDgh0geRuoSFX",
+}
 
 
 def plan_id_for_days(days: int) -> str | None:
     return PLAN_IDS.get(days)
 
 
-async def create_checkout_for_user(telegram_id: int, duration_days: int) -> tuple[str | None, str | None, str | None]:
+async def create_checkout_for_user(
+    telegram_id: int, duration_days: int
+) -> tuple[str | None, str | None, str | None]:
     plan_id = plan_id_for_days(duration_days)
     if not plan_id:
         return None, None, "unsupported_plan"
@@ -29,8 +36,9 @@ async def create_checkout_for_user(telegram_id: int, duration_days: int) -> tupl
         return None, None, "database_order_create_failed"
 
     payload = {
-        "plan_id": plan_id,
+        "company_id": WHOP_COMPANY_ID,
         "mode": "payment",
+        "plan": {"id": plan_id},
         "metadata": {
             "neural_order_id": order_id,
             "telegram_id": str(telegram_id),
@@ -49,7 +57,11 @@ async def create_checkout_for_user(telegram_id: int, duration_days: int) -> tupl
     try:
         timeout = aiohttp.ClientTimeout(total=15)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(f"{WHOP_API_BASE}/checkout_configurations", json=payload, headers=headers) as response:
+            async with session.post(
+                f"{WHOP_API_BASE}/checkout_configurations",
+                json=payload,
+                headers=headers,
+            ) as response:
                 body = await response.json(content_type=None)
                 if response.status >= 300:
                     whop_storage.update_order(order_id, status="checkout_failed")
