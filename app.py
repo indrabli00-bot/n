@@ -8,13 +8,16 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from telegram import Update
 
 import database
+import phase2_bot
+import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
 from main import build_application, post_init, setup_logging
+from whop_webhook_phase2 import handle_event, notify_customer, verify_signature
 
 logger = logging.getLogger("neural_gold.belmo")
 
@@ -26,6 +29,8 @@ async def lifespan(app: FastAPI):
     global telegram_app
     setup_logging()
     database.init_db()
+    whop_storage.init_phase2_db()
+    phase2_bot.install()
     telegram_app = build_application()
     await telegram_app.initialize()
     await post_init(telegram_app)
@@ -91,3 +96,44 @@ async def telegram_webhook(
     except Exception:
         logger.exception("Telegram webhook processing failed")
         return JSONResponse(status_code=200, content={"ok": False})
+
+
+@app.post("/webhooks/whop")
+async def whop_webhook(request: Request, background: BackgroundTasks):
+    payload = await request.body()
+    try:
+        event = verify_signature(payload, dict(request.headers))
+    except Exception:
+        logger.exception("Whop webhook verification failed")
+        return Response(status_code=401)
+
+    event_id = str(event.get("id") or request.headers.get("webhook-id") or "")
+    event_type = str(event.get("type") or "")
+    data = event.get("data") or {}
+    if not event_id or not event_type:
+        return Response(status_code=400)
+
+    payment_id = str(data.get("id") or "") or None
+    if not whop_storage.claim_webhook(event_id, event_type, payment_id):
+        return Response(status_code=200)
+
+    try:
+        result = handle_event(event_type, data)
+        whop_storage.mark_webhook(event_id, "processed")
+        if result and telegram_app is not None:
+            raw_token, duration, order_id = result
+            order = whop_storage.get_order(order_id)
+            if order is not None:
+                background.add_task(
+                    notify_customer,
+                    telegram_app.bot,
+                    order["telegram_id"],
+                    raw_token,
+                    duration,
+                    order_id,
+                )
+        return Response(status_code=200)
+    except Exception as exc:
+        logger.exception("Whop event processing failed event=%s", event_id)
+        whop_storage.mark_webhook(event_id, "failed", str(exc)[:1000])
+        return Response(status_code=200)
