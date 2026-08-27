@@ -1,24 +1,43 @@
 """NEURAL GOLD Phase 2 runtime UI and checkout patch."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import time
+from urllib.parse import quote
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import auth
 import main
-import whop_api_phase2
+from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN
 
 logger = logging.getLogger("neural_gold.phase2_bot")
 
 
+def checkout_link(telegram_id: int, days: int) -> str:
+    """Create a short-lived signed URL that Telegram can open directly.
+
+    The URL itself contains no Whop secret and cannot be changed to another
+    user/plan without invalidating the signature. The server creates the
+    personalized Whop checkout only after the user opens this link.
+    """
+    expires = int(time.time()) + 15 * 60
+    payload = f"{telegram_id}:{days}:{expires}"
+    key = (TELEGRAM_BOT_TOKEN or "neural-gold").encode("utf-8")
+    signature = hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{BELMO_PUBLIC_URL}/checkout/{days}?token={quote(payload + '.' + signature)}"
+
+
 def access_keyboard(update):
     lang = main._lang(update)
+    telegram_id = update.effective_user.id
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🟢 7 DAYS", callback_data="buy:7"),
-            InlineKeyboardButton("🟡 14 DAYS", callback_data="buy:14"),
-            InlineKeyboardButton("🔵 30 DAYS", callback_data="buy:30"),
+            InlineKeyboardButton("🟢 7 DAYS", url=checkout_link(telegram_id, 7)),
+            InlineKeyboardButton("🟡 14 DAYS", url=checkout_link(telegram_id, 14)),
+            InlineKeyboardButton("🔵 30 DAYS", url=checkout_link(telegram_id, 30)),
         ],
         [
             InlineKeyboardButton(main.t(lang, "activate"), callback_data="action:token"),
@@ -69,25 +88,11 @@ async def _callback_router(update, context):
     if query is None or user is None:
         return
 
+    # Legacy callback links are retained for compatibility with already-sent
+    # messages. New menus use URL buttons above, which produce Telegram's
+    # native "Open Link" confirmation in a single tap.
     if data.startswith("buy:"):
-        try:
-            days = int(data.split(":", 1)[1])
-        except (ValueError, IndexError):
-            await query.answer("Payment option unavailable.", show_alert=True)
-            return
-        purchase_url, order_id, error = await whop_api_phase2.create_checkout_for_user(user.id, days)
-        if purchase_url:
-            try:
-                await query.answer(url=purchase_url)
-            except Exception:
-                await query.message.reply_text(
-                    "<b>PAYMENT LINK READY</b>\n\nTap below to open payment.",
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💳 OPEN PAYMENT", url=purchase_url)]]),
-                )
-        else:
-            logger.error("Checkout creation failed telegram=%s order=%s error=%s", user.id, order_id, error)
-            await query.answer("Payment link is temporarily unavailable. Please try again shortly.", show_alert=True)
+        await query.answer("Payment link is available from the plan button.", show_alert=True)
         return
 
     if data == "support:open":
