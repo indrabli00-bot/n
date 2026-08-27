@@ -63,20 +63,26 @@ def create_order(order_id: str, telegram_id: int, plan_id: str, duration_days: i
     now = _now()
     try:
         with database.engine.begin() as conn:
-            conn.execute(text("""
-                INSERT OR IGNORE INTO whop_orders
-                (id, telegram_id, plan_id, duration_days, status, created_at, updated_at)
-                VALUES (:id, :telegram_id, :plan_id, :duration_days, 'pending', :created_at, :updated_at)
-            """), {"id": order_id, "telegram_id": telegram_id, "plan_id": plan_id,
-                   "duration_days": duration_days, "created_at": now, "updated_at": now})
-        return True
+            result = conn.execute(
+                text("""
+                    INSERT OR IGNORE INTO whop_orders
+                    (id, telegram_id, plan_id, duration_days, status, created_at, updated_at)
+                    VALUES (:id, :telegram_id, :plan_id, :duration_days, 'pending', :created_at, :updated_at)
+                """),
+                {"id": order_id, "telegram_id": telegram_id, "plan_id": plan_id,
+                 "duration_days": duration_days, "created_at": now, "updated_at": now},
+            )
+            return result.rowcount == 1
     except Exception:
         logger.exception("Failed to create Whop order %s", order_id)
         return False
 
 
 def update_order(order_id: str, **fields) -> bool:
-    allowed = {"checkout_id", "payment_id", "membership_id", "status", "token_hash", "paid_at", "notified_at"}
+    allowed = {
+        "checkout_id", "payment_id", "membership_id", "status", "token_hash",
+        "paid_at", "notified_at",
+    }
     values = {k: v for k, v in fields.items() if k in allowed}
     if not values:
         return False
@@ -85,7 +91,9 @@ def update_order(order_id: str, **fields) -> bool:
     values["id"] = order_id
     try:
         with database.engine.begin() as conn:
-            result = conn.execute(text(f"UPDATE whop_orders SET {assignments} WHERE id = :id"), values)
+            result = conn.execute(
+                text(f"UPDATE whop_orders SET {assignments} WHERE id = :id"), values
+            )
             return result.rowcount == 1
     except Exception:
         logger.exception("Failed to update Whop order %s", order_id)
@@ -94,25 +102,55 @@ def update_order(order_id: str, **fields) -> bool:
 
 def get_order(order_id: str) -> dict | None:
     with database.engine.begin() as conn:
-        row = conn.execute(text("SELECT * FROM whop_orders WHERE id = :id"), {"id": order_id}).mappings().first()
+        row = conn.execute(
+            text("SELECT * FROM whop_orders WHERE id = :id"), {"id": order_id}
+        ).mappings().first()
         return dict(row) if row else None
 
 
 def get_order_by_payment(payment_id: str) -> dict | None:
     with database.engine.begin() as conn:
-        row = conn.execute(text("SELECT * FROM whop_orders WHERE payment_id = :payment_id"), {"payment_id": payment_id}).mappings().first()
+        row = conn.execute(
+            text("SELECT * FROM whop_orders WHERE payment_id = :payment_id"),
+            {"payment_id": payment_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def get_order_by_membership(membership_id: str) -> dict | None:
+    with database.engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT * FROM whop_orders WHERE membership_id = :membership_id"),
+            {"membership_id": membership_id},
+        ).mappings().first()
         return dict(row) if row else None
 
 
 def claim_webhook(event_id: str, event_type: str, payment_id: str | None = None) -> bool:
+    """Atomically claim an event for processing, while allowing failed events to retry."""
+    now = _now()
     try:
         with database.engine.begin() as conn:
-            result = conn.execute(text("""
-                INSERT OR IGNORE INTO whop_webhook_events
-                (id, event_type, payment_id, status, created_at)
-                VALUES (:id, :event_type, :payment_id, 'received', :created_at)
-            """), {"id": event_id, "event_type": event_type, "payment_id": payment_id, "created_at": _now()})
-            return result.rowcount == 1
+            inserted = conn.execute(
+                text("""
+                    INSERT OR IGNORE INTO whop_webhook_events
+                    (id, event_type, payment_id, status, created_at)
+                    VALUES (:id, :event_type, :payment_id, 'processing', :created_at)
+                """),
+                {"id": event_id, "event_type": event_type, "payment_id": payment_id, "created_at": now},
+            )
+            if inserted.rowcount == 1:
+                return True
+
+            reclaimed = conn.execute(
+                text("""
+                    UPDATE whop_webhook_events
+                    SET status = 'processing', processed_at = NULL, error_message = NULL
+                    WHERE id = :id AND status IN ('failed', 'received')
+                """),
+                {"id": event_id},
+            )
+            return reclaimed.rowcount == 1
     except Exception:
         logger.exception("Failed to claim Whop webhook %s", event_id)
         return False
@@ -120,8 +158,22 @@ def claim_webhook(event_id: str, event_type: str, payment_id: str | None = None)
 
 def mark_webhook(event_id: str, status: str, error_message: str | None = None) -> None:
     with database.engine.begin() as conn:
-        conn.execute(text("""
-            UPDATE whop_webhook_events
-            SET status = :status, processed_at = :processed_at, error_message = :error_message
-            WHERE id = :id
-        """), {"id": event_id, "status": status, "processed_at": _now(), "error_message": error_message})
+        conn.execute(
+            text("""
+                UPDATE whop_webhook_events
+                SET status = :status, processed_at = :processed_at, error_message = :error_message
+                WHERE id = :id
+            """),
+            {"id": event_id, "status": status, "processed_at": _now(), "error_message": error_message},
+        )
+
+
+def revoke_order_access(order_id: str) -> bool:
+    """Revoke only the access issued by this order; preserve a newer purchase."""
+    order = get_order(order_id)
+    if not order or not order.get("token_hash"):
+        return False
+    user = database.get_user_by_telegram_id(int(order["telegram_id"]))
+    if user is None or user.token != order["token_hash"]:
+        return False
+    return database.update_user(int(order["telegram_id"]), is_active=False)
