@@ -13,6 +13,10 @@ ADMIN_TELEGRAM_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0") or 0)
 BELMO_PUBLIC_URL = os.getenv("BELMO_PUBLIC_URL", "").strip().rstrip("/")
 TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
 
+WHOP_API_KEY = os.getenv("WHOP_API_KEY", "").strip()
+WHOP_COMPANY_ID = os.getenv("WHOP_COMPANY_ID", "").strip()
+WHOP_WEBHOOK_SECRET = os.getenv("WHOP_WEBHOOK_SECRET", "").strip()
+
 GOLDAPI_API_KEY = os.getenv("GOLDAPI_API_KEY", "").strip()
 PRICE_SYMBOL = "XAU/USD"
 GOLDAPI_ENDPOINT = "https://www.goldapi.io/api/price/XAU/USD"
