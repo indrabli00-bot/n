@@ -5,6 +5,7 @@ import unittest
 os.environ.setdefault("WHOP_WEBHOOK_SECRET", "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("="))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")
+os.environ.setdefault("GOLDAPI_API_KEY", "phase2-test-goldapi-key")
 
 from whop_webhook_phase2 import verify_signature
 
@@ -16,7 +17,10 @@ class Phase2WebhookTests(unittest.TestCase):
         import json
         import time
 
-        payload = json.dumps({"id": "msg_test", "type": "payment.succeeded", "data": {"id": "pay_test"}}, separators=(",", ":")).encode()
+        payload = json.dumps(
+            {"id": "msg_test", "type": "payment.succeeded", "data": {"id": "pay_test"}},
+            separators=(",", ":"),
+        ).encode()
         webhook_id = "msg_test"
         timestamp = str(int(time.time()))
         signed = f"{webhook_id}.{timestamp}.".encode() + payload
