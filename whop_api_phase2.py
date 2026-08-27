@@ -6,7 +6,7 @@ import uuid
 import aiohttp
 
 import whop_storage
-from config import BELMO_PUBLIC_URL, WHOP_API_KEY, WHOP_COMPANY_ID
+from config import BELMO_PUBLIC_URL, WHOP_API_KEY
 
 WHOP_API_BASE = "https://api.whop.com/api/v1"
 PLAN_IDS = {
@@ -28,17 +28,18 @@ async def create_checkout_for_user(
         return None, None, "unsupported_plan"
     if not WHOP_API_KEY:
         return None, None, "WHOP_API_KEY_not_configured"
-    if not WHOP_COMPANY_ID:
-        return None, None, "WHOP_COMPANY_ID_not_configured"
 
     order_id = f"ng_{uuid.uuid4().hex}"
     if not whop_storage.create_order(order_id, telegram_id, plan_id, duration_days):
         return None, None, "database_order_create_failed"
 
+    # Whop's current Checkout Configurations API accepts an existing plan
+    # through the top-level `plan_id`. The company is already scoped by the
+    # company API key, so no company_id or inline {"id": ...} plan object is
+    # required here.
     payload = {
-        "company_id": WHOP_COMPANY_ID,
+        "plan_id": plan_id,
         "mode": "payment",
-        "plan": {"id": plan_id},
         "metadata": {
             "neural_order_id": order_id,
             "telegram_id": str(telegram_id),
@@ -65,7 +66,10 @@ async def create_checkout_for_user(
                 body = await response.json(content_type=None)
                 if response.status >= 300:
                     whop_storage.update_order(order_id, status="checkout_failed")
-                    detail = body.get("error") if isinstance(body, dict) else "request_failed"
+                    if isinstance(body, dict):
+                        detail = body.get("error") or body.get("message") or body
+                    else:
+                        detail = "request_failed"
                     return None, order_id, f"whop_http_{response.status}:{detail}"
                 checkout_id = str(body.get("id") or "")
                 purchase_url = str(body.get("purchase_url") or "")
