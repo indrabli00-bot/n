@@ -24,6 +24,10 @@ PLAN_DURATIONS = {
 }
 
 
+class FulfillmentRetryableError(RuntimeError):
+    """Signal that Whop should retry a payment webhook."""
+
+
 def _signing_key(secret: str) -> bytes:
     """Decode Standard Webhooks secrets; support Whop production and sandbox prefixes."""
     value = secret.strip()
@@ -91,17 +95,19 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     plan = payment.get("plan") or {}
     plan_id = str(plan.get("id") or payment.get("plan_id") or "")
     if not order_id or not payment_id:
-        logger.error("Payment missing order/payment identity payment=%s", payment_id)
-        return None
+        raise FulfillmentRetryableError(
+            f"Payment missing order/payment identity payment={payment_id}"
+        )
 
     order = whop_storage.get_order(order_id)
     if order is None:
-        logger.error("Unknown Neural Gold order_id=%s payment=%s", order_id, payment_id)
-        return None
+        raise FulfillmentRetryableError(f"Unknown Neural Gold order_id={order_id}")
 
     duration = PLAN_DURATIONS.get(plan_id) or PLAN_DURATIONS.get(order["plan_id"])
     if duration is None or duration != order["duration_days"]:
-        whop_storage.update_order(order_id, status="rejected_plan_mismatch", payment_id=payment_id)
+        whop_storage.update_order(
+            order_id, status="rejected_plan_mismatch", payment_id=payment_id
+        )
         return None
 
     existing = whop_storage.get_order_by_payment(payment_id)
@@ -110,8 +116,12 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
 
     issued = _issue_and_activate(int(order["telegram_id"]), duration)
     if issued is None:
-        whop_storage.update_order(order_id, status="fulfillment_failed", payment_id=payment_id)
-        return None
+        whop_storage.update_order(
+            order_id, status="fulfillment_failed", payment_id=payment_id
+        )
+        raise FulfillmentRetryableError(
+            f"Automatic activation failed order={order_id} payment={payment_id}"
+        )
 
     raw_token, token_hash = issued
     membership = payment.get("membership") or {}
@@ -149,6 +159,16 @@ def _event_metadata(event_type: str, data: dict) -> tuple[dict, str | None, str 
     return metadata, payment_id, membership_id
 
 
+def _is_full_successful_refund(data: dict) -> bool:
+    if str(data.get("status") or "").lower() != "succeeded":
+        return False
+    payment = data.get("payment") or {}
+    try:
+        return float(data.get("amount")) >= float(payment.get("total"))
+    except (TypeError, ValueError):
+        return False
+
+
 def handle_event(event_type: str, data: dict) -> tuple[str, int, str] | None:
     if event_type == "payment.succeeded":
         return handle_payment_succeeded(data)
@@ -170,19 +190,31 @@ def handle_event(event_type: str, data: dict) -> tuple[str, int, str] | None:
     if event_type == "payment.failed":
         whop_storage.update_order(order_id, status="payment_failed", payment_id=payment_id)
     elif event_type in {"refund.created", "refund.updated"}:
-        whop_storage.update_order(order_id, status="refunded", payment_id=payment_id)
-        whop_storage.revoke_order_access(order_id)
+        status = str(data.get("status") or "pending").lower()
+        whop_storage.update_order(order_id, status=f"refund_{status}", payment_id=payment_id)
+        if _is_full_successful_refund(data):
+            whop_storage.revoke_order_access(order_id)
     elif event_type == "membership.deactivated":
-        whop_storage.update_order(order_id, status="membership_deactivated", membership_id=membership_id)
+        whop_storage.update_order(
+            order_id, status="membership_deactivated", membership_id=membership_id
+        )
         whop_storage.revoke_order_access(order_id)
     elif event_type == "membership.cancel_at_period_end_changed":
-        whop_storage.update_order(order_id, status="cancel_at_period_end_changed", membership_id=membership_id)
+        whop_storage.update_order(
+            order_id,
+            status="cancel_at_period_end_changed",
+            membership_id=membership_id,
+        )
     elif event_type == "membership.activated":
-        whop_storage.update_order(order_id, status="membership_active", membership_id=membership_id)
+        whop_storage.update_order(
+            order_id, status="membership_active", membership_id=membership_id
+        )
     return None
 
 
-async def notify_customer(bot: Any, telegram_id: int, raw_token: str, duration_days: int, order_id: str) -> None:
+async def notify_customer(
+    bot: Any, telegram_id: int, raw_token: str, duration_days: int, order_id: str
+) -> None:
     try:
         await bot.send_message(
             chat_id=telegram_id,
@@ -195,7 +227,16 @@ async def notify_customer(bot: Any, telegram_id: int, raw_token: str, duration_d
             ),
             parse_mode="HTML",
         )
-        whop_storage.update_order(order_id, notified_at=datetime.now(timezone.utc), status="customer_notified")
+        whop_storage.update_order(
+            order_id,
+            notified_at=datetime.now(timezone.utc),
+            status="customer_notified",
+        )
     except Exception as exc:
-        logger.exception("Failed to notify Telegram user %s for order %s: %s", telegram_id, order_id, exc)
+        logger.exception(
+            "Failed to notify Telegram user %s for order %s: %s",
+            telegram_id,
+            order_id,
+            exc,
+        )
         whop_storage.update_order(order_id, status="active_notification_failed")
