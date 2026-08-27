@@ -1,11 +1,15 @@
 """NEURAL GOLD v3.2 — Belmo HTTP/Webhook entry point."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import time
 from contextlib import asynccontextmanager
+from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from telegram import Update
 
 import database
@@ -70,6 +74,40 @@ async def health():
     return {"status": "ok", "service": "neural-gold", "telegram": telegram_app is not None}
 
 
+@app.get("/checkout/{days}")
+async def checkout_redirect(days: int, token: str):
+    """Validate the short-lived Telegram plan link, create a Whop checkout,
+    and redirect directly to Whop. Telegram's URL-button confirmation is the
+    only UI shown before the payment page.
+    """
+    if days not in (7, 14, 30):
+        raise HTTPException(status_code=404, detail="Plan not found")
+    try:
+        raw = unquote(token)
+        payload, signature = raw.rsplit(".", 1)
+        telegram_id_text, days_text, expires_text = payload.split(":", 2)
+        telegram_id = int(telegram_id_text)
+        signed_days = int(days_text)
+        expires = int(expires_text)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid payment link")
+
+    if signed_days != days or expires < int(time.time()):
+        raise HTTPException(status_code=410, detail="Payment link expired")
+
+    key = (TELEGRAM_BOT_TOKEN or "neural-gold").encode("utf-8")
+    expected = hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=403, detail="Invalid payment link")
+
+    purchase_url, order_id, error = await phase2_bot.whop_api_phase2.create_checkout_for_user(telegram_id, days)
+    if not purchase_url:
+        logger.error("Direct checkout creation failed telegram=%s order=%s error=%s", telegram_id, order_id, error)
+        raise HTTPException(status_code=503, detail="Checkout temporarily unavailable")
+
+    return RedirectResponse(url=purchase_url, status_code=303)
+
+
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
     if TELEGRAM_WEBHOOK_SECRET and x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET:
@@ -117,8 +155,6 @@ async def whop_webhook(request: Request, background: BackgroundTasks):
                 background.add_task(notify_customer, telegram_app.bot, order["telegram_id"], raw_token, duration, order_id)
         return Response(status_code=200)
     except Exception as exc:
-        # Return 5xx after recording failure so Whop retries delivery.
-        # claim_webhook() can reclaim events marked failed on the next attempt.
         logger.exception("Whop event processing failed event=%s", event_id)
         whop_storage.mark_webhook(event_id, "failed", str(exc)[:1000])
         return Response(status_code=500)
