@@ -6,7 +6,7 @@ import uuid
 import aiohttp
 
 import whop_storage
-from config import BELMO_PUBLIC_URL, WHOP_API_KEY
+from config import BELMO_PUBLIC_URL, WHOP_API_KEY, WHOP_COMPANY_ID
 
 WHOP_API_BASE = "https://api.whop.com/api/v1"
 PLAN_IDS = {
@@ -28,16 +28,17 @@ async def create_checkout_for_user(
         return None, None, "unsupported_plan"
     if not WHOP_API_KEY:
         return None, None, "WHOP_API_KEY_not_configured"
+    if not WHOP_COMPANY_ID:
+        return None, None, "WHOP_COMPANY_ID_not_configured"
 
     order_id = f"ng_{uuid.uuid4().hex}"
     if not whop_storage.create_order(order_id, telegram_id, plan_id, duration_days):
         return None, None, "database_order_create_failed"
 
-    # Whop's current Checkout Configurations API accepts an existing plan
-    # through the top-level `plan_id`. The company is already scoped by the
-    # company API key, so no company_id or inline {"id": ...} plan object is
-    # required here.
+    # Whop's current Checkout Configurations API requires the company ID
+    # together with the selected existing plan ID.
     payload = {
+        "company_id": WHOP_COMPANY_ID,
         "plan_id": plan_id,
         "mode": "payment",
         "metadata": {
