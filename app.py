@@ -1,8 +1,4 @@
-"""NEURAL GOLD v3.2 — Belmo HTTP/Webhook entry point.
-
-Belmo Starter runs one long-lived API service. Telegram sends updates to
-POST /telegram/webhook; FastAPI forwards them to python-telegram-bot.
-"""
+"""NEURAL GOLD v3.2 — Belmo HTTP/Webhook entry point."""
 from __future__ import annotations
 
 import logging
@@ -20,7 +16,6 @@ from main import build_application, post_init, setup_logging
 from whop_webhook_phase2 import handle_event, notify_customer, verify_signature
 
 logger = logging.getLogger("neural_gold.belmo")
-
 telegram_app = None
 
 
@@ -76,16 +71,11 @@ async def health():
 
 
 @app.post("/telegram/webhook")
-async def telegram_webhook(
-    request: Request,
-    x_telegram_bot_api_secret_token: str | None = Header(default=None),
-):
+async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
     if TELEGRAM_WEBHOOK_SECRET and x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
-
     if telegram_app is None:
         raise HTTPException(status_code=503, detail="Bot is starting")
-
     try:
         data = await request.json()
         update = Update.de_json(data, telegram_app.bot)
@@ -124,16 +114,11 @@ async def whop_webhook(request: Request, background: BackgroundTasks):
             raw_token, duration, order_id = result
             order = whop_storage.get_order(order_id)
             if order is not None:
-                background.add_task(
-                    notify_customer,
-                    telegram_app.bot,
-                    order["telegram_id"],
-                    raw_token,
-                    duration,
-                    order_id,
-                )
+                background.add_task(notify_customer, telegram_app.bot, order["telegram_id"], raw_token, duration, order_id)
         return Response(status_code=200)
     except Exception as exc:
+        # Return 5xx after recording failure so Whop retries delivery.
+        # claim_webhook() can reclaim events marked failed on the next attempt.
         logger.exception("Whop event processing failed event=%s", event_id)
         whop_storage.mark_webhook(event_id, "failed", str(exc)[:1000])
-        return Response(status_code=200)
+        return Response(status_code=500)
