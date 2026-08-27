@@ -14,6 +14,7 @@ from telegram import Update
 
 import database
 import phase2_bot
+import whop_api_phase2
 import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
 from main import build_application, post_init, setup_logging
@@ -100,7 +101,7 @@ async def checkout_redirect(days: int, token: str):
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=403, detail="Invalid payment link")
 
-    purchase_url, order_id, error = await phase2_bot.whop_api_phase2.create_checkout_for_user(telegram_id, days)
+    purchase_url, order_id, error = await whop_api_phase2.create_checkout_for_user(telegram_id, days)
     if not purchase_url:
         logger.error("Direct checkout creation failed telegram=%s order=%s error=%s", telegram_id, order_id, error)
         raise HTTPException(status_code=503, detail="Checkout temporarily unavailable")
