@@ -15,16 +15,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    Integer,
-    String,
-    create_engine,
-    select,
-)
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import DATABASE_URL
@@ -33,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 def normalize_datetime_utc(value: datetime | None) -> datetime | None:
-    """Return a timezone-aware UTC datetime for safe comparisons."""
     if value is None:
         return None
     if value.tzinfo is None:
@@ -41,15 +31,12 @@ def normalize_datetime_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
-# ── Base ────────────────────────────────────────────────────────────────
 class Base(DeclarativeBase):
     pass
 
 
-# ── User Model ──────────────────────────────────────────────────────────
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id = Column(Integer, unique=True, nullable=False, index=True)
     username = Column(String(128), nullable=True)
@@ -58,21 +45,12 @@ class User(Base):
     token = Column(String(256), nullable=True, index=True)
     is_active = Column(Boolean, default=False, nullable=False)
     subscription_expiry = Column(DateTime, nullable=True)
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at = Column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
-# ── User Session Cache ─────────────────────────────────────────────────
 class UserSession(Base):
     __tablename__ = "user_sessions"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
     state = Column(String(64), default="idle", nullable=False)
@@ -82,42 +60,28 @@ class UserSession(Base):
     last_price_low = Column(Float, nullable=True)
     last_signal_time = Column(DateTime, nullable=True)
     last_fetch_time = Column(DateTime, nullable=True)
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    updated_at = Column(
-        DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
-# ── Token Pool (admin pre-generates these) ─────────────────────────────
 class TokenPool(Base):
     __tablename__ = "token_pool"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     token_hash = Column(String(64), unique=True, nullable=False, index=True)
     duration_days = Column(Integer, default=30, nullable=False)
     is_used = Column(Boolean, default=False, nullable=False)
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     used_at = Column(DateTime, nullable=True)
     used_by_telegram_id = Column(Integer, nullable=True)
 
 
-# ── Engine & Session Factory ───────────────────────────────────────────
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
 def init_db() -> None:
-    """Create tables and apply lightweight SQLite migrations."""
     try:
         Base.metadata.create_all(bind=engine)
-        # Existing SQLite databases need an explicit migration for the new language column.
         if DATABASE_URL.startswith("sqlite"):
             from sqlalchemy import inspect, text
             inspector = inspect(engine)
@@ -133,26 +97,17 @@ def init_db() -> None:
 
 
 def _get_session() -> Session:
-    """Return a new SQLAlchemy session. Caller must close it."""
     return SessionLocal()
 
 
-# ── Hashing helper ─────────────────────────────────────────────────────
 def _hash_token(raw_token: str) -> str:
-    """SHA-256 hash of the raw token for storage."""
     return hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  USER CRUD
-# ═══════════════════════════════════════════════════════════════════════
-
 def get_user_by_telegram_id(telegram_id: int) -> User | None:
-    """Fetch a user row by Telegram user ID."""
     session = _get_session()
     try:
-        stmt = select(User).where(User.telegram_id == telegram_id)
-        return session.scalar(stmt)
+        return session.scalar(select(User).where(User.telegram_id == telegram_id))
     except Exception as exc:
         logger.exception("get_user_by_telegram_id failed: %s", exc)
         return None
@@ -164,7 +119,7 @@ def get_user_language(telegram_id: int) -> str:
     session = _get_session()
     try:
         user = session.scalar(select(User).where(User.telegram_id == telegram_id))
-        return (user.language if user and user.language else "en")
+        return user.language if user and user.language else "en"
     except Exception as exc:
         logger.warning("get_user_language failed: %s", exc)
         return "en"
@@ -190,12 +145,9 @@ def set_user_language(telegram_id: int, language: str) -> bool:
 
 
 def get_user_by_token(token: str) -> User | None:
-    """Fetch a user by their raw token (lookup by hash)."""
     session = _get_session()
     try:
-        token_hash = _hash_token(token)
-        stmt = select(User).where(User.token == token_hash)
-        return session.scalar(stmt)
+        return session.scalar(select(User).where(User.token == _hash_token(token)))
     except Exception as exc:
         logger.exception("get_user_by_token failed: %s", exc)
         return None
@@ -203,22 +155,10 @@ def get_user_by_token(token: str) -> User | None:
         session.close()
 
 
-def create_user(
-    telegram_id: int,
-    username: str | None,
-    first_name: str | None,
-    language: str = "en",
-) -> User:
-    """Insert a new user and return the ORM object."""
+def create_user(telegram_id: int, username: str | None, first_name: str | None, language: str = "en") -> User:
     session = _get_session()
     try:
-        user = User(
-            telegram_id=telegram_id,
-            username=username,
-            first_name=first_name,
-            language=language,
-            is_active=False,
-        )
+        user = User(telegram_id=telegram_id, username=username, first_name=first_name, language=language, is_active=False)
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -232,63 +172,36 @@ def create_user(
         session.close()
 
 
-def activate_user_token(
-    telegram_id: int, raw_token: str, duration_days: int
-) -> bool:
-    """
-    Activate a subscription token for the given user.
-
-    Steps:
-      1. Look up the raw token in the token_pool (by hash).
-      2. Mark the pool entry as used.
-      3. Update the user record with the hashed token and expiry.
-
-    Returns True on success, False otherwise.
-    """
+def activate_user_token(telegram_id: int, raw_token: str, duration_days: int) -> bool:
     session = _get_session()
     try:
         token_hash = _hash_token(raw_token)
-
-        # -- find token in pool --
-        stmt = select(TokenPool).where(
-            TokenPool.token_hash == token_hash,
-            TokenPool.is_used == False,  # noqa: E712
-        )
-        pool_entry = session.scalar(stmt)
+        pool_entry = session.scalar(select(TokenPool).where(TokenPool.token_hash == token_hash, TokenPool.is_used == False))  # noqa: E712
         if pool_entry is None:
-            logger.warning(
-                "Token activation failed for user %d: token not found or already used.",
-                telegram_id,
-            )
+            logger.warning("Token activation failed for user %d: token not found or already used.", telegram_id)
             return False
 
-        # -- mark pool entry --
         pool_entry.is_used = True
         pool_entry.used_at = datetime.now(timezone.utc)
         pool_entry.used_by_telegram_id = telegram_id
 
-        # -- find or create user --
-        stmt = select(User).where(User.telegram_id == telegram_id)
-        user = session.scalar(stmt)
+        user = session.scalar(select(User).where(User.telegram_id == telegram_id))
         if user is None:
             user = User(telegram_id=telegram_id, is_active=False)
             session.add(user)
-            session.flush()  # populate user.id
+            session.flush()
 
-        # -- set token & expiry --
+        # Extend an existing active subscription instead of replacing unused time.
+        now = datetime.now(timezone.utc)
+        current_expiry = normalize_datetime_utc(user.subscription_expiry)
+        base_time = current_expiry if user.is_active and current_expiry and current_expiry > now else now
         from datetime import timedelta
         user.token = token_hash
         user.is_active = True
-        user.subscription_expiry = datetime.now(timezone.utc) + timedelta(
-            days=duration_days
-        )
+        user.subscription_expiry = base_time + timedelta(days=duration_days)
 
         session.commit()
-        logger.info(
-            "User %d activated token (expires %s).",
-            telegram_id,
-            user.subscription_expiry.isoformat(),
-        )
+        logger.info("User %d activated token (expires %s).", telegram_id, user.subscription_expiry.isoformat())
         return True
     except Exception as exc:
         session.rollback()
@@ -299,11 +212,9 @@ def activate_user_token(
 
 
 def update_user(telegram_id: int, **kwargs) -> bool:
-    """Update arbitrary fields on a user record."""
     session = _get_session()
     try:
-        stmt = select(User).where(User.telegram_id == telegram_id)
-        user = session.scalar(stmt)
+        user = session.scalar(select(User).where(User.telegram_id == telegram_id))
         if user is None:
             return False
         for key, value in kwargs.items():
@@ -319,20 +230,10 @@ def update_user(telegram_id: int, **kwargs) -> bool:
         session.close()
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  TOKEN POOL CRUD  (admin operations)
-# ═══════════════════════════════════════════════════════════════════════
-
 def add_token_to_pool(raw_token: str, duration_days: int = 30) -> bool:
-    """Pre-generate a token and store its hash in the pool."""
     session = _get_session()
     try:
-        token_hash = _hash_token(raw_token)
-        entry = TokenPool(
-            token_hash=token_hash,
-            duration_days=duration_days,
-        )
-        session.add(entry)
+        session.add(TokenPool(token_hash=_hash_token(raw_token), duration_days=duration_days))
         session.commit()
         logger.info("Token added to pool (duration=%d days).", duration_days)
         return True
@@ -345,24 +246,10 @@ def add_token_to_pool(raw_token: str, duration_days: int = 30) -> bool:
 
 
 def list_all_users() -> list[dict]:
-    """Return a list of dicts with every user's key info."""
     session = _get_session()
     try:
-        stmt = select(User).order_by(User.id)
-        rows = session.scalars(stmt).all()
-        return [
-            {
-                "id": u.id,
-                "telegram_id": u.telegram_id,
-                "username": u.username,
-                "first_name": u.first_name,
-                "is_active": u.is_active,
-                "subscription_expiry": (
-                    u.subscription_expiry.isoformat() if u.subscription_expiry else None
-                ),
-            }
-            for u in rows
-        ]
+        rows = session.scalars(select(User).order_by(User.id)).all()
+        return [{"id": u.id, "telegram_id": u.telegram_id, "username": u.username, "first_name": u.first_name, "is_active": u.is_active, "subscription_expiry": u.subscription_expiry.isoformat() if u.subscription_expiry else None} for u in rows]
     except Exception as exc:
         logger.exception("list_all_users failed: %s", exc)
         return []
@@ -371,23 +258,15 @@ def list_all_users() -> list[dict]:
 
 
 def revoke_user(telegram_id: int) -> bool:
-    """Deactivate a user and clear their token."""
     return update_user(telegram_id, is_active=False, token=None)
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  USER SESSION CRUD
-# ═══════════════════════════════════════════════════════════════════════
-
 def get_or_create_session(user_id: int) -> UserSession:
-    """Return the session row for a user, creating one if absent."""
     session = _get_session()
     try:
-        stmt = select(UserSession).where(UserSession.user_id == user_id)
-        row = session.scalar(stmt)
+        row = session.scalar(select(UserSession).where(UserSession.user_id == user_id))
         if row is not None:
             return row
-
         row = UserSession(user_id=user_id)
         session.add(row)
         session.commit()
@@ -402,11 +281,9 @@ def get_or_create_session(user_id: int) -> UserSession:
 
 
 def update_session(user_id: int, **kwargs) -> None:
-    """Persist cached price / signal data for a user session."""
     session = _get_session()
     try:
-        stmt = select(UserSession).where(UserSession.user_id == user_id)
-        row = session.scalar(stmt)
+        row = session.scalar(select(UserSession).where(UserSession.user_id == user_id))
         if row is None:
             return
         for key, value in kwargs.items():
