@@ -15,13 +15,20 @@ logger = logging.getLogger("neural_gold.phase2_bot")
 def access_keyboard(update):
     lang = main._lang(update)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟢 7 DAYS", callback_data="buy:7")],
-        [InlineKeyboardButton("🟡 14 DAYS", callback_data="buy:14")],
-        [InlineKeyboardButton("🔵 30 DAYS", callback_data="buy:30")],
-        [InlineKeyboardButton("💳 I HAVE PAID", callback_data="paid:menu")],
-        [InlineKeyboardButton(main.t(lang, "activate"), callback_data="action:token")],
+        [
+            InlineKeyboardButton("🟢 7 DAYS", callback_data="buy:7"),
+            InlineKeyboardButton("🟡 14 DAYS", callback_data="buy:14"),
+            InlineKeyboardButton("🔵 30 DAYS", callback_data="buy:30"),
+        ],
+        [
+            InlineKeyboardButton(main.t(lang, "activate"), callback_data="action:token"),
+            InlineKeyboardButton("💳 I HAVE PAID", callback_data="paid:menu"),
+        ],
         [InlineKeyboardButton(main.t(lang, "account_status"), callback_data="screen:account")],
-        [InlineKeyboardButton(main.t(lang, "back"), callback_data="nav:home"), InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:home")],
+        [
+            InlineKeyboardButton(main.t(lang, "back"), callback_data="nav:home"),
+            InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:home"),
+        ],
     ])
 
 
@@ -71,8 +78,6 @@ async def _callback_router(update, context):
         purchase_url, order_id, error = await whop_api_phase2.create_checkout_for_user(user.id, days)
         if purchase_url:
             try:
-                # Open the personalized Whop payment directly from the callback.
-                # The order metadata remains available for automatic fulfillment.
                 await query.answer(url=purchase_url)
             except Exception:
                 await query.message.reply_text(
