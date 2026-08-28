@@ -30,7 +30,7 @@ def home_keyboard(update):
     rows.extend([
         [InlineKeyboardButton("⚙️ System Sync", callback_data="screen:settings"), InlineKeyboardButton("🌐 Uplink", callback_data="screen:support")],
         [InlineKeyboardButton("💎 Premium Clearance", callback_data="screen:access")],
-        [InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
+        [InlineKeyboardButton("⌂ MENU", callback_data="screen:home")],
     ])
     return InlineKeyboardMarkup(rows)
 
@@ -42,7 +42,7 @@ def access_keyboard(update):
     rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token")])
     rows.append([InlineKeyboardButton("♛ OPERATOR HUB", callback_data="screen:account")])
     rows.append([InlineKeyboardButton("🌐 UPLINK", callback_data="screen:support")])
-    rows.append([InlineKeyboardButton("⌂ MENU", callback_data="nav:home")])
+    rows.append([InlineKeyboardButton("⌂ MENU", callback_data="screen:home")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -55,7 +55,7 @@ def price_keyboard(update):
         [InlineKeyboardButton(_days_label(14), url=_checkout(update, 14))],
         [InlineKeyboardButton(_days_label(30), url=_checkout(update, 30))],
         [InlineKeyboardButton("🔑 INPUT ACTIVATION TOKEN", callback_data="action:token")],
-        [InlineKeyboardButton("← BACK", callback_data="nav:home"), InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
+        [InlineKeyboardButton("← BACK", callback_data="screen:home"), InlineKeyboardButton("⌂ MENU", callback_data="screen:home")],
     ])
 
 
