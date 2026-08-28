@@ -1,4 +1,4 @@
-"""NEURAL GOLD v3.2 — command-center UI layer."""
+"""NEURAL GOLD v3.2 — consolidated Telegram UI layer."""
 from __future__ import annotations
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -20,29 +20,32 @@ def _checkout(update, days: int) -> str:
 
 
 def home_keyboard(update):
+    active = _active(update)
     rows = []
-    if not _active(update):
-        rows.append([InlineKeyboardButton("🎯 Market Pulse", callback_data="screen:price"), InlineKeyboardButton("⚡️ Neural Strikes", callback_data="screen:signal")])
-        rows.append([InlineKeyboardButton("🏗️ Structure Map", callback_data="screen:analysis"), InlineKeyboardButton("♛ Operator Hub", callback_data="screen:account")])
+    if active:
+        rows.append([InlineKeyboardButton("🧠 Neural Strikes", callback_data="screen:signal"), InlineKeyboardButton("📊 Structure Map", callback_data="screen:analysis")])
+        rows.append([InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
     else:
-        rows.append([InlineKeyboardButton("⚡️ Neural Strikes", callback_data="screen:signal"), InlineKeyboardButton("🏗️ Structure Map", callback_data="screen:analysis")])
-        rows.append([InlineKeyboardButton("♛ Operator Hub", callback_data="screen:account")])
+        rows.append([InlineKeyboardButton("📈 Market Pulse 🔒", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes 🔒", callback_data="screen:signal")])
+        rows.append([InlineKeyboardButton("📊 Structure Map 🔒", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
     rows.extend([
         [InlineKeyboardButton("⚙️ System Sync", callback_data="screen:settings"), InlineKeyboardButton("🌐 Uplink", callback_data="screen:support")],
         [InlineKeyboardButton("💎 Premium Clearance", callback_data="screen:access")],
-        [InlineKeyboardButton("⌂ MENU", callback_data="screen:home")],
+        [InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
     ])
     return InlineKeyboardMarkup(rows)
 
 
 def access_keyboard(update):
+    active = _active(update)
     rows = []
-    if not _active(update):
+    if not active:
         rows.append([InlineKeyboardButton("🎯 SELECT CLEARANCE", callback_data="screen:price")])
-    rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token")])
-    rows.append([InlineKeyboardButton("♛ OPERATOR HUB", callback_data="screen:account")])
+        rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token")])
+    else:
+        rows.append([InlineKeyboardButton("👑 OPERATOR HUB", callback_data="screen:account")])
     rows.append([InlineKeyboardButton("🌐 UPLINK", callback_data="screen:support")])
-    rows.append([InlineKeyboardButton("⌂ MENU", callback_data="screen:home")])
+    rows.append([InlineKeyboardButton("⌂ MENU", callback_data="nav:home")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -54,8 +57,7 @@ def price_keyboard(update):
         [InlineKeyboardButton(_days_label(7), url=_checkout(update, 7))],
         [InlineKeyboardButton(_days_label(14), url=_checkout(update, 14))],
         [InlineKeyboardButton(_days_label(30), url=_checkout(update, 30))],
-        [InlineKeyboardButton("🔑 INPUT ACTIVATION TOKEN", callback_data="action:token")],
-        [InlineKeyboardButton("← BACK", callback_data="screen:home"), InlineKeyboardButton("⌂ MENU", callback_data="screen:home")],
+        [InlineKeyboardButton("← BACK", callback_data="screen:access"), InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
     ])
 
 
@@ -68,30 +70,28 @@ async def render_access(update, context):
         expiry = main.database.normalize_datetime_utc(db_user.subscription_expiry) if db_user else None
         expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
         text = (
-            "<b>PREMIUM ACCESS</b>\nNEURAL GOLD v3.2\n"
+            "<b>PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
             "-------------------------------------------------\n\n"
-            "<b>✓ CLEARANCE ACTIVE</b>\n\n"
+            "<b>🟢 CLEARANCE ACTIVE</b>\n\n"
             f"Access until <code>{expiry_text}</code>\n\n"
             "Your Alpha Terminal is synchronized."
         )
     else:
         text = (
-            "<b>PREMIUM ACCESS</b>\nNEURAL GOLD v3.2\n"
+            "<b>PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
             "-------------------------------------------------\n\n"
-            "<i>\"Anda berada di dalam, tapi Anda belum 'terhubung'.</i>\n\n"
+            "<i>\"Anda berada di dalam, tapi Anda belum 'terhubung'.\"</i>\n\n"
             "Pasar XAU/USD adalah mesin pemindah uang dari trader amatir ke institusi. Tanpa akses ke saraf pusat kami, Anda hanyalah statistik dalam data likuiditas mereka.\n\n"
             "<b>Jangan hanya trading. Dominasi.</b>\n\n"
             "Aktifkan enkripsi premium untuk menghentikan penebakan dan mulai melihat struktur pasar yang sebenarnya:\n\n"
-            "◈ Institutional Orderflow (Live XAU/USD)\n"
-            "◎ Neural Precision Strikes (Signals)\n"
-            "⌁ Market Architecture (Structural Analysis)\n"
-            "♛ Alpha Terminal (Private Dashboard)\n\n"
+            "📈 Institutional Orderflow (Live XAU/USD)\n"
+            "🧠 Neural Precision Strikes (Signals)\n"
+            "📊 Market Architecture (Structural Analysis)\n"
+            "👑 Alpha Terminal (Private Dashboard)\n\n"
             "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n"
-            "[ 7 DAYS — Tactical Trial ]\n"
-            "[ 14 DAYS — Strategic Entry ]\n"
-            "[ 30 DAYS — Full Operational Control ]\n\n"
+            "Gunakan <b>🎯 SELECT CLEARANCE</b> untuk membuka pilihan 7/14/30 hari.\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "<b>INPUT ACTIVATION TOKEN BELOW TO SYNC.</b>"
+            "<b>🔑 ACTIVATE TOKEN</b> setelah pembelian dan masukkan token sekali pakai."
         )
     await main._present(update, text, access_keyboard(update))
 
@@ -102,7 +102,8 @@ async def render_price(update, context):
         await main._original_render_price(update, context)
         return
     text = (
-        "<b>🎯 MARKET PULSE // CLEARANCE</b>\nNEURAL GOLD v3.2\n"
+        "<b>📈 MARKET PULSE // CLEARANCE</b>\n"
+        "NEURAL GOLD v3.2\n"
         f"{main.DIVIDER}\n\n"
         "<i>Clearance levels control the duration of your premium connection.</i>\n\n"
         "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n\n"
@@ -130,9 +131,9 @@ async def render_home(update, context, edit: bool = True):
             "Gunakan modul di bawah untuk mendominasi aliran harga.\n\n"
             "<b>S E L E C T _ M O D U L E</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "⚡️ Neural Strikes (Signals)\n"
-            "🏗️ Structure Map (Structural Analysis)\n"
-            "♛ Operator Hub (Private Dashboard)\n"
+            "🧠 Neural Strikes (Signals)\n"
+            "📊 Structure Map (Structural Analysis)\n"
+            "👑 Operator Hub (Private Dashboard)\n"
             "⚙️ System Sync (Settings)\n"
             "🌐 Uplink (Support)"
         )
@@ -145,14 +146,67 @@ async def render_home(update, context, edit: bool = True):
             "<i>Market intelligence is visible. Premium signal layers remain encrypted until clearance is activated.</i>\n\n"
             "<b>S E L E C T _ M O D U L E</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎯 Market Pulse (Clearance Levels)\n"
-            "⚡️ Neural Strikes (Locked)\n"
-            "🏗️ Structure Map (Locked)\n"
-            "♛ Operator Hub (Private Dashboard)\n"
+            "📈 Market Pulse (Clearance Levels)\n"
+            "🧠 Neural Strikes 🔒\n"
+            "📊 Structure Map 🔒\n"
+            "👑 Operator Hub (Private Dashboard)\n"
             "⚙️ System Sync (Settings)\n"
             "🌐 Uplink (Support)"
         )
     await main._present(update, text, home_keyboard(update), edit=edit)
+
+
+async def callback_router(update, context):
+    """Own navigation callbacks so legacy public-menu and token prompts cannot reappear."""
+    import main
+    import auth
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    data = query.data or ""
+
+    if data == "nav:home":
+        await query.answer()
+        await render_home(update, context)
+        return
+
+    if data == "screen:home":
+        await query.answer()
+        await render_home(update, context)
+        return
+
+    if data == "screen:access":
+        await query.answer()
+        await render_access(update, context)
+        return
+
+    if data == "screen:price":
+        await query.answer()
+        await render_price(update, context)
+        return
+
+    if data == "action:token":
+        await query.answer()
+        context.user_data["awaiting_token"] = True
+        await main._present(
+            update,
+            "<b>🔑 ACTIVATION TOKEN</b>\n\nEnter your single-use activation token below to sync your clearance.",
+            access_keyboard(update),
+        )
+        return
+
+    if data == "screen:signal" and not auth.verify_token(user.id)[0]:
+        await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)
+        await render_access(update, context)
+        return
+
+    if data == "screen:analysis" and not auth.verify_token(user.id)[0]:
+        await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)
+        await render_access(update, context)
+        return
+
+    await main._original_callback_router(update, context)
 
 
 def install() -> None:
@@ -161,10 +215,13 @@ def install() -> None:
         main._original_render_price = main.render_price
     if getattr(main, "_original_price_keyboard", None) is None:
         main._original_price_keyboard = main.price_keyboard
+    if getattr(main, "_original_callback_router", None) is None:
+        main._original_callback_router = main.callback_router
     main.home_keyboard = home_keyboard
     main.access_keyboard = access_keyboard
     main.price_keyboard = price_keyboard
     main.render_access = render_access
     main.render_price = render_price
     main.render_home = render_home
+    main.callback_router = callback_router
     main._emoji_ui_installed = True
