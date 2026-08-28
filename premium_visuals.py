@@ -1,9 +1,4 @@
-"""NEURAL GOLD v3.2 — premium visual presentation layer.
-
-Business logic remains in main.py. This layer adds a generated Telegram-ready
-visual card before each premium screen, using the official Neural Gold SVG as
-the identity anchor.
-"""
+"""NEURAL GOLD v3.2 — premium visual presentation layer."""
 from __future__ import annotations
 
 from telegram import InlineKeyboardMarkup, Update
@@ -12,6 +7,8 @@ from visuals import visual_path
 
 def _visual_key(text: str) -> str:
     upper = text.upper()
+    if "LIVE MARKET FEED" in upper or "GOLD SPOT" in upper:
+        return "price"
     if "ALPHA-SENTI MATRIX" in upper or "MARKET ANALYSIS" in upper:
         return "matrix"
     if "NEURAL SIGNAL" in upper or "NEURAL-SIGNAL" in upper:
@@ -33,6 +30,7 @@ def _short_caption(text: str) -> str:
     key = _visual_key(text)
     titles = {
         "home": "NEURAL GOLD // v3.2",
+        "price": "LIVE GOLD FEED // XAU/USD",
         "matrix": "ALPHA-SENTI MATRIX // XAU/USD",
         "signal": "NEURAL-SIGNAL // XAU/USD",
         "account": "ACCOUNT STATUS // PREMIUM ACCESS",
