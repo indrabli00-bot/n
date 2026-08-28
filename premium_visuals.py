@@ -166,14 +166,14 @@ async def callback_router(update, context):
         return
     data = query.data or ""
 
-    if data == "nav:home":
+    if data in {"nav:home", "screen:home"}:
         await query.answer()
         await render_home(update, context)
         return
 
-    if data == "screen:home":
+    if data == "nav:access":
         await query.answer()
-        await render_home(update, context)
+        await render_access(update, context)
         return
 
     if data == "screen:access":
