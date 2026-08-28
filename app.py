@@ -14,6 +14,7 @@ from telegram import Update
 
 import database
 import phase2_bot
+import premium_visuals
 import whop_api_phase2
 import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
     database.init_db()
     whop_storage.init_phase2_db()
     phase2_bot.install()
+    premium_visuals.install()
     telegram_app = build_application()
     await telegram_app.initialize()
     await post_init(telegram_app)
