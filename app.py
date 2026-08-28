@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from telegram import Update
 
 import database
+import expiry_notifier
 import phase2_bot
 import premium_visuals
 import whop_api_phase2
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     telegram_app = build_application()
     await telegram_app.initialize()
     await post_init(telegram_app)
+    expiry_notifier.schedule(telegram_app)
     await telegram_app.start()
 
     if BELMO_PUBLIC_URL:
@@ -80,8 +82,7 @@ async def health():
 @app.get("/checkout/{days}")
 async def checkout_redirect(days: int, token: str):
     """Validate the short-lived Telegram plan link, create a Whop checkout,
-    and redirect directly to Whop. Telegram's URL-button confirmation is the
-    only UI shown before the payment page.
+    and redirect directly to Whop.
     """
     if days not in (7, 14, 30):
         raise HTTPException(status_code=404, detail="Plan not found")
