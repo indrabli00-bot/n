@@ -41,7 +41,7 @@ def access_keyboard(update):
     rows = []
     if not active:
         rows.append([InlineKeyboardButton("🎯 SELECT CLEARANCE", callback_data="screen:price")])
-        rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token")])
+        rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token"), InlineKeyboardButton("💳 I HAVE PAID", callback_data="paid:menu")])
     else:
         rows.append([InlineKeyboardButton("👑 OPERATOR HUB", callback_data="screen:account")])
     rows.append([InlineKeyboardButton("🌐 UPLINK", callback_data="screen:support")])
@@ -157,9 +157,10 @@ async def render_home(update, context, edit: bool = True):
 
 
 async def callback_router(update, context):
-    """Own navigation callbacks so legacy public-menu and token prompts cannot reappear."""
+    """Single UI owner; delegate only legacy Phase-2 service callbacks."""
     import main
     import auth
+    import phase2_bot
     query = update.callback_query
     user = update.effective_user
     if query is None or user is None:
@@ -170,43 +171,36 @@ async def callback_router(update, context):
         await query.answer()
         await render_home(update, context)
         return
-
-    if data == "nav:access":
+    if data == "nav:access" or data == "screen:access":
         await query.answer()
         await render_access(update, context)
         return
-
-    if data == "screen:access":
-        await query.answer()
-        await render_access(update, context)
-        return
-
     if data == "screen:price":
         await query.answer()
         await render_price(update, context)
         return
-
     if data == "action:token":
         await query.answer()
         context.user_data["awaiting_token"] = True
-        await main._present(
-            update,
-            "<b>🔑 ACTIVATION TOKEN</b>\n\nEnter your single-use activation token below to sync your clearance.",
-            access_keyboard(update),
-        )
+        await main._present(update, "<b>🔑 ACTIVATE TOKEN</b>\n\nEnter your single-use activation token below to sync your clearance.", access_keyboard(update))
         return
-
     if data == "screen:signal" and not auth.verify_token(user.id)[0]:
         await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)
         await render_access(update, context)
         return
-
     if data == "screen:analysis" and not auth.verify_token(user.id)[0]:
         await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)
         await render_access(update, context)
         return
 
-    await main._original_callback_router(update, context)
+    # Phase-2 retains payment confirmation, language, support, and token
+    # service callbacks without taking ownership of the main UI.
+    await phase2_bot._callback_router(update, context)
+
+
+async def unknown_text_handler(update, context):
+    import phase2_bot
+    await phase2_bot._unknown_text_handler(update, context)
 
 
 def install() -> None:
@@ -215,8 +209,6 @@ def install() -> None:
         main._original_render_price = main.render_price
     if getattr(main, "_original_price_keyboard", None) is None:
         main._original_price_keyboard = main.price_keyboard
-    if getattr(main, "_original_callback_router", None) is None:
-        main._original_callback_router = main.callback_router
     main.home_keyboard = home_keyboard
     main.access_keyboard = access_keyboard
     main.price_keyboard = price_keyboard
@@ -224,4 +216,5 @@ def install() -> None:
     main.render_price = render_price
     main.render_home = render_home
     main.callback_router = callback_router
+    main.unknown_text_handler = unknown_text_handler
     main._emoji_ui_installed = True
