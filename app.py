@@ -14,7 +14,6 @@ from telegram import Update
 
 import database
 import expiry_notifier
-import phase2_bot
 import premium_visuals
 import whop_api_phase2
 import whop_storage
@@ -32,7 +31,6 @@ async def lifespan(app: FastAPI):
     setup_logging()
     database.init_db()
     whop_storage.init_phase2_db()
-    phase2_bot.install()
     premium_visuals.install()
     telegram_app = build_application()
     await telegram_app.initialize()
