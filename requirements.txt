@@ -1,5 +1,6 @@
 # NEURAL GOLD v3.2 — Belmo Phase 2
 python-telegram-bot==21.7
+APScheduler==3.10.4
 aiohttp==3.13.5
 SQLAlchemy==2.0.35
 python-dotenv==1.0.1
