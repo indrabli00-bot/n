@@ -15,6 +15,7 @@ from typing import Any
 import database
 import whop_storage
 from config import WHOP_WEBHOOK_SECRET
+from visuals import visual_path
 
 logger = logging.getLogger("neural_whop_webhook")
 PLAN_DURATIONS = {
@@ -136,6 +137,7 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     logger.info(
         "Whop payment fulfilled payment=%s order=%s telegram=%s duration=%sd",
         payment_id,
+        order_id,
         order["telegram_id"],
         duration,
     )
@@ -216,6 +218,18 @@ async def notify_customer(
     bot: Any, telegram_id: int, raw_token: str, duration_days: int, order_id: str
 ) -> None:
     try:
+        asset = visual_path("success")
+        if asset:
+            try:
+                with open(asset, "rb") as fh:
+                    await bot.send_photo(
+                        chat_id=telegram_id,
+                        photo=fh,
+                        caption="<b>PAYMENT CONFIRMED</b>\n<i>NEURAL GOLD v3.2</i>",
+                        parse_mode="HTML",
+                    )
+            except Exception:
+                logger.exception("Premium payment visual delivery failed")
         await bot.send_message(
             chat_id=telegram_id,
             text=(
