@@ -27,6 +27,15 @@ def install() -> None:
              InlineKeyboardButton(f"⌂ {main.t(lang, 'menu')}", callback_data="nav:home")],
         ])
 
+    def _days_label(lang: str, days: int) -> str:
+        labels = {
+            "vi": {7: "7 NGÀY", 14: "14 NGÀY", 30: "30 NGÀY"},
+            "id": {7: "7 HARI", 14: "14 HARI", 30: "30 HARI"},
+            "hi": {7: "7 दिन", 14: "14 दिन", 30: "30 दिन"},
+            "zh": {7: "7 天", 14: "14 天", 30: "30 天"},
+        }
+        return labels.get(lang, {7: "7 DAYS", 14: "14 DAYS", 30: "30 DAYS"})[days]
+
     def access_keyboard(update):
         lang = main._lang(update)
         telegram_id = update.effective_user.id
@@ -40,15 +49,6 @@ def install() -> None:
             [InlineKeyboardButton(f"← {main.t(lang, 'back')}", callback_data="nav:home"),
              InlineKeyboardButton(f"⌂ {main.t(lang, 'menu')}", callback_data="nav:home")],
         ])
-
-    def _days_label(lang: str, days: int) -> str:
-        labels = {
-            "vi": {7: "7 NGÀY", 14: "14 NGÀY", 30: "30 NGÀY"},
-            "id": {7: "7 HARI", 14: "14 HARI", 30: "30 HARI"},
-            "hi": {7: "7 दिन", 14: "14 दिन", 30: "30 दिन"},
-            "zh": {7: "7 天", 14: "14 天", 30: "30 天"},
-        }
-        return labels.get(lang, {7: "7 DAYS", 14: "14 DAYS", 30: "30 DAYS"})[days]
 
     async def render_access(update, context):
         user = update.effective_user
@@ -76,4 +76,5 @@ def install() -> None:
     main.home_keyboard = home_keyboard
     main.access_keyboard = access_keyboard
     main.render_access = render_access
+    phase2_bot.access_keyboard = access_keyboard
     main._emoji_ui_installed = True
