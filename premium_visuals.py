@@ -20,10 +20,8 @@ def _checkout(update, days: int) -> str:
 
 
 def home_keyboard(update):
-    import main
-    active = _active(update)
     rows = []
-    if not active:
+    if not _active(update):
         rows.append([InlineKeyboardButton("🎯 Market Pulse", callback_data="screen:price"), InlineKeyboardButton("⚡️ Neural Strikes", callback_data="screen:signal")])
         rows.append([InlineKeyboardButton("🏗️ Structure Map", callback_data="screen:analysis"), InlineKeyboardButton("♛ Operator Hub", callback_data="screen:account")])
     else:
@@ -38,10 +36,8 @@ def home_keyboard(update):
 
 
 def access_keyboard(update):
-    import main
-    active = _active(update)
     rows = []
-    if not active:
+    if not _active(update):
         rows.append([InlineKeyboardButton("🎯 SELECT CLEARANCE", callback_data="screen:price")])
     rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token")])
     rows.append([InlineKeyboardButton("♛ OPERATOR HUB", callback_data="screen:account")])
@@ -91,7 +87,9 @@ async def render_access(update, context):
             "⌁ Market Architecture (Structural Analysis)\n"
             "♛ Alpha Terminal (Private Dashboard)\n\n"
             "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n"
-            "Pilih MARKET PULSE untuk membuka 7/14/30 hari.\n\n"
+            "[ 7 DAYS — Tactical Trial ]\n"
+            "[ 14 DAYS — Strategic Entry ]\n"
+            "[ 30 DAYS — Full Operational Control ]\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "<b>INPUT ACTIVATION TOKEN BELOW TO SYNC.</b>"
         )
@@ -122,8 +120,7 @@ async def render_home(update, context, edit: bool = True):
     user = update.effective_user
     if user is None:
         return
-    active = _active(update)
-    if active:
+    if _active(update):
         text = (
             "<b>NEURAL GOLD v3.2 // ALPHA TERMINAL</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
