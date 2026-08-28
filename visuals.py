@@ -1,9 +1,4 @@
-"""NEURAL GOLD v3.2 visual identity renderer.
-
-Uses the official Neural Gold SVG asset as the identity anchor and generates
-small Telegram-ready PNG cards at runtime with a black / metallic-gold /
-neural-intelligence treatment.
-"""
+"""NEURAL GOLD v3.2 visual identity renderer."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,6 +29,7 @@ def _esc(v: str) -> str:
 def _svg_for(key: str) -> str:
     title, subtitle, badge = THEMES.get(key, THEMES["home"])
     logo = LOGO_SVG.read_text(encoding="utf-8")
+    logo_body = logo.split("<svg", 1)[1].split(">", 1)[1].rsplit("</svg>", 1)[0]
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
 <defs>
   <radialGradient id="bg"><stop stop-color="#17130a"/><stop offset="1" stop-color="#020203"/></radialGradient>
@@ -51,7 +47,7 @@ def _svg_for(key: str) -> str:
   <circle cx="760" cy="275" r="3"/><circle cx="910" cy="330" r="3"/><circle cx="1070" cy="330" r="3"/>
   <circle cx="800" cy="500" r="3"/><circle cx="950" cy="430" r="3"/><circle cx="1100" cy="365" r="3"/>
 </g>
-<g transform="translate(55 55) scale(.42)">{logo.split('<svg',1)[1].split('>',1)[1].rsplit('</svg>',1)[0]}</g>
+<g transform="translate(55 55) scale(.42)">{logo_body}</g>
 <text x="315" y="125" fill="url(#gold)" font-family="Arial,sans-serif" font-size="52" font-weight="800" letter-spacing="2">NEURAL GOLD <tspan font-size="30">v3.2</tspan></text>
 <text x="318" y="170" fill="#eee5c9" font-family="Arial,sans-serif" font-size="25" letter-spacing="2">{_esc(title)}</text>
 <text x="318" y="208" fill="#cfa83f" font-family="Arial,sans-serif" font-size="17" letter-spacing="3">{_esc(subtitle)}</text>
