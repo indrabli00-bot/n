@@ -12,6 +12,7 @@ CACHE_DIR = Path("/tmp/neural_gold_visuals")
 
 THEMES = {
     "home": ("NEURAL GOLD", "PREMIUM XAU/USD MARKET INTELLIGENCE", "HOME"),
+    "price": ("LIVE GOLD FEED", "XAU/USD REAL-TIME MARKET", "GOLD"),
     "matrix": ("ALPHA-SENTI MATRIX", "MARKET INTELLIGENCE", "MATRIX"),
     "signal": ("NEURAL-SIGNAL", "XAU/USD MARKET SIGNAL", "SIGNAL"),
     "account": ("ACCOUNT STATUS", "PREMIUM ACCESS CONTROL", "ACCOUNT"),
