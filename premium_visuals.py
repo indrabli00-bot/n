@@ -1,57 +1,47 @@
 """NEURAL GOLD v3.2 — premium visual presentation layer.
 
-This module keeps business logic in main.py untouched while adding a consistent
-visual header to Telegram screens. It is intentionally isolated so visual
-changes cannot alter checkout, webhook, token, or database logic.
+Business logic remains in main.py. This layer adds a generated Telegram-ready
+visual card before each premium screen, using the official Neural Gold SVG as
+the identity anchor.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from telegram import InlineKeyboardMarkup, Update
-
-ASSET_DIR = Path(__file__).resolve().parent / "assets"
-
-ASSETS = {
-    "logo": ASSET_DIR / "logo_neural_gold.png",
-    "matrix": ASSET_DIR / "bg_matrix.jpg",
-    "signal": ASSET_DIR / "bg_signal.jpg",
-    "account": ASSET_DIR / "bg_account.jpg",
-    "token": ASSET_DIR / "bg_token.jpg",
-    "plans": ASSET_DIR / "bg_plans.jpg",
-}
+from visuals import visual_path
 
 
-def _asset_for_text(text: str) -> Path:
+def _visual_key(text: str) -> str:
     upper = text.upper()
     if "ALPHA-SENTI MATRIX" in upper or "MARKET ANALYSIS" in upper:
-        return ASSETS["matrix"]
+        return "matrix"
     if "NEURAL SIGNAL" in upper or "NEURAL-SIGNAL" in upper:
-        return ASSETS["signal"]
+        return "signal"
     if "ACCOUNT INTELLIGENCE" in upper or "<B>♛ ACCOUNT" in upper or "ACCOUNT STATUS" in upper:
-        return ASSETS["account"]
+        return "account"
     if "ACTIVATE TOKEN" in upper or "SECURE ACTIVATION" in upper:
-        return ASSETS["token"]
+        return "token"
+    if "PAYMENT CONFIRMED" in upper or "ACCESS ACTIVATED" in upper:
+        return "success"
+    if "CHECKOUT" in upper:
+        return "checkout"
     if "PREMIUM ACCESS" in upper or "ACCESS PACKAGES" in upper or "ACCESS / PLANS" in upper:
-        return ASSETS["plans"]
-    return ASSETS["logo"]
+        return "access"
+    return "home"
 
 
 def _short_caption(text: str) -> str:
-    """Keep the visual header concise; the full intelligence brief follows it."""
-    upper = text.upper()
-    title = "NEURAL GOLD // v3.2"
-    if "ALPHA-SENTI MATRIX" in upper or "MARKET ANALYSIS" in upper:
-        title = "ALPHA-SENTI MATRIX // XAU/USD"
-    elif "NEURAL SIGNAL" in upper or "NEURAL-SIGNAL" in upper:
-        title = "NEURAL-SIGNAL // XAU/USD"
-    elif "ACCOUNT" in upper:
-        title = "ACCOUNT STATUS // PREMIUM ACCESS"
-    elif "ACTIVATE" in upper:
-        title = "ACTIVATE TOKEN // SECURE ACCESS"
-    elif "PREMIUM ACCESS" in upper or "ACCESS PACKAGES" in upper:
-        title = "NEURAL GOLD // PREMIUM ACCESS"
-    return f"<b>{title}</b>\n<i>NEURAL GOLD v3.2</i>"
+    key = _visual_key(text)
+    titles = {
+        "home": "NEURAL GOLD // v3.2",
+        "matrix": "ALPHA-SENTI MATRIX // XAU/USD",
+        "signal": "NEURAL-SIGNAL // XAU/USD",
+        "account": "ACCOUNT STATUS // PREMIUM ACCESS",
+        "token": "ACTIVATE TOKEN // SECURE ACCESS",
+        "access": "NEURAL GOLD // PREMIUM ACCESS",
+        "checkout": "CHECKOUT // SECURE PAYMENT ROUTE",
+        "success": "PAYMENT CONFIRMED // ACCESS FULFILLMENT",
+    }
+    return f"<b>{titles[key]}</b>\n<i>NEURAL GOLD v3.2</i>"
 
 
 def install() -> None:
@@ -71,9 +61,9 @@ def install() -> None:
     ) -> None:
         query = update.callback_query
         localized = main._localized_text(update, text)
-        asset = _asset_for_text(localized)
+        asset = visual_path(_visual_key(localized))
 
-        if not asset.exists():
+        if not asset:
             await original_present(update, text, keyboard, edit=edit)
             return
 
@@ -87,7 +77,7 @@ def install() -> None:
             except Exception:
                 pass
             try:
-                with asset.open("rb") as fh:
+                with open(asset, "rb") as fh:
                     await query.message.chat.send_photo(
                         photo=fh,
                         caption=_short_caption(localized),
@@ -105,7 +95,7 @@ def install() -> None:
 
         if update.message:
             try:
-                with asset.open("rb") as fh:
+                with open(asset, "rb") as fh:
                     await update.message.reply_photo(
                         photo=fh,
                         caption=_short_caption(localized),
