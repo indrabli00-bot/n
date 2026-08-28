@@ -12,6 +12,7 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, Re
 from fastapi.responses import JSONResponse, RedirectResponse
 from telegram import Update
 
+import command_localization
 import database
 import expiry_notifier
 import premium_visuals
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     telegram_app = build_application()
     await telegram_app.initialize()
     await post_init(telegram_app)
+    await command_localization.install(telegram_app.bot, database_admin_id())
     expiry_notifier.schedule(telegram_app)
     await telegram_app.start()
 
@@ -62,6 +64,15 @@ async def lifespan(app: FastAPI):
             logger.exception("Failed to delete Telegram webhook")
         await telegram_app.stop()
         await telegram_app.shutdown()
+
+
+def database_admin_id() -> int | None:
+    """Return the configured admin Telegram ID without duplicating config logic."""
+    try:
+        from config import ADMIN_TELEGRAM_ID
+        return ADMIN_TELEGRAM_ID
+    except Exception:
+        return None
 
 
 app = FastAPI(title="NEURAL GOLD v3.2", version="3.2.0", lifespan=lifespan)
