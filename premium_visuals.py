@@ -1,115 +1,79 @@
-"""NEURAL GOLD v3.2 — premium visual presentation layer."""
+"""NEURAL GOLD v3.2 — emoji-first premium UI layer.
+
+The Telegram UI uses descriptive emojis for feature identity. Image/SVG
+presentation is intentionally disabled so navigation stays compact and clear.
+"""
 from __future__ import annotations
 
-from telegram import InlineKeyboardMarkup, Update
-from visuals import visual_path
-
-
-def _visual_key(text: str) -> str:
-    upper = text.upper()
-    if "LIVE MARKET FEED" in upper or "GOLD SPOT" in upper:
-        return "price"
-    if "ALPHA-SENTI MATRIX" in upper or "MARKET ANALYSIS" in upper:
-        return "matrix"
-    if "NEURAL SIGNAL" in upper or "NEURAL-SIGNAL" in upper:
-        return "signal"
-    if "ACCOUNT INTELLIGENCE" in upper or "<B>♛ ACCOUNT" in upper or "ACCOUNT STATUS" in upper:
-        return "account"
-    if "ACTIVATE TOKEN" in upper or "SECURE ACTIVATION" in upper:
-        return "token"
-    if "PAYMENT CONFIRMED" in upper or "ACCESS ACTIVATED" in upper:
-        return "success"
-    if "CHECKOUT" in upper:
-        return "checkout"
-    if "PREMIUM ACCESS" in upper or "ACCESS PACKAGES" in upper or "ACCESS / PLANS" in upper:
-        return "access"
-    return "home"
-
-
-def _short_caption(text: str) -> str:
-    key = _visual_key(text)
-    titles = {
-        "home": "NEURAL GOLD // v3.2",
-        "price": "LIVE GOLD FEED // XAU/USD",
-        "matrix": "ALPHA-SENTI MATRIX // XAU/USD",
-        "signal": "NEURAL-SIGNAL // XAU/USD",
-        "account": "ACCOUNT STATUS // PREMIUM ACCESS",
-        "token": "ACTIVATE TOKEN // SECURE ACCESS",
-        "access": "NEURAL GOLD // PREMIUM ACCESS",
-        "checkout": "CHECKOUT // SECURE PAYMENT ROUTE",
-        "success": "PAYMENT CONFIRMED // ACCESS FULFILLMENT",
-    }
-    return f"<b>{titles[key]}</b>\n<i>NEURAL GOLD v3.2</i>"
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def install() -> None:
-    """Install the visual presenter into main._present at application startup."""
+    """Install the emoji-first navigation layer after Phase 2 UI setup."""
     import main
+    import phase2_bot
 
-    if getattr(main, "_premium_visual_installed", False):
-        return
+    def home_keyboard(update):
+        lang = main._lang(update)
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"📈 {main.t(lang, 'price')}", callback_data="screen:price"),
+             InlineKeyboardButton(f"🧠 {main.t(lang, 'signal')}", callback_data="screen:signal")],
+            [InlineKeyboardButton(f"📊 {main.t(lang, 'analysis')}", callback_data="screen:analysis"),
+             InlineKeyboardButton(f"👑 {main.t(lang, 'account')}", callback_data="screen:account")],
+            [InlineKeyboardButton(f"💎 {main.t(lang, 'access')}", callback_data="screen:access"),
+             InlineKeyboardButton(f"⚙️ {main.t(lang, 'settings')}", callback_data="screen:settings")],
+            [InlineKeyboardButton(f"💬 {main.t(lang, 'support')}", callback_data="screen:support")],
+            [InlineKeyboardButton(f"← {main.t(lang, 'back')}", callback_data="nav:home"),
+             InlineKeyboardButton(f"⌂ {main.t(lang, 'menu')}", callback_data="nav:home")],
+        ])
 
-    original_present = main._present
+    def access_keyboard(update):
+        lang = main._lang(update)
+        telegram_id = update.effective_user.id
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("🕐 7 DAYS" if lang == "en" else f"🕐 {_days_label(lang, 7)}", url=phase2_bot.checkout_link(telegram_id, 7)),
+             InlineKeyboardButton("📅 14 DAYS" if lang == "en" else f"📅 {_days_label(lang, 14)}", url=phase2_bot.checkout_link(telegram_id, 14)),
+             InlineKeyboardButton("🗓️ 30 DAYS" if lang == "en" else f"🗓️ {_days_label(lang, 30)}", url=phase2_bot.checkout_link(telegram_id, 30))],
+            [InlineKeyboardButton(f"🔑 {main.t(lang, 'activate')}", callback_data="action:token"),
+             InlineKeyboardButton(phase2_bot._ui(lang, "paid"), callback_data="paid:menu")],
+            [InlineKeyboardButton(f"👑 {main.t(lang, 'account_status')}", callback_data="screen:account")],
+            [InlineKeyboardButton(f"← {main.t(lang, 'back')}", callback_data="nav:home"),
+             InlineKeyboardButton(f"⌂ {main.t(lang, 'menu')}", callback_data="nav:home")],
+        ])
 
-    async def visual_present(
-        update: Update,
-        text: str,
-        keyboard: InlineKeyboardMarkup,
-        edit: bool = True,
-    ) -> None:
-        query = update.callback_query
-        localized = main._localized_text(update, text)
-        asset = visual_path(_visual_key(localized))
+    def _days_label(lang: str, days: int) -> str:
+        labels = {
+            "vi": {7: "7 NGÀY", 14: "14 NGÀY", 30: "30 NGÀY"},
+            "id": {7: "7 HARI", 14: "14 HARI", 30: "30 HARI"},
+            "hi": {7: "7 दिन", 14: "14 दिन", 30: "30 दिन"},
+            "zh": {7: "7 天", 14: "14 天", 30: "30 天"},
+        }
+        return labels.get(lang, {7: "7 DAYS", 14: "14 DAYS", 30: "30 DAYS"})[days]
 
-        if not asset:
-            await original_present(update, text, keyboard, edit=edit)
-            return
+    async def render_access(update, context):
+        user = update.effective_user
+        active = bool(user and __import__('auth').verify_token(user.id)[0])
+        lang = main._lang(update)
+        state = main.t(lang, "active") if active else "READY TO ACTIVATE"
+        icon = "🟢" if active else "✅"
+        text = (
+            f"<b>💎 {main.t(lang, 'premium_access')}</b>\n"
+            f"<i>NEURAL GOLD MEMBERSHIP</i>\n{main.DIVIDER}\n\n"
+            f"<b>{icon} {state}</b>\n\n"
+            f"{main.t(lang, 'unlocks')}\n"
+            f"📈 Live XAU/USD pricing\n"
+            f"🧠 Neural trade signals\n"
+            f"📊 Market structure analysis\n"
+            f"👑 Private account dashboard\n\n"
+            f"<b>ACCESS PACKAGES</b>\n"
+            f"🕐 7 DAYS   •   SHORT TERM\n"
+            f"📅 14 DAYS  •   STANDARD\n"
+            f"🗓️ 30 DAYS  •   PREMIUM\n\n"
+            f"<i>Enter your single-use activation token after purchase.</i>"
+        )
+        await main._present(update, text, access_keyboard(update))
 
-        if query and query.message:
-            try:
-                await query.answer()
-            except Exception:
-                pass
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            try:
-                with open(asset, "rb") as fh:
-                    await query.message.chat.send_photo(
-                        photo=fh,
-                        caption=_short_caption(localized),
-                        parse_mode="HTML",
-                    )
-                await query.message.chat.send_message(
-                    text=localized,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                )
-                return
-            except Exception:
-                await original_present(update, text, keyboard, edit=False)
-                return
-
-        if update.message:
-            try:
-                with open(asset, "rb") as fh:
-                    await update.message.reply_photo(
-                        photo=fh,
-                        caption=_short_caption(localized),
-                        parse_mode="HTML",
-                    )
-                await update.message.reply_text(
-                    localized,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                )
-                return
-            except Exception:
-                await original_present(update, text, keyboard, edit=False)
-                return
-
-        await original_present(update, text, keyboard, edit=edit)
-
-    main._present = visual_present
-    main._premium_visual_installed = True
+    main.home_keyboard = home_keyboard
+    main.access_keyboard = access_keyboard
+    main.render_access = render_access
+    main._emoji_ui_installed = True
