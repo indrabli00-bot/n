@@ -80,9 +80,11 @@ def support_keyboard(update):
 
 async def _render_public_menu(update, context):
     lang = main._lang(update)
-    text = (f"<b>NEURAL GOLD</b>\n{main.DIVIDER}\n\n<b>{_ui(lang, 'public_menu')}</b>\n\n"
-            f"{_ui(lang, 'language')}\n{_ui(lang, 'choose_language')}\n\n"
-            f"{_ui(lang, 'access_plans')}\n{_ui(lang, 'select_plan')}")
+    text = (f"<b>[ CONSOLE ]: {_ui(lang, 'public_menu')}</b>\n{main.DIVIDER}\n\n"
+            "<pre>  MODULE 01 — LANGUAGE ........ OPEN\n"
+            "  MODULE 02 — ACCESS &amp; PLANS . OPEN</pre>\n\n"
+            f"{_ui(lang, 'language')}: {_ui(lang, 'choose_language')}\n\n"
+            f"{_ui(lang, 'access_plans')}: {_ui(lang, 'select_plan')}")
     await main._present(update, text, public_menu_keyboard(update))
 
 
@@ -98,17 +100,19 @@ async def _callback_router(update, context):
         context.user_data["awaiting_token"] = True
         await main._present(
             update,
-            "<b>🔑 ACTIVATE TOKEN</b>\n\nEnter your single-use activation token below.",
+            "<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n"
+            ">> Enter your single-use activation token below.\n"
+            "<i>(Token dikirim administrator setelah pembayaran diverifikasi.)</i>",
             access_keyboard(update),
         )
         return
     if data.startswith("buy:"):
-        await query.answer("Checkout is available from the plan button.", show_alert=True)
+        await query.answer("[ ERROR ]: INVALID ROUTE — gunakan tombol paket untuk checkout.", show_alert=True)
         return
     if data == "support:open":
         await query.answer()
         context.user_data["awaiting_support"] = True
-        await query.message.reply_text(f"<b>{_ui(lang, 'support_title')}</b>\n\n{_ui(lang, 'support_prompt')}\n{_ui(lang, 'support_routed')}", parse_mode="HTML")
+        await query.message.reply_text(f"<b>[ UPLINK ]: {_ui(lang, 'support_title')}</b>\n\n{_ui(lang, 'support_prompt')}\n{_ui(lang, 'support_routed')}", parse_mode="HTML")
         return
     if data == "settings:language":
         await query.answer()
@@ -124,7 +128,7 @@ async def _callback_router(update, context):
         return
     if data == "screen:support":
         await query.answer()
-        await main._present(update, f"<b>{_ui(lang, 'support_title')}</b>\n{main.DIVIDER}\n\n{_ui(lang, 'support_prompt')}", support_keyboard(update))
+        await main._present(update, f"<b>[ UPLINK ]: {_ui(lang, 'support_title')}</b>\n{main.DIVIDER}\n\n{_ui(lang, 'support_prompt')}", support_keyboard(update))
         return
     await _original_router(update, context)
 
@@ -139,15 +143,21 @@ async def _unknown_text_handler(update, context):
             await update.message.reply_text(_ui(lang, "support_empty"))
             context.user_data["awaiting_support"] = True
             return
-        support_text = (f"<b>NEURAL GOLD SUPPORT REQUEST</b>\n\nCustomer: <b>{main._esc(user.first_name or 'Trader')}</b>\n"
-                        f"Username: <code>@{main._esc(user.username or 'N/A')}</code>\n"
-                        f"Telegram ID: <code>{user.id}</code>\n\nMessage:\n{main._esc(text)}")
+        support_text = (f"<b>[ INCOMING ]: NEURAL GOLD SUPPORT REQUEST</b>\n\n"
+                        f"CUSTOMER: <b>{main._esc(user.first_name or 'Trader')}</b>\n"
+                        f"USERNAME: <code>@{main._esc(user.username or 'N/A')}</code>\n"
+                        f"TELEGRAM_ID: <code>{user.id}</code>\n\nMESSAGE_LOG:\n{main._esc(text)}")
         if main.ADMIN_TELEGRAM_ID:
             try:
                 await context.bot.send_message(chat_id=main.ADMIN_TELEGRAM_ID, text=support_text, parse_mode="HTML")
             except Exception:
                 logger.exception("Failed to route support request")
-        await update.message.reply_text(_ui(lang, "support_sent"), parse_mode="HTML", reply_markup=access_keyboard(update))
+        sent_body = _ui(lang, "support_sent").split("\n\n", 1)[-1]
+        await update.message.reply_text(
+            f"<b>[ LOG ]: SUPPORT REQUEST TRANSMITTED</b>\n\n{sent_body}",
+            parse_mode="HTML",
+            reply_markup=access_keyboard(update),
+        )
         return
     await _original_unknown_text(update, context)
 

@@ -1,6 +1,7 @@
 """NEURAL GOLD v3.2 — consolidated Telegram UI layer."""
 from __future__ import annotations
 
+import terminal_style as ts
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
@@ -70,24 +71,29 @@ async def render_access(update, context):
         expiry = main.database.normalize_datetime_utc(db_user.subscription_expiry) if db_user else None
         expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
         text = (
-            "<b>PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
+            "<b>[ CLEARANCE ]: PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
+            f"{ts.stamp()}\n"
             "-------------------------------------------------\n\n"
-            "<b>🟢 CLEARANCE ACTIVE</b>\n\n"
-            f"Access until <code>{expiry_text}</code>\n\n"
-            "Your Alpha Terminal is synchronized."
+            "[ ACCESS ]: GRANTED. WELCOME, OPERATOR.\n\n"
+            f"CLEARANCE: <b>🟢 ACTIVE</b>\n\n"
+            f"ACCESS_UNTIL: <code>{expiry_text}</code>\n\n"
+            "[ CORE ]: YOUR ALPHA TERMINAL IS SYNCHRONIZED."
         )
     else:
+        lang = main._lang(update)
         text = (
-            "<b>PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
+            "<b>[ CLEARANCE ]: PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
+            f"{ts.stamp()}\n"
             "-------------------------------------------------\n\n"
-            "<i>\"Anda berada di dalam, tapi Anda belum 'terhubung'.\"</i>\n\n"
-            "Pasar XAU/USD adalah mesin pemindah uang dari trader amatir ke institusi. Tanpa akses ke saraf pusat kami, Anda hanyalah statistik dalam data likuiditas mereka.\n\n"
-            "<b>Jangan hanya trading. Dominasi.</b>\n\n"
-            "Aktifkan enkripsi premium untuk menghentikan penebakan dan mulai melihat struktur pasar yang sebenarnya:\n\n"
-            "📈 Institutional Orderflow (Live XAU/USD)\n"
-            "🧠 Neural Precision Strikes (Signals)\n"
-            "📊 Market Architecture (Structural Analysis)\n"
-            "👑 Alpha Terminal (Private Dashboard)\n\n"
+            "[ ACCESS ]: PENDING // OPERATOR NOT YET CONNECTED\n\n"
+            "<pre>  ENCRYPTED PREMIUM MODULES:\n"
+            "   ▸ Institutional Orderflow (Live XAU/USD)\n"
+            "   ▸ Neural Precision Strikes (Signals)\n"
+            "   ▸ Market Architecture (Structural Analysis)\n"
+            "   ▸ Alpha Terminal (Private Dashboard)</pre>\n\n"
+            "Pasar XAU/USD memindahkan uang dari trader amatir ke institusi. "
+            "Tanpa akses premium, Anda hanya data likuiditas. Jangan hanya trading. Dominasi.\n\n"
+            f"{ts.pay_guide(lang, tag='PAYMENT')}\n\n"
             "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n"
             "Gunakan <b>🎯 SELECT CLEARANCE</b> untuk membuka pilihan 7/14/30 hari.\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -101,16 +107,15 @@ async def render_price(update, context):
     if _active(update):
         await main._original_render_price(update, context)
         return
+    lang = main._lang(update)
     text = (
-        "<b>📈 MARKET PULSE // CLEARANCE</b>\n"
-        "NEURAL GOLD v3.2\n"
+        "<b>[ CLEARANCE LEVELS ]: MARKET PULSE // NEURAL GOLD v3.2</b>\n"
+        f"{ts.stamp()}\n"
         f"{main.DIVIDER}\n\n"
-        "<i>Clearance levels control the duration of your premium connection.</i>\n\n"
-        "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n\n"
-        "🕐 <b>7 DAYS — Tactical Trial</b>\n"
-        "📅 <b>14 DAYS — Strategic Entry</b>\n"
-        "🗓️ <b>30 DAYS — Full Operational Control</b>\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "<pre>  🕐 7 DAYS  — TACTICAL TRIAL\n"
+        "  📅 14 DAYS — STRATEGIC ENTRY\n"
+        "  🗓️ 30 DAYS — FULL OPERATIONAL CONTROL</pre>\n\n"
+        f"{ts.buy_guide(lang, tag='PAYMENT')}\n\n"
         "<b>SELECT A CLEARANCE LEVEL TO CONTINUE.</b>"
     )
     await main._present(update, text, price_keyboard(update))
@@ -125,11 +130,13 @@ async def render_home(update, context, edit: bool = True):
         text = (
             "<b>NEURAL GOLD v3.2 // ALPHA TERMINAL</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Operator: <b>{main._safe_user_name(user)}</b>\n"
-            "Status: CLEARANCE GRANTED ✅\n\n"
+            f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
+            f"{ts.stamp()}\n\n"
+            "[ SYSTEM ]: INITIALIZING NEURAL GOLD v3.2...\n"
+            "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...\n"
+            "[ ACCESS ]: GRANTED. WELCOME, OPERATOR.\n\n"
             "<i>\"Saraf pusat XAU/USD kini tersinkronisasi dengan akun Anda. Seluruh data market telah difilter; hanya presisi yang tersisa.</i>\n\n"
-            "Gunakan modul di bawah untuk mendominasi aliran harga.\n\n"
-            "<b>S E L E C T _ M O D U L E</b>\n"
+            "<b>>> S E L E C T _ M O D U L E</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "🧠 Neural Strikes (Signals)\n"
             "📊 Structure Map (Structural Analysis)\n"
@@ -141,10 +148,15 @@ async def render_home(update, context, edit: bool = True):
         text = (
             "<b>NEURAL GOLD v3.2 // ALPHA TERMINAL</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Operator: <b>{main._safe_user_name(user)}</b>\n"
-            "Status: CLEARANCE PENDING ⏳\n\n"
-            "<i>Market intelligence is visible. Premium signal layers remain encrypted until clearance is activated.</i>\n\n"
-            "<b>S E L E C T _ M O D U L E</b>\n"
+            f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
+            f"{ts.stamp()}\n\n"
+            "[ SYSTEM ]: INITIALIZING NEURAL GOLD v3.2...\n"
+            "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...\n"
+            "[ ACCESS ]: PENDING // CLEARANCE REQUIRED\n\n"
+            "<pre>  MARKET INTELLIGENCE ..... VISIBLE\n"
+            "  PREMIUM SIGNAL LAYERS ... ENCRYPTED\n"
+            "  STATUS .................. AWAITING ACTIVATION</pre>\n\n"
+            "<b>>> S E L E C T _ M O D U L E</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "📈 Market Pulse (Clearance Levels)\n"
             "🧠 Neural Strikes 🔒\n"
@@ -182,7 +194,7 @@ async def callback_router(update, context):
     if data == "action:token":
         await query.answer()
         context.user_data["awaiting_token"] = True
-        await main._present(update, "<b>🔑 ACTIVATE TOKEN</b>\n\nEnter your single-use activation token below to sync your clearance.", access_keyboard(update))
+        await main._present(update, "<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n>> Enter your single-use activation token below to sync your clearance.\n<i>(Token dikirim administrator setelah pembayaran diverifikasi.)</i>", access_keyboard(update))
         return
     if data == "screen:signal" and not auth.verify_token(user.id)[0]:
         await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)

@@ -225,7 +225,7 @@ async def notify_customer(
                     await bot.send_photo(
                         chat_id=telegram_id,
                         photo=fh,
-                        caption="<b>PAYMENT CONFIRMED</b>\n<i>NEURAL GOLD v3.2</i>",
+                        caption="<b>[ ACCESS ]: PAYMENT CONFIRMED</b>\n<i>NEURAL GOLD v3.2</i>",
                         parse_mode="HTML",
                     )
             except Exception:
@@ -233,11 +233,12 @@ async def notify_customer(
         await bot.send_message(
             chat_id=telegram_id,
             text=(
-                "<b>✓ PAYMENT VERIFIED</b>\n"
+                "<b>[ SYSTEM ]: PAYMENT VERIFIED // FULFILLMENT COMPLETE</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"Your <b>{duration_days}-day</b> Neural Gold access is now <b>ACTIVE</b>.\n\n"
+                f"[ ACCESS ]: Your <b>{duration_days}-day</b> Neural Gold access is now <b>ACTIVE</b>.\n\n"
                 "Your Telegram account was activated automatically.\n"
-                "A single-use activation token was generated and consumed securely as part of fulfillment."
+                "A single-use activation token was generated and consumed securely as part of fulfillment.\n\n"
+                ">> [ CORE ]: ALL INTELLIGENCE MODULES UNLOCKED. PRESS /start."
             ),
             parse_mode="HTML",
         )

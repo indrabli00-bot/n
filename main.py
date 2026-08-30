@@ -28,12 +28,14 @@ import api_handler
 import auth
 import database
 from i18n import LANGUAGES, detect_language, language_buttons, t
+from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp
 from config import (
     ADMIN_TELEGRAM_ID,
     LOG_FILE,
     LOG_FORMAT,
     LOG_LEVEL,
     NEURAL_VERSION,
+    SIGNAL_VALIDITY_MINUTES,
     TELEGRAM_BOT_TOKEN,
 )
 
@@ -70,15 +72,14 @@ ALPHA_TERMS = {
 }
 
 SHORT_DESCRIPTION = (
-    "NEURAL GOLD v3.2 — Premium XAU/USD market intelligence."
+    "NEURAL GOLD v3.2 — PREMIUM XAU/USD TERMINAL INTELLIGENCE."
 )
 BOT_DESCRIPTION = (
     "NEURAL GOLD v3.2 — PREMIUM XAU/USD MARKET INTELLIGENCE\n\n"
     "━━━━━━━━━━━━━━━━━━━━\n\n"
-    "Welcome, Trader.\n\n"
-    "Real-time gold intelligence, built for fast decisions.\n\n"
-    "Monitor the XAU/USD market through live pricing, neural signal reads, "
-    "market structure and private account access."
+    "[ SYSTEM ]: XAU/USD INTELLIGENCE TERMINAL ONLINE.\n\n"
+    "Live pricing · Neural signal reads · Market structure · Private operator access.\n\n"
+    ">> Press /start to initialize."
 )
 
 
@@ -242,23 +243,25 @@ async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: 
         await render_access(update, context)
         return
 
-    access_line = "● PREMIUM ACCESS ACTIVE"
-    access_hint = "Live intelligence unlocked."
-
     text = (
-        f"<b>NEURAL GOLD</b>  <code>{NEURAL_VERSION}</code>\n"
-        f"<i>PREMIUM XAU/USD MARKET INTELLIGENCE</i>\n"
+        f"{boot(granted=True)}\n"
+        f"<i>{stamp()}</i>\n"
         f"{DIVIDER}\n\n"
-        f"Welcome, <b>{_safe_user_name(user)}</b>.\n\n"
-        f"<b>Real-time gold intelligence, built for fast decisions.</b>\n"
-        f"Monitor the XAU/USD market through live pricing, neural\n"
-        f"signal reads, market structure and private account access.\n\n"
-        f"<b>{GOLD} {access_line}</b>\n"
-        f"<i>{access_hint}</i>\n\n"
-        f"<b>SELECT A MODULE</b>\n"
-        f"Price  •  Signal  •  Analysis  •  Account\n"
-        f"Access  •  Settings  •  Support\n\n"
-        f"<i>Everything is one tap away.</i>"
+        f"OPERATOR: <b>{_safe_user_name(user)}</b>\n"
+        f"TELEGRAM_ID: <code>{user.id}</code>\n"
+        f"CLEARANCE: <b>{GOLD} ● PREMIUM ACCESS ACTIVE</b>\n\n"
+        f"<b>>> SELECT A MODULE</b>\n"
+        + panel(
+            [
+                "  01  PRICE     — LIVE MARKET FEED",
+                "  02  SIGNAL    — NEURAL SIGNAL",
+                "  03  ANALYSIS  — MARKET ANALYSIS",
+                "  04  ACCOUNT   — ACCOUNT INTELLIGENCE",
+                "  05  SETTINGS  — SETTINGS",
+                "  06  SUPPORT   — PREMIUM SUPPORT",
+            ]
+        )
+        + "\n>> [ CORE ]: ALL MODULES UNLOCKED. AWAITING SELECTION."
     )
     await _present(update, text, home_keyboard(update), edit=edit)
 
@@ -273,7 +276,7 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await render_locked(update, "price")
         return
 
-    await _answer_loading(update, "Syncing live market feed…")
+    await _answer_loading(update, "[ CORE ]: SYNCING XAUUSD FEED...")
     try:
         data = await api_handler.get_cached_or_fresh_price(user.id)
         bid = float(data["bid"])
@@ -287,7 +290,7 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         timestamp = _format_timestamp(raw_ts)
         move_icon = "📈" if change > 0 else ("📉" if change < 0 else "⚡️")
         text = (
-            f"<b>🟢 LIVE MARKET FEED</b>\n"
+            f"<b>[ ANALYSIS ]: LIVE MARKET FEED // XAUUSD</b>\n"
             f"<pre>┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑\n"
             f"  SYSTEM: MARKET_DATA_SATELLITE // XAU_USD\n"
             f"  STATUS: [LIVE]          TIMESTAMP: {timestamp}\n"
@@ -302,12 +305,13 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"  ─────────────────────────────────────────────\n"
             f"  UPLINK:  {source}   // MODE: LIVE\n"
             f"</pre>"
+            f">> [ CORE ]: FEED VERIFIED // {stamp()}\n"
             f"<i>Market feed may vary slightly by venue.</i>"
         )
         await _present(update, text, price_keyboard(update))
     except Exception as exc:
         logger.exception("Premium price screen failed: %s", exc)
-        await _present(update, "<b>🟢 LIVE MARKET FEED</b>\n\n<pre>┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑\n  STATUS: [OFFLINE]\n  MARKET DATA UPLINK TEMPORARILY UNAVAILABLE\n┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙</pre>\nPlease refresh in a moment.", price_keyboard(update))
+        await _present(update, f"<b>[ FAULT ]: LINK_TIMEOUT // RETRYING...</b>\n\n<pre>┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑\n  STATUS: [OFFLINE]\n  [ ERROR ]: DATA_GAP_DETECTED\n  MARKET DATA UPLINK TEMPORARILY UNAVAILABLE\n┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙</pre>\nPlease refresh in a moment.", price_keyboard(update))
 
 
 async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -320,7 +324,7 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await render_locked(update, "signal")
         return
 
-    await _answer_loading(update, "Building neural signal…")
+    await _answer_loading(update, "[ NEURAL-MAP ]: COMPUTING SIGNAL VECTOR...")
     try:
         data = await api_handler.get_cached_or_fresh_price(user.id)
         indicators = api_handler._simulate_technical_indicators(float(data["bid"]), float(data.get("change_percent", 0)))
@@ -332,20 +336,21 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         setup = "AWAITING CONFIRMATION" if direction == "HOLD" else f"{_money(signal['entry_low'])} — {_money(signal['entry_high'])}"
         align = "POSITIVE" if "BULLISH" in str(indicators.get("ema_trend", "")) else ("NEGATIVE" if "BEARISH" in str(indicators.get("ema_trend", "")) else "NEUTRAL")
         text = (
-            f"<b>🟡 NEURAL SIGNAL</b>\n"
-            f"<i>Designed as an institutional intelligence brief</i>\n"
+            f"<b>{intel_header()}</b>\n"
+            f"<i>{stamp()} // NEURAL-SIGNAL ENGINE</i>\n"
             f"<pre>◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥\n"
             f"   NEURAL-SIGNAL // ALGO-READ : XAU_USD\n"
             f"   OPERATIONAL STATUS: SCANNING...\n"
             f"◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢\n"
-            f"  SIGNAL:      {icon} {direction}\n"
-            f"  CONFIDENCE:  {confidence:.1f}% [{confidence_tag}]\n"
+            f"  VECTOR:      {icon} {direction}\n"
+            f"  COORDINATE:  [{_esc(setup)}]\n"
+            f"  CONFIDENCE_LEVEL: {confidence:.1f}% [{confidence_tag}]\n"
+            f"  TIMEFRAME:   INTRADAY // {SIGNAL_VALIDITY_MINUTES} MIN WINDOW\n"
             f"  MOMENTUM:    {_esc(signal['momentum'])}\n"
             f"  LIQUIDITY:   {_esc(signal['liquidity'])}\n"
             f"  VOLATILITY:   {_esc(signal['volatility'])}\n"
             f"  ─────────────────────────────────────────────\n"
             f"  EXECUTION MAP:\n"
-            f"  ▸ ENTRY:    [{_esc(setup)}]\n"
             f"  ▸ TP_1:     {_money(signal['tp1']) if signal['tp1'] else '—'}  |  TP_2: {_money(signal['tp2']) if signal['tp2'] else '—'}  |  TP_3: {_money(signal['tp3']) if signal['tp3'] else '—'}\n"
             f"  ▸ STOP_LOSS: {_money(signal['sl']) if signal['sl'] else '—'}  |  R:R: 1 : {signal['risk_reward']}\n"
             f"  ─────────────────────────────────────────────\n"
@@ -357,12 +362,13 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"  ─────────────────────────────────────────────\n"
             f"  LOG: Algorithmic projection layer active.\n"
             f"</pre>"
+            f"{intel_footer()}\n"
             f"<i>Algorithmic projection — not financial advice.</i>"
         )
         await _present(update, text, signal_keyboard(update))
     except Exception as exc:
         logger.exception("Signal screen failed: %s", exc)
-        await _present(update, "<b>🟡 NEURAL SIGNAL</b>\n\n<pre>◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥\n  STATUS: SIGNAL ENGINE UNAVAILABLE\n◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢</pre>\nPlease refresh in a moment.", signal_keyboard(update))
+        await _present(update, "<b>[ FAULT ]: NEURAL-MAP OFFLINE // RETRYING...</b>\n\n<pre>◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥\n  STATUS: SIGNAL ENGINE UNAVAILABLE\n  [ ERROR ]: DATA_GAP_DETECTED\n◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢</pre>\nPlease refresh in a moment.", signal_keyboard(update))
 
 
 async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -374,7 +380,7 @@ async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await render_locked(update, "analysis")
         return
 
-    await _answer_loading(update, "Reading market structure…")
+    await _answer_loading(update, "[ EXTRACTING ]: MARKET STRUCTURE...")
     try:
         data = await api_handler.get_cached_or_fresh_price(user.id)
         bid = float(data["bid"])
@@ -388,8 +394,8 @@ async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         rsi_state = "OVERSOLD" if rsi < 30 else ("OVERBOUGHT" if rsi > 70 else "NEUTRAL")
         stoch_state = "OVERSOLD" if stoch < 20 else ("OVERBOUGHT" if stoch > 80 else "NEUTRAL")
         text = (
-            f"<b>🔵 MARKET ANALYSIS</b>\n"
-            f"<i>Designed as a quantitative deep-dive</i>\n"
+            f"<b>[ NEURAL-MAP ]: MARKET ANALYSIS</b>\n"
+            f"<i>{stamp()} // QUANTITATIVE DEEP-DIVE</i>\n"
             f"<pre>⌁─────────────────────────────────────────────⌁\n"
             f"  ANALYSIS_STRUCTURE :: MOMENTUM &amp; VOLATILITY\n"
             f"⌁─────────────────────────────────────────────⌁\n"
@@ -409,12 +415,13 @@ async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"  ─────────────────────────────────────────────\n"
             f"  SOURCE: SIGNAL_ENGINE_C2 // LIVE FEED LINKED\n"
             f"</pre>"
+            f">> [ CORE ]: STRUCTURE SCAN COMPLETE // {stamp()}\n"
             f"<i>Analysis generated from the current feed and signal engine.</i>"
         )
         await _present(update, text, analysis_keyboard(update))
     except Exception as exc:
         logger.exception("Analysis screen failed: %s", exc)
-        await _present(update, "<b>🔵 MARKET ANALYSIS</b>\n\n<pre>⌁─────────────────────────────────────────────⌁\n  STATUS: ANALYSIS ENGINE UNAVAILABLE\n⌁─────────────────────────────────────────────⌁</pre>\nPlease refresh in a moment.", analysis_keyboard(update))
+        await _present(update, "<b>[ FAULT ]: ANALYSIS ENGINE OFFLINE // RETRYING...</b>\n\n<pre>⌁─────────────────────────────────────────────⌁\n  STATUS: ANALYSIS ENGINE UNAVAILABLE\n  [ ERROR ]: DATA_GAP_DETECTED\n⌁─────────────────────────────────────────────⌁</pre>\nPlease refresh in a moment.", analysis_keyboard(update))
 
 
 def _bias_icon(momentum: str) -> str:
@@ -432,9 +439,10 @@ async def render_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     db_user = database.get_user_by_telegram_id(user.id)
     if db_user is None:
         text = (
-            f"<b>♛ ACCOUNT</b>\n{DIVIDER}\n\n"
-            f"Profile not registered yet.\n\n"
-            f"Tap <b>ACCESS / PLANS</b> to activate your account."
+            f"<b>[ FILE ]: ACCOUNT INTELLIGENCE</b>\n{DIVIDER}\n\n"
+            f"[ ERROR ]: OPERATOR_PROFILE_NOT_FOUND\n\n"
+            f">> Profile not registered yet.\n"
+            f">> Tap <b>ACCESS / PLANS</b> to activate your account."
         )
     else:
         valid, reason = auth.verify_token(user.id)
@@ -443,14 +451,18 @@ async def render_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         status = "ACTIVE" if valid else reason.replace("_", " ").upper()
         status_icon = "🟢" if valid else "○"
         text = (
-            f"<b>♛ ACCOUNT INTELLIGENCE</b>\n"
-            f"<i>YOUR PREMIUM ACCESS</i>\n"
+            f"<b>[ FILE ]: ACCOUNT INTELLIGENCE</b>\n"
+            f"<i>YOUR PREMIUM ACCESS // {stamp()}</i>\n"
             f"{DIVIDER}\n\n"
-            f"<b>{status_icon} {status}</b>\n\n"
-            f"Telegram ID  <code>{user.id}</code>\n"
-            f"Username     <code>@{_esc(user.username or 'N/A')}</code>\n"
-            f"Access until <code>{expiry_text}</code>\n\n"
-            f"<i>Your private access status is checked in real time.</i>"
+            f"STATUS: <b>{status_icon} {status}</b>\n\n"
+            + panel(
+                [
+                    f"  TELEGRAM_ID:  {user.id}",
+                    f"  USERNAME:     @{_esc(user.username or 'N/A')}",
+                    f"  ACCESS_UNTIL: {expiry_text}",
+                ]
+            )
+            + "\n>> [ CORE ]: Your private access status is checked in real time."
         )
     await _present(update, text, account_keyboard(update))
 
@@ -464,10 +476,10 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     state = "ACTIVE" if active else "READY TO ACTIVATE"
     icon = "🟢" if active else "◆"
     text = (
-        f"<b>◆ PREMIUM ACCESS</b>\n"
-        f"<i>NEURAL GOLD MEMBERSHIP</i>\n"
+        f"<b>[ CLEARANCE ]: PREMIUM ACCESS</b>\n"
+        f"<i>NEURAL GOLD MEMBERSHIP // {stamp()}</i>\n"
         f"{DIVIDER}\n\n"
-        f"<b>{icon} {state}</b>\n\n"
+        f"{icon} {state}\n\n"
         f"Your access unlocks:\n"
         f"◈ Live XAU/USD pricing\n"
         f"◎ Neural trade signals\n"
@@ -477,6 +489,7 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"7 DAYS   •   SHORT TERM\n"
         f"14 DAYS  •   STANDARD\n"
         f"30 DAYS  •   PREMIUM\n\n"
+        f"{pay_guide(_lang(update), tag='PAYMENT')}\n\n"
         f"<i>Enter your single-use activation token after purchase.</i>"
     )
     await _present(update, text, access_keyboard(update))
@@ -484,8 +497,8 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def render_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        f"<b>⚙ SETTINGS</b>\n"
-        f"<i>INTERFACE CONTROL</i>\n"
+        f"<b>[ SYSTEM ]: SETTINGS</b>\n"
+        f"<i>INTERFACE CONTROL // {stamp()}</i>\n"
         f"{DIVIDER}\n\n"
         f"<b>DISPLAY PROFILE</b>\n"
         f"◈ Premium dark interface\n"
@@ -494,20 +507,20 @@ async def render_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"<b>REGION</b>\n"
         f"Timezone  <code>Asia/Jakarta</code>\n"
         f"Language  <code>{_lang(update).upper()}</code>\n\n"
-        f"<i>Core settings are controlled by the bot configuration.</i>"
+        f">> [ CORE ]: Core settings are controlled by the bot configuration."
     )
     await _present(update, text, settings_keyboard(update))
 
 
 async def render_support(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        f"<b>◉ PREMIUM SUPPORT</b>\n"
-        f"<i>DIRECT ASSISTANCE</i>\n"
+        f"<b>[ UPLINK ]: PREMIUM SUPPORT</b>\n"
+        f"<i>DIRECT ASSISTANCE // {stamp()}</i>\n"
         f"{DIVIDER}\n\n"
         f"Need help with access, token activation or account issues?\n\n"
         f"<b>Support channel</b>\n"
         f"Tap the button below to contact the administrator.\n\n"
-        f"<i>For security, never share your activation token publicly.</i>"
+        f"[ SECURITY ]: For security, never share your activation token publicly."
     )
     await _present(update, text, support_keyboard(update))
 
@@ -520,11 +533,12 @@ async def render_locked(update: Update, module: str) -> None:
     }
     label = labels.get(module, module.upper())
     text = (
-        f"<b>🔒 {label}</b>\n"
+        f"<b>[ LOCKED ]: {label}</b>\n"
         f"{DIVIDER}\n\n"
+        f"[ FAULT ]: CLEARANCE_CHECK_FAILED\n\n"
         f"This module is part of the premium intelligence layer.\n\n"
-        f"<b>ACCESS REQUIRED</b>\n"
-        f"Activate a valid subscription token to continue.\n\n"
+        f"[ ERROR ]: ACCESS REQUIRED\n"
+        f">> Activate a valid subscription token to continue.\n\n"
         f"<i>Your account and token are verified automatically.</i>"
     )
     await _present(update, text, access_keyboard(update))
@@ -613,18 +627,19 @@ async def activate_token_for_user(update: Update, context: ContextTypes.DEFAULT_
         expiry = database.normalize_datetime_utc(db_user.subscription_expiry) if db_user else None
         expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
         text = (
-            f"<b>✓ ACCESS ACTIVATED</b>\n{DIVIDER}\n\n"
-            f"Your premium access is now active.\n\n"
+            f"<b>[ ACCESS ]: TOKEN ACCEPTED // CLEARANCE GRANTED</b>\n{DIVIDER}\n\n"
+            f"[ SYSTEM ]: Your premium access is now active.\n\n"
             f"Expires  <code>{expiry_text}</code>\n"
             f"Package  <b>{duration} days</b>\n\n"
-            f"Your intelligence modules are unlocked."
+            f">> [ CORE ]: Your intelligence modules are unlocked."
         )
         await update.message.reply_text(text, parse_mode="HTML", reply_markup=home_keyboard(update))
     else:
         await update.message.reply_text(
-            "<b>✕ ACTIVATION FAILED</b>\n\n"
+            "<b>[ ERROR ]: TOKEN_REJECTED</b>\n\n"
+            "[ FAULT ]: INVALID_OR_ALREADY_BURNED\n"
             "The token is invalid or has already been used.\n\n"
-            "Tap <b>ACCESS / PLANS</b> to try again.",
+            ">> Tap <b>ACCESS / PLANS</b> to try again.",
             parse_mode="HTML",
             reply_markup=access_keyboard(update),
         )
@@ -637,21 +652,29 @@ async def token_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["awaiting_token"] = False
     raw_token = (update.message.text or "").strip()
     if not raw_token:
-        await update.message.reply_text("Please send the activation token.", reply_markup=access_keyboard(update))
+        await update.message.reply_text(
+            "[ ERROR ]: EMPTY_INPUT\n>> Please send the activation token.",
+            reply_markup=access_keyboard(update),
+        )
         return
     try:
         await activate_token_for_user(update, context, raw_token)
     except Exception as exc:
         logger.exception("Interactive token activation failed: %s", exc)
-        await update.message.reply_text("⚠ Activation service temporarily unavailable.", parse_mode="HTML", reply_markup=access_keyboard(update))
+        await update.message.reply_text(
+            "[ FAULT ]: ACTIVATION_LINK_TIMEOUT // RETRYING...\n"
+            "⚠ Activation service temporarily unavailable.",
+            parse_mode="HTML",
+            reply_markup=access_keyboard(update),
+        )
 
 
 async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Fallback activation command for users who prefer commands."""
     if not context.args:
         await update.message.reply_text(
-            "<b>🔑 ACTIVATE ACCESS</b>\n\n"
-            "Tap the activation button and enter your single-use token.",
+            "<b>[ KEYGEN ]: ACTIVATE ACCESS</b>\n\n"
+            ">> Tap the activation button and enter your single-use token.",
             parse_mode="HTML",
             reply_markup=access_keyboard(update),
         )
@@ -660,7 +683,11 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await activate_token_for_user(update, context, " ".join(context.args).strip())
     except Exception as exc:
         logger.exception("Error during /token: %s", exc)
-        await update.message.reply_text("⚠ Activation service temporarily unavailable.", parse_mode="HTML")
+        await update.message.reply_text(
+            "[ FAULT ]: ACTIVATION_LINK_TIMEOUT // RETRYING...\n"
+            "⚠ Activation service temporarily unavailable.",
+            parse_mode="HTML",
+        )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -690,14 +717,14 @@ async def addtoken_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         if database.add_token_to_pool(generated, duration_days=days):
             await update.message.reply_text(
-                f"<b>✓ TOKEN CREATED</b>\n\n<code>{generated}</code>\n\nDuration <b>{days} days</b>",
+                f"<b>[ KEYGEN ]: TOKEN_MINTED</b>\n\n<code>{generated}</code>\n\nVALIDITY: <b>{days} days</b>\n>> Deliver via secure channel only. Single-use.",
                 parse_mode="HTML",
             )
         else:
-            await update.message.reply_text("<b>✕ TOKEN CREATION FAILED</b>", parse_mode="HTML")
+            await update.message.reply_text("<b>[ ERROR ]: TOKEN_CREATION_FAILED</b>", parse_mode="HTML")
     except Exception:
         logger.exception("Error in /addtoken")
-        await update.message.reply_text("⚠ Internal error.", parse_mode="HTML")
+        await update.message.reply_text("[ FAULT ]: INTERNAL_ERROR // CHECK LOGS", parse_mode="HTML")
 
 
 @auth.require_admin
@@ -705,9 +732,9 @@ async def listusers_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         users = database.list_all_users()
         if not users:
-            await update.message.reply_text("No registered users.")
+            await update.message.reply_text("[ ERROR ]: NO_OPERATORS_IN_REGISTRY")
             return
-        lines = [f"<b>USERS • {len(users)}</b>", DIVIDER]
+        lines = [f"<b>[ DATABASE ]: OPERATOR REGISTRY • {len(users)}</b>", DIVIDER]
         for u in users:
             icon = "🟢" if u["is_active"] else "○"
             exp = u["subscription_expiry"][:16] if u["subscription_expiry"] else "—"
@@ -715,24 +742,24 @@ async def listusers_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     except Exception:
         logger.exception("Error in /listusers")
-        await update.message.reply_text("⚠ Could not fetch users.", parse_mode="HTML")
+        await update.message.reply_text("[ ERROR ]: DB_READ_FAILED // CONTACT SYSADMIN", parse_mode="HTML")
 
 
 @auth.require_admin
 async def revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args or not context.args[0].strip().lstrip("-").isdigit():
-        await update.message.reply_text("Usage: <code>/revoke TELEGRAM_ID</code>", parse_mode="HTML")
+        await update.message.reply_text(">> USAGE: <code>/revoke TELEGRAM_ID</code>", parse_mode="HTML")
         return
     target_id = int(context.args[0].strip())
     try:
         success = database.revoke_user(target_id)
         await update.message.reply_text(
-            f"{'✓' if success else '✕'} User <code>{target_id}</code> {'revoked' if success else 'not found'}.",
+            f"[ ACCESS ]: {'REVOKED' if success else 'TARGET_NOT_FOUND'} // <code>{target_id}</code>",
             parse_mode="HTML",
         )
     except Exception:
         logger.exception("Error in /revoke")
-        await update.message.reply_text("⚠ Internal error.", parse_mode="HTML")
+        await update.message.reply_text("[ FAULT ]: INTERNAL_ERROR // CHECK LOGS", parse_mode="HTML")
 
 
 async def paid_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -742,19 +769,19 @@ async def paid_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if query is None or user is None:
         return
     try:
-        await query.answer("Payment notice sent.", show_alert=False)
+        await query.answer("[ LOG ]: PAYMENT NOTICE TRANSMITTED", show_alert=False)
     except Exception:
         pass
 
     username = f"@{user.username}" if user.username else "(no username)"
     text = (
-        "<b>💳 PAYMENT NOTICE</b>\n"
+        "<b>[ INCOMING ]: PAYMENT NOTICE</b>\n"
         f"{DIVIDER}\n"
-        f"Customer: <b>{_esc(user.first_name or 'Trader')}</b>\n"
-        f"Username: <code>{_esc(username)}</code>\n"
-        f"Telegram ID: <code>{user.id}</code>\n\n"
-        "Customer reports that a Whop payment was completed.\n"
-        "Verify the Whop order manually, then issue the matching token."
+        f"CUSTOMER: <b>{_esc(user.first_name or 'Trader')}</b>\n"
+        f"USERNAME: <code>{_esc(username)}</code>\n"
+        f"TELEGRAM_ID: <code>{user.id}</code>\n\n"
+        ">> Customer reports that a Whop payment was completed.\n"
+        ">> Verify the Whop order manually, then issue the matching token via /addtoken."
     )
     if ADMIN_TELEGRAM_ID:
         try:
@@ -767,9 +794,10 @@ async def paid_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             logger.exception("Failed to send payment notice to admin")
 
     await query.message.reply_text(
-        "<b>PAYMENT NOTICE REGISTERED</b>\n\n"
+        "<b>[ LOG ]: PAYMENT NOTICE REGISTERED</b>\n\n"
         "Your payment notice has been sent to support. "
-        "After manual verification, the administrator will provide your single-use activation token.",
+        "After manual verification, the administrator will provide your single-use activation token.\n\n"
+        f"{pay_guide(_lang(update), tag='NEXT')}",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -874,9 +902,8 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Never leave an unknown command unanswered."""
     await update.message.reply_text(
-        "<b>NEURAL GOLD</b>\n\n"
-        "⌁ Command not recognized.\n"
-        "Use <b>/start</b> to open ACCESS / PLANS and the premium dashboard.",
+        "<b>[ ERROR ]: COMMAND_NOT_RECOGNIZED</b>\n\n"
+        ">> Unknown command. Use <b>/start</b> to open ACCESS / PLANS and the premium dashboard.",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -888,9 +915,8 @@ async def unknown_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await token_text_handler(update, context)
         return
     await update.message.reply_text(
-        "<b>NEURAL GOLD</b>\n\n"
-        "⌁ Input not recognized.\n"
-        "Use the premium menu below or tap <b>ACCESS / PLANS</b>.",
+        "<b>[ ERROR ]: INPUT_NOT_RECOGNIZED</b>\n\n"
+        ">> Use the premium menu below or tap <b>ACCESS / PLANS</b>.",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -908,7 +934,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         if query:
             try:
                 await query.edit_message_text(
-                    "<b>NEURAL GOLD</b>\n\n⚠ <b>Module temporarily unavailable.</b>\nPlease tap <b>MENU</b> and try again.",
+                    "<b>[ FAULT ]: Module temporarily unavailable.</b>\n\n>> Please tap <b>MENU</b> and try again.",
                     parse_mode="HTML",
                     reply_markup=home_keyboard(update),
                 )
@@ -917,7 +943,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         elif update.message:
             try:
                 await update.message.reply_text(
-                    "⚠ <b>Temporary service error</b>\nPlease try again.",
+                    "[ FAULT ]: TEMPORARY SERVICE ERROR\n>> Please try again.",
                     parse_mode="HTML",
                     reply_markup=home_keyboard(update),
                 )

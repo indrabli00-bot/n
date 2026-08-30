@@ -1,6 +1,11 @@
 import base64
 import os
+import sys
 import unittest
+
+# Test harness bootstrap: make the repository root importable regardless of
+# the runner (pytest standalone, pytest combined, unittest discover, direct).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ.setdefault("WHOP_WEBHOOK_SECRET", "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("="))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
