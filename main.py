@@ -79,7 +79,7 @@ BOT_DESCRIPTION = (
     "━━━━━━━━━━━━━━━━━━━━\n\n"
     "[ SYSTEM ]: XAU/USD INTELLIGENCE TERMINAL ONLINE.\n\n"
     "Live pricing · Neural signal reads · Market structure · Private operator access.\n\n"
-    ">> Press /start to initialize."
+    ">> PRESS /start TO INITIALIZE."
 )
 
 
@@ -144,7 +144,7 @@ def _format_timestamp(value: str) -> str:
 
 
 def _safe_user_name(user) -> str:
-    return _esc(user.first_name or "Trader")
+    return _esc(user.first_name or "OPERATOR")
 
 
 def _nav_keyboard(update: Update, *rows: tuple[str, str], back: str = "home") -> InlineKeyboardMarkup:
@@ -253,12 +253,12 @@ async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: 
         f"<b>>> SELECT A MODULE</b>\n"
         + panel(
             [
-                "  01  PRICE     — LIVE MARKET FEED",
-                "  02  SIGNAL    — NEURAL SIGNAL",
-                "  03  ANALYSIS  — MARKET ANALYSIS",
-                "  04  ACCOUNT   — ACCOUNT INTELLIGENCE",
-                "  05  SETTINGS  — SETTINGS",
-                "  06  SUPPORT   — PREMIUM SUPPORT",
+                "  01  PRICE     — MARKET PULSE",
+                "  02  SIGNAL    — NEURAL STRIKES",
+                "  03  ANALYSIS  — STRUCTURE MAP",
+                "  04  ACCOUNT   — OPERATOR HUB",
+                "  05  SETTINGS  — SYSTEM SYNC",
+                "  06  SUPPORT   — UPLINK",
             ]
         )
         + "\n>> [ CORE ]: ALL MODULES UNLOCKED. AWAITING SELECTION."
@@ -337,9 +337,9 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         align = "POSITIVE" if "BULLISH" in str(indicators.get("ema_trend", "")) else ("NEGATIVE" if "BEARISH" in str(indicators.get("ema_trend", "")) else "NEUTRAL")
         text = (
             f"<b>{intel_header()}</b>\n"
-            f"<i>{stamp()} // NEURAL-SIGNAL ENGINE</i>\n"
+            f"<i>{stamp()} // NEURAL SIGNAL ENGINE</i>\n"
             f"<pre>◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥\n"
-            f"   NEURAL-SIGNAL // ALGO-READ : XAU_USD\n"
+            f"   NEURAL SIGNAL // ALGO-READ : XAU_USD\n"
             f"   OPERATIONAL STATUS: SCANNING...\n"
             f"◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢\n"
             f"  VECTOR:      {icon} {direction}\n"
@@ -442,7 +442,7 @@ async def render_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"<b>[ FILE ]: ACCOUNT INTELLIGENCE</b>\n{DIVIDER}\n\n"
             f"[ ERROR ]: OPERATOR_PROFILE_NOT_FOUND\n\n"
             f">> Profile not registered yet.\n"
-            f">> Tap <b>ACCESS / PLANS</b> to activate your account."
+            f">> Tap <b>ACCESS &amp; PLANS</b> to activate your account."
         )
     else:
         valid, reason = auth.verify_token(user.id)
@@ -485,7 +485,7 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"◎ Neural trade signals\n"
         f"⌁ Market structure analysis\n"
         f"♛ Private account dashboard\n\n"
-        f"<b>ACCESS PACKAGES</b>\n"
+        f"<b>ACCESS &amp; PLANS</b>\n"
         f"7 DAYS   •   SHORT TERM\n"
         f"14 DAYS  •   STANDARD\n"
         f"30 DAYS  •   PREMIUM\n\n"
@@ -527,9 +527,9 @@ async def render_support(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def render_locked(update: Update, module: str) -> None:
     labels = {
-        "price": "LIVE PRICE",
-        "signal": "NEURAL SIGNAL",
-        "analysis": "MARKET ANALYSIS",
+        "price": "MARKET PULSE",
+        "signal": "NEURAL STRIKES",
+        "analysis": "STRUCTURE MAP",
     }
     label = labels.get(module, module.upper())
     text = (
@@ -639,7 +639,7 @@ async def activate_token_for_user(update: Update, context: ContextTypes.DEFAULT_
             "<b>[ ERROR ]: TOKEN_REJECTED</b>\n\n"
             "[ FAULT ]: INVALID_OR_ALREADY_BURNED\n"
             "The token is invalid or has already been used.\n\n"
-            ">> Tap <b>ACCESS / PLANS</b> to try again.",
+            ">> Tap <b>ACCESS &amp; PLANS</b> to try again.",
             parse_mode="HTML",
             reply_markup=access_keyboard(update),
         )
@@ -797,7 +797,7 @@ async def paid_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "<b>[ LOG ]: PAYMENT NOTICE REGISTERED</b>\n\n"
         "Your payment notice has been sent to support. "
         "After manual verification, the administrator will provide your single-use activation token.\n\n"
-        f"{pay_guide(_lang(update), tag='NEXT')}",
+        f"{pay_guide(_lang(update), tag='PAYMENT')}",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -903,7 +903,7 @@ async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_
     """Never leave an unknown command unanswered."""
     await update.message.reply_text(
         "<b>[ ERROR ]: COMMAND_NOT_RECOGNIZED</b>\n\n"
-        ">> Unknown command. Use <b>/start</b> to open ACCESS / PLANS and the premium dashboard.",
+        ">> PRESS <b>/start</b> TO OPEN ACCESS &amp; PLANS.",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -916,7 +916,7 @@ async def unknown_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await update.message.reply_text(
         "<b>[ ERROR ]: INPUT_NOT_RECOGNIZED</b>\n\n"
-        ">> Use the premium menu below or tap <b>ACCESS / PLANS</b>.",
+        ">> Use the premium menu below or tap <b>ACCESS &amp; PLANS</b>.",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )

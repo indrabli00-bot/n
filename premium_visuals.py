@@ -31,7 +31,7 @@ def home_keyboard(update):
         rows.append([InlineKeyboardButton("📊 Structure Map 🔒", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
     rows.extend([
         [InlineKeyboardButton("⚙️ System Sync", callback_data="screen:settings"), InlineKeyboardButton("🌐 Uplink", callback_data="screen:support")],
-        [InlineKeyboardButton("💎 Premium Clearance", callback_data="screen:access")],
+        [InlineKeyboardButton("💎 ACCESS & PLANS", callback_data="screen:access")],
         [InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
     ])
     return InlineKeyboardMarkup(rows)
@@ -41,7 +41,7 @@ def access_keyboard(update):
     active = _active(update)
     rows = []
     if not active:
-        rows.append([InlineKeyboardButton("🎯 SELECT CLEARANCE", callback_data="screen:price")])
+        rows.append([InlineKeyboardButton("🎯 SELECT PACKAGE", callback_data="screen:price")])
         rows.append([InlineKeyboardButton("🔑 ACTIVATE TOKEN", callback_data="action:token"), InlineKeyboardButton("💳 I HAVE PAID", callback_data="paid:menu")])
     else:
         rows.append([InlineKeyboardButton("👑 OPERATOR HUB", callback_data="screen:account")])
@@ -95,7 +95,7 @@ async def render_access(update, context):
             "Tanpa akses premium, Anda hanya data likuiditas. Jangan hanya trading. Dominasi.\n\n"
             f"{ts.pay_guide(lang, tag='PAYMENT')}\n\n"
             "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n"
-            "Gunakan <b>🎯 SELECT CLEARANCE</b> untuk membuka pilihan 7/14/30 hari.\n\n"
+            "Gunakan <b>🎯 SELECT PACKAGE</b> untuk membuka pilihan 7/14/30 hari.\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "<b>🔑 ACTIVATE TOKEN</b> setelah pembelian dan masukkan token sekali pakai."
         )
@@ -109,7 +109,7 @@ async def render_price(update, context):
         return
     lang = main._lang(update)
     text = (
-        "<b>[ CLEARANCE LEVELS ]: MARKET PULSE // NEURAL GOLD v3.2</b>\n"
+        "<b>[ ACCESS &amp; PLANS ]: CLEARANCE LEVELS // NEURAL GOLD v3.2</b>\n"
         f"{ts.stamp()}\n"
         f"{main.DIVIDER}\n\n"
         "<pre>  🕐 7 DAYS  — TACTICAL TRIAL\n"
@@ -132,11 +132,9 @@ async def render_home(update, context, edit: bool = True):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
             f"{ts.stamp()}\n\n"
-            "[ SYSTEM ]: INITIALIZING NEURAL GOLD v3.2...\n"
-            "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...\n"
-            "[ ACCESS ]: GRANTED. WELCOME, OPERATOR.\n\n"
+            f"{ts.boot(granted=True)}\n\n"
             "<i>\"Saraf pusat XAU/USD kini tersinkronisasi dengan akun Anda. Seluruh data market telah difilter; hanya presisi yang tersisa.</i>\n\n"
-            "<b>>> S E L E C T _ M O D U L E</b>\n"
+            "<b>>> SELECT A MODULE</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "🧠 Neural Strikes (Signals)\n"
             "📊 Structure Map (Structural Analysis)\n"
@@ -150,13 +148,11 @@ async def render_home(update, context, edit: bool = True):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
             f"{ts.stamp()}\n\n"
-            "[ SYSTEM ]: INITIALIZING NEURAL GOLD v3.2...\n"
-            "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...\n"
-            "[ ACCESS ]: PENDING // CLEARANCE REQUIRED\n\n"
+            f"{ts.boot(granted=False)}\n\n"
             "<pre>  MARKET INTELLIGENCE ..... VISIBLE\n"
             "  PREMIUM SIGNAL LAYERS ... ENCRYPTED\n"
             "  STATUS .................. AWAITING ACTIVATION</pre>\n\n"
-            "<b>>> S E L E C T _ M O D U L E</b>\n"
+            "<b>>> SELECT A MODULE</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "📈 Market Pulse (Clearance Levels)\n"
             "🧠 Neural Strikes 🔒\n"

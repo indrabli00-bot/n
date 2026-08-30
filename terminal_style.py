@@ -112,35 +112,35 @@ _BUY_STEPS = {
 
 _PAY_STEPS = {
     "en": [
-        "Tap \U0001F3AF SELECT CLEARANCE and choose a 7 / 14 / 30 day package.",
+        "Tap \U0001F3AF SELECT PACKAGE and choose a 7 / 14 / 30 day package.",
         "Complete the payment on the Whop checkout page.",
         "Return to the bot and tap \"\U0001F4B3 I HAVE PAID\".",
         "The administrator verifies your payment and sends a single-use activation token.",
         "Tap \"\U0001F511 ACTIVATE TOKEN\" and paste the token.",
     ],
     "id": [
-        "Ketuk \U0001F3AF SELECT CLEARANCE, lalu pilih paket 7 / 14 / 30 hari.",
+        "Ketuk \U0001F3AF SELECT PACKAGE, lalu pilih paket 7 / 14 / 30 hari.",
         "Selesaikan pembayaran di halaman checkout Whop.",
         "Kembali ke bot dan ketuk \"\U0001F4B3 SAYA SUDAH MEMBAYAR\".",
         "Administrator memverifikasi pembayaran Anda, lalu mengirim token aktivasi sekali pakai.",
         "Ketuk \"\U0001F511 ACTIVATE TOKEN\" dan tempel token Anda.",
     ],
     "vi": [
-        "Nhấn \U0001F3AF SELECT CLEARANCE và chọn gói 7 / 14 / 30 ngày.",
+        "Nhấn \U0001F3AF SELECT PACKAGE và chọn gói 7 / 14 / 30 ngày.",
         "Hoàn tất thanh toán trên trang checkout Whop.",
         "Quay lại bot và nhấn \"\U0001F4B3 TÔI ĐÃ THANH TOÁN\".",
         "Quản trị viên xác minh thanh toán và gửi token kích hoạt dùng một lần.",
         "Nhấn \"\U0001F511 ACTIVATE TOKEN\" và dán token của bạn.",
     ],
     "hi": [
-        "\U0001F3AF SELECT CLEARANCE दबाएँ और 7 / 14 / 30 दिन का पैकेज चुनें।",
+        "\U0001F3AF SELECT PACKAGE दबाएँ और 7 / 14 / 30 दिन का पैकेज चुनें।",
         "Whop चेकआउट पेज पर भुगतान पूरा करें।",
         "बॉट पर वापस आएँ और \"\U0001F4B3 मैंने भुगतान कर दिया है\" दबाएँ।",
         "एडमिन आपका भुगतान सत्यापित करके एकल-उपयोग एक्टिवेशन टोकन भेजेगा।",
         "\"\U0001F511 ACTIVATE TOKEN\" दबाएँ और अपना टोकन पेस्ट करें।",
     ],
     "zh": [
-        "点击 \U0001F3AF SELECT CLEARANCE 并选择 7 / 14 / 30 天套餐。",
+        "点击 \U0001F3AF SELECT PACKAGE 并选择 7 / 14 / 30 天套餐。",
         "在 Whop 结账页面完成付款。",
         "返回机器人并点击“\U0001F4B3 我已付款”。",
         "管理员核验付款后，会向您发送一次性激活令牌。",
