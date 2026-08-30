@@ -91,8 +91,7 @@ async def render_access(update, context):
             "   ▸ Neural Precision Strikes (Signals)\n"
             "   ▸ Market Architecture (Structural Analysis)\n"
             "   ▸ Alpha Terminal (Private Dashboard)</pre>\n\n"
-            "Pasar XAU/USD memindahkan uang dari trader amatir ke institusi. "
-            "Tanpa akses premium, Anda hanya data likuiditas. Jangan hanya trading. Dominasi.\n\n"
+            f"{main.t(lang, 'market_pitch')}\n\n"
             f"{ts.pay_guide(lang, tag='PAYMENT')}\n\n"
             "<b>SELECT YOUR CLEARANCE LEVEL:</b>\n"
             "Gunakan <b>🎯 SELECT PACKAGE</b> untuk membuka pilihan 7/14/30 hari.\n\n"
@@ -190,7 +189,8 @@ async def callback_router(update, context):
     if data == "action:token":
         await query.answer()
         context.user_data["awaiting_token"] = True
-        await main._present(update, "<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n>> Enter your single-use activation token below to sync your clearance.\n<i>(Token dikirim administrator setelah pembayaran diverifikasi.)</i>", access_keyboard(update))
+        lang = main._lang(update)
+        await main._present(update, f"<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n>> {main.t(lang, 'enter_activation')}\n<i>{main.t(lang, 'token_note')}</i>", access_keyboard(update))
         return
     if data == "screen:signal" and not auth.verify_token(user.id)[0]:
         await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)

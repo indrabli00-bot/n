@@ -101,13 +101,13 @@ async def _callback_router(update, context):
         await main._present(
             update,
             "<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n"
-            ">> Enter your single-use activation token below.\n"
-            "<i>(Token dikirim administrator setelah pembayaran diverifikasi.)</i>",
+            f">> {_t(lang, 'enter_activation')}\n"
+            f"<i>{_t(lang, 'token_note')}</i>",
             access_keyboard(update),
         )
         return
     if data.startswith("buy:"):
-        await query.answer("[ ERROR ]: INVALID ROUTE — gunakan tombol paket untuk checkout.", show_alert=True)
+        await query.answer(f"[ ERROR ]: INVALID ROUTE — {_t(lang, 'use_package_buttons')}", show_alert=True)
         return
     if data == "support:open":
         await query.answer()

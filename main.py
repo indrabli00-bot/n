@@ -102,11 +102,8 @@ def _localized_text(update: Update, text: str) -> str:
     # Stable UI phrases that occur throughout the existing premium screens.
     replacements = {
         "LIVE MARKET FEED":"live_feed", "NEURAL SIGNAL":"neural_signal", "MARKET ANALYSIS":"analysis_title",
-        "SELECT A MODULE":"select_module", "PREMIUM ACCESS ACTIVE":"premium_active", "ACCESS NOT ACTIVATED":"access_off",
-        "Live intelligence unlocked.":"unlocked", "Activate access to unlock live intelligence.":"locked_hint",
-        "Real-time gold intelligence, built for fast decisions.":"real_time",
-        "Monitor the XAU/USD market through live pricing, neural signal reads, market structure and private account access.":"monitor",
-        "Everything is one tap away.":"one_tap", "ACCOUNT INTELLIGENCE":"account_intel", "YOUR PREMIUM ACCESS":"your_access",
+        "SELECT A MODULE":"select_module", "PREMIUM ACCESS ACTIVE":"premium_active",
+        "ACCOUNT INTELLIGENCE":"account_intel", "YOUR PREMIUM ACCESS":"your_access",
         "PREMIUM ACCESS":"premium_access", "NEURAL GOLD MEMBERSHIP":"membership", "Your access unlocks:":"unlocks",
         "ACCESS REQUIRED":"access_required", "Not activated":"not_activated", "ACTIVE":"active", "READY TO ACTIVATE":"ready",
         "SETTINGS":"settings_title", "INTERFACE CONTROL":"interface_control", "DISPLAY PROFILE":"display_profile",
