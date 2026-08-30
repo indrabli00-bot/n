@@ -86,33 +86,36 @@ def _lang_text(update: Update, key: str) -> str:
     return t(_lang(update), key)
 
 
+# Stable UI phrases that occur throughout the existing premium screens.
+# Single-pass translation (audit P4): longest-first alternation prevents
+# partial matches like PREMIUM ACCESS inside PREMIUM ACCESS ACTIVE.
+_PHRASE_MAP = {
+    "LIVE MARKET FEED":"live_feed", "NEURAL SIGNAL":"neural_signal", "MARKET ANALYSIS":"analysis_title",
+    "SELECT A MODULE":"select_module", "PREMIUM ACCESS ACTIVE":"premium_active",
+    "ACCOUNT INTELLIGENCE":"account_intel", "YOUR PREMIUM ACCESS":"your_access",
+    "PREMIUM ACCESS":"premium_access", "NEURAL GOLD MEMBERSHIP":"membership", "Your access unlocks:":"unlocks",
+    "ACCESS REQUIRED":"access_required", "Not activated":"not_activated", "ACTIVE":"active", "READY TO ACTIVATE":"ready",
+    "SETTINGS":"settings_title", "INTERFACE CONTROL":"interface_control", "DISPLAY PROFILE":"display_profile",
+    "Premium dark interface":"premium_dark", "Gold-accent navigation":"gold_nav", "Compact market cards":"compact_cards",
+    "REGION":"region", "Language":"language_value", "Core settings are controlled by the bot configuration.":"core_settings",
+    "PREMIUM SUPPORT":"support_title", "DIRECT ASSISTANCE":"direct_help",
+    "Need help with access, token activation or account issues?":"support_need", "Support channel":"support_channel",
+    "Tap the button below to contact the administrator.":"support_tap", "For security, never share your activation token publicly.":"security",
+    "This module is part of the premium intelligence layer.":"locked",
+    "Activate a valid subscription token to continue.":"activate_required",
+    "Your account and token are verified automatically.":"verified_auto",
+    "Your premium access is now active.":"activation_active", "Your intelligence modules are unlocked.":"modules_unlocked",
+    "The token is invalid or has already been used.":"invalid_token", "Please refresh in a moment.":"please_refresh",
+}
+_PHRASE_RE = re.compile("|".join(re.escape(p) for p in sorted(_PHRASE_MAP, key=len, reverse=True)))
+
+
 def _localized_text(update: Update, text: str) -> str:
-    """Translate stable UI phrases while preserving live values and Alpha-Senti terms."""
+    """Translate stable UI phrases (single pass) while preserving live values and Alpha-Senti terms."""
     lang = _lang(update)
     if lang == "en":
         return text
-    # Stable UI phrases that occur throughout the existing premium screens.
-    replacements = {
-        "LIVE MARKET FEED":"live_feed", "NEURAL SIGNAL":"neural_signal", "MARKET ANALYSIS":"analysis_title",
-        "SELECT A MODULE":"select_module", "PREMIUM ACCESS ACTIVE":"premium_active",
-        "ACCOUNT INTELLIGENCE":"account_intel", "YOUR PREMIUM ACCESS":"your_access",
-        "PREMIUM ACCESS":"premium_access", "NEURAL GOLD MEMBERSHIP":"membership", "Your access unlocks:":"unlocks",
-        "ACCESS REQUIRED":"access_required", "Not activated":"not_activated", "ACTIVE":"active", "READY TO ACTIVATE":"ready",
-        "SETTINGS":"settings_title", "INTERFACE CONTROL":"interface_control", "DISPLAY PROFILE":"display_profile",
-        "Premium dark interface":"premium_dark", "Gold-accent navigation":"gold_nav", "Compact market cards":"compact_cards",
-        "REGION":"region", "Language":"language_value", "Core settings are controlled by the bot configuration.":"core_settings",
-        "PREMIUM SUPPORT":"support_title", "DIRECT ASSISTANCE":"direct_help",
-        "Need help with access, token activation or account issues?":"support_need", "Support channel":"support_channel",
-        "Tap the button below to contact the administrator.":"support_tap", "For security, never share your activation token publicly.":"security",
-        "This module is part of the premium intelligence layer.":"locked",
-        "Activate a valid subscription token to continue.":"activate_required",
-        "Your account and token are verified automatically.":"verified_auto",
-        "Your premium access is now active.":"activation_active", "Your intelligence modules are unlocked.":"modules_unlocked",
-        "The token is invalid or has already been used.":"invalid_token", "Please refresh in a moment.":"please_refresh",
-    }
-    for phrase, key in replacements.items():
-        text = text.replace(phrase, t(lang, key))
-    return text
+    return _PHRASE_RE.sub(lambda m: t(lang, _PHRASE_MAP[m.group(0)]), text)
 
 
 def _esc(value: object) -> str:
@@ -280,7 +283,7 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"<b>[ ANALYSIS ]: LIVE MARKET FEED // XAUUSD</b>\n"
             f"<pre>┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑\n"
             f"  SYSTEM: MARKET_DATA_SATELLITE // XAU_USD\n"
-            f"  STATUS: [LIVE]          TIMESTAMP: {timestamp}\n"
+            f"  STATUS: [LIVE]          FEED_TIME: {timestamp}\n"
             f"┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙\n"
             f"  SYMBOL     XAU/USD · GOLD SPOT\n"
             f"  PRICE      {_money(mid)} ⚡️ [STABLE]\n"

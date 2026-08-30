@@ -17,6 +17,7 @@ Phase 0.0 CORE RULES enforced by construction:
 """
 from __future__ import annotations
 
+import html
 from datetime import datetime, timezone
 
 from config import NEURAL_VERSION
@@ -36,8 +37,10 @@ def line(tag: str, msg: str) -> str:
     return f"[ {tag} ]: {msg}"
 
 
-def panel(rows) -> str:
-    """Monospaced terminal panel for technical data. Rows must be HTML-safe."""
+def panel(rows, escape: bool = False) -> str:
+    """Monospaced terminal panel. Set escape=True for raw (unescaped) rows."""
+    if escape:
+        rows = [_html.escape(str(r)) for r in rows]
     return "<pre>" + "\n".join(rows) + "</pre>"
 
 
