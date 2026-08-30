@@ -1,4 +1,5 @@
 """Fulfillment lock tests (audit round-2): payment_id idempotency + atomicity + stale recovery."""
+import base64
 import os
 import sys
 import unittest
