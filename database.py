@@ -13,9 +13,10 @@ DATABASE_URL environment variable to a postgresql:// URI.
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, select
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import DATABASE_URL
@@ -209,6 +210,68 @@ def activate_user_token(telegram_id: int, raw_token: str, duration_days: int) ->
         return False
     finally:
         session.close()
+
+
+def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment_id: str) -> tuple[str, str]:
+    """Atomic Whop fulfillment (audit round-2).
+
+    ONE transaction: create + consume the entitlement token, activate/extend
+    the user, mark the order fulfilled-by-payment, and close the fulfillment
+    lock. Any failure rolls EVERYTHING back — no orphan tokens, no partially
+    updated accounts, no double credit on retry.
+    Returns (raw_token, token_hash).
+    """
+    raw_token = f"XAU-NEURAL-{secrets.token_hex(8).upper()}"
+    token_hash = _hash_token(raw_token)
+    now = datetime.now(timezone.utc)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO token_pool (token_hash, duration_days, is_used, created_at, used_at, used_by_telegram_id)
+                VALUES (:h, :d, 1, :now, :now, :tid)
+            """),
+            {"h": token_hash, "d": duration_days, "now": now, "tid": telegram_id},
+        )
+        user = conn.execute(
+            text("SELECT is_active, subscription_expiry FROM users WHERE telegram_id = :tid"),
+            {"tid": telegram_id},
+        ).mappings().first()
+        if user is None:
+            new_expiry = now + timedelta(days=duration_days)
+            conn.execute(
+                text("""
+                    INSERT INTO users (telegram_id, language, is_active, subscription_expiry, token, created_at, updated_at)
+                    VALUES (:tid, :lang, 1, :exp, :h, :now, :now)
+                """),
+                {"tid": telegram_id, "lang": "en", "exp": new_expiry, "h": token_hash, "now": now},
+            )
+        else:
+            current = normalize_datetime_utc(user["subscription_expiry"])
+            base = current if user["is_active"] and current and current > now else now
+            new_expiry = base + timedelta(days=duration_days)
+            conn.execute(
+                text("UPDATE users SET token = :h, is_active = 1, subscription_expiry = :exp, updated_at = :now WHERE telegram_id = :tid"),
+                {"h": token_hash, "exp": new_expiry, "tid": telegram_id, "now": now},
+            )
+        order_row = conn.execute(
+            text("UPDATE whop_orders SET payment_id = :pid, token_hash = :h, status = 'active', paid_at = :now, updated_at = :now WHERE id = :oid"),
+            {"pid": payment_id, "h": token_hash, "now": now, "oid": order_id},
+        )
+        if order_row.rowcount != 1:
+            raise RuntimeError(f"Fulfillment target order not found: {order_id}")
+        lock_row = conn.execute(
+            text("UPDATE whop_fulfillment SET status = 'fulfilled', updated_at = :now WHERE payment_id = :pid"),
+            {"pid": payment_id, "now": now},
+        )
+        if lock_row.rowcount != 1:
+            raise RuntimeError(f"Fulfillment lock row missing: {payment_id}")
+
+    logger.info(
+        "Atomic fulfillment complete telegram=%d order=%s payment=%s duration=%dd",
+        telegram_id, order_id, payment_id, duration_days,
+    )
+    return raw_token, token_hash
 
 
 def update_user(telegram_id: int, **kwargs) -> bool:

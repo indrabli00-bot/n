@@ -117,42 +117,20 @@ async def render_home(update, context, edit: bool = True):
     user = update.effective_user
     if user is None:
         return
-    if _active(update):
-        lang = main._lang(update)
-        text = (
-            "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
-            f"{ts.stamp()}\n\n"
-            f"{ts.boot(granted=True)}\n\n"
-            f"<i>{main.t(lang, 'home_pitch')}</i>\n\n"
-            "<b>>> SELECT A MODULE</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🧠 Neural Strikes (Signals)\n"
-            "📊 Structure Map (Structural Analysis)\n"
-            "👑 Operator Hub (Private Dashboard)\n"
-            "⚙️ System Sync (Settings)\n"
-            "🌐 Uplink (Support)"
-        )
-    else:
-        text = (
-            "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
-            f"{ts.stamp()}\n\n"
-            f"{ts.boot(granted=False)}\n\n"
-            "<pre>  MARKET INTELLIGENCE ..... VISIBLE\n"
-            "  PREMIUM SIGNAL LAYERS ... ENCRYPTED\n"
-            "  STATUS .................. AWAITING ACTIVATION</pre>\n\n"
-            "<b>>> SELECT A MODULE</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📈 Market Pulse (Clearance Levels)\n"
-            "🧠 Neural Strikes 🔒\n"
-            "📊 Structure Map 🔒\n"
-            "👑 Operator Hub (Private Dashboard)\n"
-            "⚙️ System Sync (Settings)\n"
-            "🌐 Uplink (Support)"
-        )
+    if not _active(update):
+        # Operator fix: inactive operators land on the single purchase surface
+        await render_access(update, context)
+        return
+    lang = main._lang(update)
+    text = (
+        "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
+        "\u2501" * 28 + "\n"
+        f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
+        f"{ts.stamp()}\n\n"
+        f"{ts.boot(granted=True)}\n\n"
+        f"<i>{main.t(lang, 'home_pitch')}</i>\n\n"
+        "<b>>> SELECT A MODULE</b>"
+    )
     await main._present(update, text, home_keyboard(update), edit=edit)
 
 

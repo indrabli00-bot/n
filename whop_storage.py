@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 
@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS whop_webhook_events (
 CREATE INDEX IF NOT EXISTS ix_whop_webhook_events_event_type ON whop_webhook_events(event_type);
 CREATE INDEX IF NOT EXISTS ix_whop_webhook_events_payment_id ON whop_webhook_events(payment_id);
 CREATE INDEX IF NOT EXISTS ix_whop_webhook_events_status ON whop_webhook_events(status);
+CREATE TABLE IF NOT EXISTS whop_fulfillment (
+    payment_id VARCHAR(128) PRIMARY KEY,
+    order_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'processing',
+    claimed_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    error_message VARCHAR(500)
+);
+CREATE INDEX IF NOT EXISTS ix_whop_fulfillment_status ON whop_fulfillment(status);
 """
 
 
@@ -166,6 +175,80 @@ def mark_webhook(event_id: str, status: str, error_message: str | None = None) -
             """),
             {"id": event_id, "status": status, "processed_at": _now(), "error_message": error_message},
         )
+
+
+def get_fulfillment(payment_id: str) -> dict | None:
+    with database.engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT * FROM whop_fulfillment WHERE payment_id = :pid"),
+            {"pid": payment_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def claim_fulfillment(payment_id: str, order_id: str, stale_minutes: int = 10) -> bool:
+    """Atomic fulfillment lock keyed by payment_id (audit round-2).
+
+    Returns True when THIS caller owns the fulfillment. One payment_id can
+    only ever reach 'fulfilled' once. Stale 'processing' claims older than
+    stale_minutes are reclaimable so crashed fulfillments can recover without
+    opening a double-fulfillment path.
+    """
+    now = _now()
+    cutoff = now - timedelta(minutes=stale_minutes)
+    try:
+        with database.engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT status FROM whop_fulfillment WHERE payment_id = :pid"),
+                {"pid": payment_id},
+            ).mappings().first()
+            if row is None:
+                conn.execute(
+                    text("""
+                        INSERT INTO whop_fulfillment (payment_id, order_id, status, claimed_at, updated_at)
+                        VALUES (:pid, :oid, 'processing', :now, :now)
+                    """),
+                    {"pid": payment_id, "oid": order_id, "now": now},
+                )
+                return True
+            status = row["status"]
+            if status == "fulfilled":
+                return False
+            if status == "failed":
+                conn.execute(
+                    text("UPDATE whop_fulfillment SET status = 'processing', claimed_at = :now, updated_at = :now WHERE payment_id = :pid"),
+                    {"pid": payment_id, "now": now},
+                )
+                return True
+            if status in ("processing", "pending"):
+                # 'processing' is reclaimable only when the claim is stale; the
+                # stale comparison is done in SQL so storage-format differences
+                # (SQLite string timestamps vs Postgres timestamps) stay safe.
+                reclaimed = conn.execute(
+                    text("UPDATE whop_fulfillment SET status = 'processing', claimed_at = :now, updated_at = :now WHERE payment_id = :pid AND status = :st AND claimed_at <= :cutoff"),
+                    {"pid": payment_id, "now": now, "st": status, "cutoff": cutoff},
+                )
+                return reclaimed.rowcount == 1
+            return False
+    except Exception:
+        logger.exception("claim_fulfillment failed payment=%s", payment_id)
+        return False
+
+
+def mark_fulfillment(payment_id: str, status: str, error_message: str | None = None) -> None:
+    try:
+        with database.engine.begin() as conn:
+            conn.execute(
+                text("""
+                    UPDATE whop_fulfillment
+                    SET status = :status, updated_at = :now,
+                        error_message = COALESCE(:err, error_message)
+                    WHERE payment_id = :pid
+                """),
+                {"pid": payment_id, "status": status, "now": _now(), "err": error_message},
+            )
+    except Exception:
+        logger.exception("mark_fulfillment failed payment=%s", payment_id)
 
 
 def revoke_order_access(order_id: str) -> bool:

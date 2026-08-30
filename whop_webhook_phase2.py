@@ -7,7 +7,6 @@ import hashlib
 import hmac
 import json
 import logging
-import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -24,6 +23,9 @@ PLAN_DURATIONS = {
     "plan_Yc1JnCIP8jgII": 14,
     "plan_JDgh0geRuoSFX": 30,
 }
+
+# Fulfillment lock (audit round-2): reclaim window for stale 'processing' claims.
+STALE_FULFILLMENT_MINUTES = 10
 
 
 class FulfillmentRetryableError(RuntimeError):
@@ -74,22 +76,6 @@ def verify_signature(payload: bytes, headers: dict) -> dict:
     return json.loads(payload.decode("utf-8"))
 
 
-def _token() -> str:
-    return f"XAU-NEURAL-{secrets.token_hex(8).upper()}"
-
-
-def _issue_and_activate(telegram_id: int, duration_days: int) -> tuple[str, str] | None:
-    """Create a single-use token, consume it immediately, and activate the Telegram account."""
-    raw_token = _token()
-    if not database.add_token_to_pool(raw_token, duration_days=duration_days):
-        return None
-    if not database.activate_user_token(telegram_id, raw_token, duration_days):
-        logger.error("Automatic activation failed telegram=%s duration=%s", telegram_id, duration_days)
-        return None
-    token_hash = hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
-    return raw_token, token_hash
-
-
 def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     metadata = payment.get("metadata") or {}
     order_id = str(metadata.get("neural_order_id") or "")
@@ -116,24 +102,29 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     if existing is not None and existing.get("token_hash"):
         return None
 
-    issued = _issue_and_activate(int(order["telegram_id"]), duration)
-    if issued is None:
-        whop_storage.update_order(
-            order_id, status="fulfillment_failed", payment_id=payment_id
+    # Fulfillment lock (audit round-2): atomic + payment_id-keyed idempotency.
+    if not whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=STALE_FULFILLMENT_MINUTES):
+        logger.info(
+            "Fulfillment skipped payment=%s order=%s (already fulfilled or being processed).",
+            payment_id, order_id,
         )
+        return None
+    try:
+        raw_token, token_hash = database.fulfill_payment(
+            int(order["telegram_id"]), duration, order_id, payment_id
+        )
+    except Exception as exc:
+        whop_storage.mark_fulfillment(payment_id, "failed", str(exc)[:200])
+        whop_storage.update_order(order_id, status="fulfillment_failed", payment_id=payment_id)
+        logger.exception("Atomic fulfillment failed order=%s payment=%s", order_id, payment_id)
         raise FulfillmentRetryableError(
-            f"Automatic activation failed order={order_id} payment={payment_id}"
+            f"Atomic fulfillment failed order={order_id} payment={payment_id}"
         )
 
-    raw_token, token_hash = issued
     membership = payment.get("membership") or {}
     whop_storage.update_order(
         order_id,
-        payment_id=payment_id,
         membership_id=str(membership.get("id") or "") or None,
-        token_hash=token_hash,
-        paid_at=datetime.now(timezone.utc),
-        status="active",
     )
     logger.info(
         "Whop payment fulfilled payment=%s order=%s telegram=%s duration=%sd",
