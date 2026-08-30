@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import database
+import i18n
 import whop_storage
 from config import WHOP_WEBHOOK_SECRET
 from visuals import visual_path
@@ -217,6 +218,7 @@ def handle_event(event_type: str, data: dict) -> tuple[str, int, str] | None:
 async def notify_customer(
     bot: Any, telegram_id: int, raw_token: str, duration_days: int, order_id: str
 ) -> None:
+    lang = database.get_user_language(telegram_id)
     try:
         asset = visual_path("success")
         if asset:
@@ -235,9 +237,8 @@ async def notify_customer(
             text=(
                 "<b>[ SYSTEM ]: PAYMENT VERIFIED // FULFILLMENT COMPLETE</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"[ ACCESS ]: Your <b>{duration_days}-day</b> Neural Gold access is now <b>ACTIVE</b>.\n\n"
-                "Your Telegram account was activated automatically.\n"
-                "A single-use activation token was generated and consumed securely as part of fulfillment.\n\n"
+                f"[ ACCESS ]: <b>{i18n.t(lang, 'access_now_active', days=duration_days)}</b>\n\n"
+                f"{i18n.t(lang, 'auto_activated_note')}\n\n"
                 ">> [ CORE ]: ALL INTELLIGENCE MODULES UNLOCKED. PRESS /start."
             ),
             parse_mode="HTML",

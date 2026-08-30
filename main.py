@@ -152,27 +152,26 @@ def home_keyboard(update: Update) -> InlineKeyboardMarkup:
         InlineKeyboardButton(t(lang,"price"), callback_data="screen:price"), InlineKeyboardButton(t(lang,"signal"), callback_data="screen:signal")],
         [InlineKeyboardButton(t(lang,"analysis"), callback_data="screen:analysis"), InlineKeyboardButton(t(lang,"account"), callback_data="screen:account")],
         [InlineKeyboardButton(t(lang,"access"), callback_data="screen:access"), InlineKeyboardButton(t(lang,"settings"), callback_data="screen:settings")],
+        [InlineKeyboardButton(f"🌐 {t(lang,'language')}", callback_data="settings:language"), InlineKeyboardButton(f"❓ {t(lang,'help')}", callback_data="screen:help")],
         [InlineKeyboardButton(t(lang,"support"), callback_data="screen:support")],
         [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
 
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"refresh"), callback_data="screen:price"), InlineKeyboardButton(t(lang,"signal"), callback_data="screen:signal")],
-        [InlineKeyboardButton(t(lang,"market_analysis"), callback_data="screen:analysis")],
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"refresh"), callback_data="screen:price")],
         [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
 
 
 def signal_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"new_signal"), callback_data="screen:signal"), InlineKeyboardButton(t(lang,"live_price"), callback_data="screen:price")],
-        [InlineKeyboardButton(t(lang,"market_analysis"), callback_data="screen:analysis")],
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"new_signal"), callback_data="screen:signal")],
         [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
 
 
 def account_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"access"), callback_data="screen:access")], [InlineKeyboardButton(t(lang,"refresh_status"), callback_data="screen:account")], [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"refresh_status"), callback_data="screen:account")], [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
 
 
 def access_keyboard(update: Update) -> InlineKeyboardMarkup:
@@ -190,12 +189,12 @@ def access_keyboard(update: Update) -> InlineKeyboardMarkup:
 
 def analysis_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"live_price"), callback_data="screen:price"), InlineKeyboardButton(t(lang,"signal"), callback_data="screen:signal")], [InlineKeyboardButton(t(lang,"refresh_analysis"), callback_data="screen:analysis")], [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang,"refresh_analysis"), callback_data="screen:analysis")], [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
 
 
 def settings_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    rows = [[InlineKeyboardButton(t(lang,"language"), callback_data="settings:language")], [InlineKeyboardButton(t(lang,"interface"), callback_data="noop")], [InlineKeyboardButton(t(lang,"timezone"), callback_data="noop")], [InlineKeyboardButton(t(lang,"data_mode"), callback_data="noop")], [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]]
+    rows = [[InlineKeyboardButton(t(lang,"interface"), callback_data="noop")], [InlineKeyboardButton(t(lang,"timezone"), callback_data="noop")], [InlineKeyboardButton(t(lang,"data_mode"), callback_data="noop")], [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]]
     return InlineKeyboardMarkup(rows)
 
 
@@ -353,7 +352,7 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"  LOG: Algorithmic projection layer active.\n"
             f"</pre>"
             f"{intel_footer()}\n"
-            f"<i>Algorithmic projection — not financial advice.</i>"
+            f"<i>{t(_lang(update), 'signal_disclaimer')}</i>"
         )
         await _present(update, text, signal_keyboard(update))
     except Exception as exc:
@@ -406,7 +405,7 @@ async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"  SOURCE: SIGNAL_ENGINE_C2 // LIVE FEED LINKED\n"
             f"</pre>"
             f">> [ CORE ]: STRUCTURE SCAN COMPLETE // {stamp()}\n"
-            f"<i>Analysis generated from the current feed and signal engine.</i>"
+            f"<i>{t(_lang(update), 'analysis_note')}</i>"
         )
         await _present(update, text, analysis_keyboard(update))
     except Exception as exc:
@@ -479,10 +478,21 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"7 DAYS   •   SHORT TERM\n"
         f"14 DAYS  •   STANDARD\n"
         f"30 DAYS  •   PREMIUM\n\n"
-        f"{pay_guide(_lang(update), tag='PAYMENT')}\n\n"
+        f"{t(_lang(update), 'activation_route')}\n\n"
         f"<i>Enter your single-use activation token after purchase.</i>"
     )
     await _present(update, text, access_keyboard(update))
+
+
+async def render_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Operator manual: how to use the bot (audit fix: menu-requested help)."""
+    lang = _lang(update)
+    text = (
+        f"<b>[ MANUAL ]: HOW TO USE // NEURAL GOLD {NEURAL_VERSION}</b>\n"
+        f"{DIVIDER}\n\n"
+        f"<pre>{_esc(t(lang, 'help_body'))}</pre>"
+    )
+    await _present(update, text, _nav_keyboard(update))
 
 
 async def render_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -641,9 +651,10 @@ async def token_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     context.user_data["awaiting_token"] = False
     raw_token = (update.message.text or "").strip()
+    lang = _lang(update)
     if not raw_token:
         await update.message.reply_text(
-            "[ ERROR ]: EMPTY_INPUT\n>> Please send the activation token.",
+            f"[ ERROR ]: EMPTY_INPUT\n>> {t(lang, 'send_token')}",
             reply_markup=access_keyboard(update),
         )
         return
@@ -652,8 +663,7 @@ async def token_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as exc:
         logger.exception("Interactive token activation failed: %s", exc)
         await update.message.reply_text(
-            "[ FAULT ]: ACTIVATION_LINK_TIMEOUT // RETRYING...\n"
-            "⚠ Activation service temporarily unavailable.",
+            f"[ FAULT ]: ACTIVATION_LINK_TIMEOUT // RETRYING...\n{t(lang, 'activation_unavailable')}",
             parse_mode="HTML",
             reply_markup=access_keyboard(update),
         )
@@ -663,8 +673,7 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Fallback activation command for users who prefer commands."""
     if not context.args:
         await update.message.reply_text(
-            "<b>[ KEYGEN ]: ACTIVATE ACCESS</b>\n\n"
-            ">> Tap the activation button and enter your single-use token.",
+            f"<b>[ KEYGEN ]: ACTIVATE ACCESS</b>\n\n>> {t(_lang(update), 'enter_activation')}",
             parse_mode="HTML",
             reply_markup=access_keyboard(update),
         )
@@ -674,8 +683,7 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as exc:
         logger.exception("Error during /token: %s", exc)
         await update.message.reply_text(
-            "[ FAULT ]: ACTIVATION_LINK_TIMEOUT // RETRYING...\n"
-            "⚠ Activation service temporarily unavailable.",
+            f"[ FAULT ]: ACTIVATION_LINK_TIMEOUT // RETRYING...\n{t(_lang(update), 'activation_unavailable')}",
             parse_mode="HTML",
         )
 
@@ -775,9 +783,8 @@ async def paid_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     await query.message.reply_text(
         "<b>[ LOG ]: PAYMENT NOTICE REGISTERED</b>\n\n"
-        "Your payment notice has been sent to support. "
-        "After manual verification, the administrator will provide your single-use activation token.\n\n"
-        f"{pay_guide(_lang(update), tag='PAYMENT')}",
+        f"{t(_lang(update), 'payment_notice_registered')}\n\n"
+        f"{t(_lang(update), 'activate_note')}",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -814,7 +821,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if data.startswith("screen:"):
         target = data.split(":", 1)[1]
-        if target in {"home", "account", "access", "settings", "support"}:
+        if target in {"home", "account", "access", "settings", "support", "help"}:
             try:
                 await query.answer()
             except Exception:
@@ -835,6 +842,8 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await render_settings(update, context)
         elif target == "support":
             await render_support(update, context)
+        elif target == "help":
+            await render_help(update, context)
         return
 
     if data.startswith("lang:"):
@@ -877,7 +886,7 @@ async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_
     """Never leave an unknown command unanswered."""
     await update.message.reply_text(
         "<b>[ ERROR ]: COMMAND_NOT_RECOGNIZED</b>\n\n"
-        ">> PRESS <b>/start</b> TO OPEN ACCESS &amp; PLANS.",
+        f">> {t(_lang(update), 'unknown_cmd_hint')}",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -890,7 +899,7 @@ async def unknown_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await update.message.reply_text(
         "<b>[ ERROR ]: INPUT_NOT_RECOGNIZED</b>\n\n"
-        ">> Use the premium menu below or tap <b>ACCESS &amp; PLANS</b>.",
+        f">> {t(_lang(update), 'unknown_input_hint')}",
         parse_mode="HTML",
         reply_markup=access_keyboard(update),
     )
@@ -908,7 +917,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         if query:
             try:
                 await query.edit_message_text(
-                    "<b>[ FAULT ]: Module temporarily unavailable.</b>\n\n>> Please tap <b>MENU</b> and try again.",
+                    f"<b>[ FAULT ]: Module temporarily unavailable.</b>\n\n>> {t(_lang(update), 'tap_menu_retry')}",
                     parse_mode="HTML",
                     reply_markup=home_keyboard(update),
                 )
@@ -917,7 +926,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
         elif update.message:
             try:
                 await update.message.reply_text(
-                    "[ FAULT ]: TEMPORARY SERVICE ERROR\n>> Please try again.",
+                    f"[ FAULT ]: TEMPORARY SERVICE ERROR\n>> {t(_lang(update), 'try_again')}",
                     parse_mode="HTML",
                     reply_markup=home_keyboard(update),
                 )
