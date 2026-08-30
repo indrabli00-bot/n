@@ -13,31 +13,26 @@ PUBLIC_COMMANDS: dict[str, list[tuple[str, str]]] = {
         ("start", "Open NEURAL GOLD console"),
         ("token", "Activate NEURAL GOLD access"),
         ("status", "Read NEURAL GOLD access"),
-        ("help", "Open NEURAL GOLD guide"),
     ],
     "vi": [
         ("start", "Mở bảng điều khiển NEURAL GOLD"),
         ("token", "Kích hoạt quyền truy cập NEURAL GOLD"),
         ("status", "Xem trạng thái NEURAL GOLD"),
-        ("help", "Mở hướng dẫn NEURAL GOLD"),
     ],
     "id": [
         ("start", "Buka konsol NEURAL GOLD"),
         ("token", "Aktifkan akses NEURAL GOLD"),
         ("status", "Lihat status akses NEURAL GOLD"),
-        ("help", "Buka panduan NEURAL GOLD"),
     ],
     "hi": [
         ("start", "NEURAL GOLD कंसोल खोलें"),
         ("token", "NEURAL GOLD एक्सेस सक्रिय करें"),
         ("status", "NEURAL GOLD एक्सेस देखें"),
-        ("help", "NEURAL GOLD गाइड खोलें"),
     ],
     "zh": [
         ("start", "打开 NEURAL GOLD 控制台"),
         ("token", "激活 NEURAL GOLD 访问权限"),
         ("status", "查看 NEURAL GOLD 访问状态"),
-        ("help", "打开 NEURAL GOLD 指南"),
     ],
 }
 

@@ -9,11 +9,12 @@ administration and token activation.
 import html
 import logging
 import os
+import re
 import secrets
 import sys
 from datetime import datetime, timezone
 
-from telegram import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -48,17 +49,8 @@ logger = logging.getLogger(__name__)
 GOLD = "◆"
 DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
 
-WHOP_CHECKOUT_URLS = {
-    7: "https://whop.com/checkout/plan_ksl11weFJ0z41",
-    14: "https://whop.com/checkout/plan_Yc1JnCIP8jgII",
-    30: "https://whop.com/checkout/plan_JDgh0geRuoSFX",
-}
-
-PLAN_LABELS = {
-    7: "7 DAYS • SHORT TERM",
-    14: "14 DAYS • STANDARD",
-    30: "30 DAYS • PREMIUM",
-}
+# Single checkout route (audit C3): HMAC-signed /checkout/{days} links built by
+# phase2_bot.checkout_link — direct Whop plan URLs removed.
 
 # Customer-facing Alpha-Senti terminology. Internal calculation keys remain
 # unchanged for backward compatibility with the signal engine/database.
@@ -183,10 +175,8 @@ def account_keyboard(update: Update) -> InlineKeyboardMarkup:
 def access_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
     rows = [
-        [InlineKeyboardButton("🟢 7 DAYS", url=WHOP_CHECKOUT_URLS[7])],
-        [InlineKeyboardButton("🟡 14 DAYS", url=WHOP_CHECKOUT_URLS[14])],
-        [InlineKeyboardButton("🔵 30 DAYS", url=WHOP_CHECKOUT_URLS[30])],
-        [InlineKeyboardButton("💳 I HAVE PAID", callback_data="paid:menu")],
+        [InlineKeyboardButton("🎯 SELECT PACKAGE", callback_data="screen:price")],
+        [InlineKeyboardButton(t(lang, "paid"), callback_data="paid:menu")],
         [InlineKeyboardButton(t(lang, "activate"), callback_data="action:token")],
         [InlineKeyboardButton(t(lang, "account_status"), callback_data="screen:account")],
         [InlineKeyboardButton(t(lang, "support"), callback_data="screen:support")],
@@ -687,16 +677,6 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    if user:
-        active, _ = auth.verify_token(user.id)
-        if not active:
-            await render_access(update, context)
-            return
-    await render_home(update, context, edit=False)
-
-
 # ═══════════════════════════════════════════════════════════════════════
 # ADMIN HANDLERS
 # ═══════════════════════════════════════════════════════════════════════
@@ -881,18 +861,12 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception:
             pass
         context.user_data["awaiting_token"] = True
-        try:
-            await query.message.reply_text(
-                "<b>🔑 SECURE ACTIVATION</b>\n\n"
-                "Enter your single-use activation token below.",
-                parse_mode="HTML",
-                reply_markup=ForceReply(selective=True),
-            )
-        except Exception:
-            await query.message.reply_text(
-                "<b>🔑 SECURE ACTIVATION</b>\n\nEnter your single-use activation token.",
-                parse_mode="HTML",
-            )
+        lang = _lang(update)
+        await query.message.reply_text(
+            f"<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n>> {t(lang, 'enter_activation')}\n<i>{t(lang, 'token_note')}</i>",
+            parse_mode="HTML",
+            reply_markup=access_keyboard(update),
+        )
         return
 
 
@@ -953,14 +927,6 @@ async def post_init(application: Application) -> None:
     try:
         await application.bot.set_my_short_description(SHORT_DESCRIPTION)
         await application.bot.set_my_description(BOT_DESCRIPTION)
-        await application.bot.set_my_commands(
-            [
-                ("start", "Open premium dashboard"),
-                ("token", "Activate access token"),
-                ("status", "View account status"),
-                ("help", "Open dashboard"),
-            ]
-        )
         logger.info("Telegram premium profile metadata configured.")
     except Exception as exc:
         logger.warning("Could not configure Telegram profile metadata: %s", exc)
@@ -988,7 +954,6 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("token", token_command))
     application.add_handler(CommandHandler("status", lambda u, c: render_account(u, c)))
-    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("addtoken", addtoken_command))
     application.add_handler(CommandHandler("listusers", listusers_command))
     application.add_handler(CommandHandler("revoke", revoke_command))
