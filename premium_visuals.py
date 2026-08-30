@@ -24,21 +24,18 @@ def home_keyboard(update):
     active = _active(update)
     rows = []
     if active:
-        rows.append([InlineKeyboardButton("🧠 Neural Strikes", callback_data="screen:signal"), InlineKeyboardButton("📊 Structure Map", callback_data="screen:analysis")])
-        rows.append([InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
+        rows.append([InlineKeyboardButton("📈 Market Pulse", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes", callback_data="screen:signal")])
+        rows.append([InlineKeyboardButton("📊 Structure Map", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
     else:
         rows.append([InlineKeyboardButton("📈 Market Pulse 🔒", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes 🔒", callback_data="screen:signal")])
         rows.append([InlineKeyboardButton("📊 Structure Map 🔒", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
-    rows.extend([
-        [InlineKeyboardButton("⚙️ System Sync", callback_data="screen:settings"), InlineKeyboardButton("🌐 Language", callback_data="settings:language")],
-        [InlineKeyboardButton("❓ Help", callback_data="screen:help"), InlineKeyboardButton("🌐 Uplink", callback_data="screen:support")],
-        [InlineKeyboardButton("💎 ACCESS & PLANS", callback_data="screen:access")],
-        [InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
-    ])
+    rows.append([InlineKeyboardButton("💎 ACCESS & PLANS", callback_data="screen:access")])
+    rows.append([InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")])
     return InlineKeyboardMarkup(rows)
 
 
 def access_keyboard(update):
+    import main
     import phase2_bot
     lang = main._lang(update)
     telegram_id = update.effective_user.id
@@ -74,30 +71,36 @@ async def render_access(update, context):
         text = (
             "<b>[ CLEARANCE ]: PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
             f"{ts.stamp()}\n"
-            "-------------------------------------------------\n\n"
+            f"{main.DIVIDER}\n\n"
             "[ ACCESS ]: GRANTED. WELCOME, OPERATOR.\n\n"
             f"CLEARANCE: <b>🟢 ACTIVE</b>\n\n"
             f"ACCESS_UNTIL: <code>{expiry_text}</code>\n\n"
-            "[ CORE ]: YOUR ALPHA TERMINAL IS SYNCHRONIZED."
+            "[ CORE ]: YOUR OPERATOR HUB IS SYNCHRONIZED."
         )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")],
+            [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")],
+        ])
     else:
         lang = main._lang(update)
         text = (
             "<b>[ CLEARANCE ]: PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
             f"{ts.stamp()}\n"
-            "-------------------------------------------------\n\n"
+            f"{main.DIVIDER}\n\n"
             "[ ACCESS ]: PENDING // OPERATOR NOT YET CONNECTED\n\n"
             "<pre>  ENCRYPTED PREMIUM MODULES:\n"
-            "   ▸ Institutional Orderflow (Live XAU/USD)\n"
-            "   ▸ Neural Precision Strikes (Signals)\n"
-            "   ▸ Market Architecture (Structural Analysis)\n"
-            "   ▸ Alpha Terminal (Private Dashboard)</pre>\n\n"
+            "   ▸ Market Pulse (Live XAU/USD)\n"
+            "   ▸ Neural Strikes (Signals)\n"
+            "   ▸ Structure Map (Analysis)\n"
+            "   ▸ Operator Hub (Dashboard)</pre>\n\n"
             f"{main.t(lang, 'market_pitch')}\n\n"
             "<b>>> SELECT PACKAGE ↓</b>\n"
             f"{main.t(lang, 'select_package_hint')}\n\n"
             f"{main.t(lang, 'activation_route')}"
         )
-    await main._present(update, text, access_keyboard(update))
+    if not active:
+        kb = access_keyboard(update)
+    await main._present(update, text, kb)
 
 
 async def render_price(update, context):
@@ -117,7 +120,7 @@ async def render_home(update, context, edit: bool = True):
     if _active(update):
         lang = main._lang(update)
         text = (
-            "<b>NEURAL GOLD v3.2 // ALPHA TERMINAL</b>\n"
+            "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
             f"{ts.stamp()}\n\n"
@@ -133,7 +136,7 @@ async def render_home(update, context, edit: bool = True):
         )
     else:
         text = (
-            "<b>NEURAL GOLD v3.2 // ALPHA TERMINAL</b>\n"
+            "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
             f"{ts.stamp()}\n\n"
@@ -167,6 +170,10 @@ async def callback_router(update, context):
     if data in {"nav:home", "screen:home"}:
         await query.answer()
         await render_home(update, context)
+        return
+    if data == "nav:menu":
+        await query.answer()
+        await main.render_menu(update, context)
         return
     if data == "nav:access" or data == "screen:access":
         await query.answer()

@@ -44,6 +44,22 @@ def panel(rows, escape: bool = False) -> str:
     return "<pre>" + "\n".join(rows) + "</pre>"
 
 
+# ── Standard panel geometry (operator fix): ONE width everywhere, fits small screens.
+PANEL_W = 36   # total visual width including borders
+INNER_W = 34   # usable inner width for content rows
+
+
+def prow(text: str, inner: int = INNER_W) -> str:
+    """Pad (or hard-trim) a panel row to the standard inner width."""
+    s = str(text)
+    return s[:inner] if len(s) > inner else s.ljust(inner)
+
+
+def bar(ch: str = "─", inner: int = INNER_W) -> str:
+    """Horizontal rule of the standard inner width."""
+    return ch * inner
+
+
 def boot(granted: bool) -> str:
     """Spec A — INITIALIZATION/WELCOME boot sequence."""
     seq = [

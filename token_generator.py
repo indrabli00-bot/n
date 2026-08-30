@@ -1,5 +1,5 @@
 """
-genertortoken.py — CLI token generator.
+token_generator.py — CLI token generator.
 
 PENTING: token dibuat lewat script ini SEKARANG ditulis langsung ke
 database yang sama dengan bot (table token_pool via database.py),

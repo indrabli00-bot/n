@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -28,6 +29,7 @@ from telegram.ext import (
 import api_handler
 import auth
 import database
+import terminal_style as ts
 from i18n import LANGUAGES, detect_language, language_buttons, t
 from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp
 from config import (
@@ -47,7 +49,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════
 
 GOLD = "◆"
-DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
+DIVIDER = "━" * 36
 
 # Single checkout route (audit C3): HMAC-signed /checkout/{days} links built by
 # phase2_bot.checkout_link — direct Whop plan URLs removed.
@@ -151,10 +153,8 @@ def home_keyboard(update: Update) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton(t(lang,"price"), callback_data="screen:price"), InlineKeyboardButton(t(lang,"signal"), callback_data="screen:signal")],
         [InlineKeyboardButton(t(lang,"analysis"), callback_data="screen:analysis"), InlineKeyboardButton(t(lang,"account"), callback_data="screen:account")],
-        [InlineKeyboardButton(t(lang,"access"), callback_data="screen:access"), InlineKeyboardButton(t(lang,"settings"), callback_data="screen:settings")],
-        [InlineKeyboardButton(f"🌐 {t(lang,'language')}", callback_data="settings:language"), InlineKeyboardButton(f"❓ {t(lang,'help')}", callback_data="screen:help")],
-        [InlineKeyboardButton(t(lang,"support"), callback_data="screen:support")],
-        [InlineKeyboardButton(t(lang,"back"), callback_data="nav:home"), InlineKeyboardButton(t(lang,"menu"), callback_data="nav:home")]])
+        [InlineKeyboardButton(t(lang,"access"), callback_data="screen:access")],
+        [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")]])
 
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
@@ -265,7 +265,7 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await render_locked(update, "price")
         return
 
-    await _answer_loading(update, "[ CORE ]: SYNCING XAUUSD FEED...")
+    await _answer_loading(update, "[ CORE ]: SYNCING XAU/USD FEED...")
     try:
         data = await api_handler.get_cached_or_fresh_price(user.id)
         bid = float(data["bid"])
@@ -278,22 +278,25 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         raw_ts = str(data.get("timestamp", "—"))
         timestamp = _format_timestamp(raw_ts)
         move_icon = "📈" if change > 0 else ("📉" if change < 0 else "⚡️")
+        rows = [
+            "  SYSTEM: MARKET_DATA_SATELLITE",
+            f"  STATUS: [LIVE]      FEED_TIME: {timestamp}",
+            ts.bar(),
+            "  SYMBOL      XAU/USD · GOLD SPOT",
+            f"  PRICE       {_money(mid)} [STABLE]",
+            f"  BID/ASK     {_money(bid)} / {_money(ask)}",
+            ts.bar(),
+            f"  HIGH  {_money(float(data['high']))}",
+            f"  LOW   {_money(float(data['low']))}",
+            f"  NET   {change_mark}{change:.2f} ({change_mark}{pct:.2f}%)",
+            ts.bar(),
+            f"  UPLINK: {source} // MODE: LIVE",
+        ]
         text = (
-            f"<b>[ ANALYSIS ]: LIVE MARKET FEED // XAUUSD</b>\n"
-            f"<pre>┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑\n"
-            f"  SYSTEM: MARKET_DATA_SATELLITE // XAU_USD\n"
-            f"  STATUS: [LIVE]          FEED_TIME: {timestamp}\n"
-            f"┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙\n"
-            f"  SYMBOL     XAU/USD · GOLD SPOT\n"
-            f"  PRICE      {_money(mid)} ⚡️ [STABLE]\n"
-            f"  BID/ASK    {_money(bid)} / {_money(ask)}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  SESSION HIGH:  {_money(float(data['high']))}\n"
-            f"  SESSION LOW:   {_money(float(data['low']))}\n"
-            f"  NET CHANGE:    {change_mark}{change:.2f} ({change_mark}{pct:.2f}%) {move_icon}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  UPLINK:  {source}   // MODE: LIVE\n"
-            f"</pre>"
+            f"<b>[ ANALYSIS ]: LIVE MARKET FEED // XAU/USD {move_icon}</b>\n"
+            "<pre>┍" + ts.bar("━") + "┑\n"
+            + "\n".join(ts.prow(r) for r in rows)
+            + "\n┕" + ts.bar("━") + "┙</pre>\n"
             f">> [ CORE ]: FEED VERIFIED // {stamp()}\n"
             f"<i>Market feed may vary slightly by venue.</i>"
         )
@@ -324,33 +327,43 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         confidence_tag = "HIGH" if confidence >= 70 else ("MODERATE" if confidence >= 55 else "MARGINAL")
         setup = "AWAITING CONFIRMATION" if direction == "HOLD" else f"{_money(signal['entry_low'])} — {_money(signal['entry_high'])}"
         align = "POSITIVE" if "BULLISH" in str(indicators.get("ema_trend", "")) else ("NEGATIVE" if "BEARISH" in str(indicators.get("ema_trend", "")) else "NEUTRAL")
+        rows = [
+            "  NEURAL SIGNAL // ALGO-READ",
+            "  OPERATIONAL STATUS: SCANNING...",
+            ts.bar(),
+            f"  VECTOR:      {direction}",
+            "  COORDINATE:",
+            f"   ↳ [{_esc(setup)}]",
+            f"  CONF_LEVEL:  {confidence:.1f}% [{confidence_tag}]",
+            f"  TIMEFRAME:   INTRADAY // {SIGNAL_VALIDITY_MINUTES} MIN",
+            ts.bar(),
+            f"  MOMENTUM:    {_esc(signal['momentum'])}",
+            f"  LIQUIDITY:   {_esc(signal['liquidity'])}",
+            f"  VOLATILITY:  {_esc(signal['volatility'])}",
+            ts.bar(),
+            "  EXECUTION MAP:",
+            f"  TP_1 {_money(signal['tp1']) if signal['tp1'] else '—'}",
+            f"  TP_2 {_money(signal['tp2']) if signal['tp2'] else '—'} | TP_3 {_money(signal['tp3']) if signal['tp3'] else '—'}",
+            f"  STOP_LOSS {_money(signal['sl']) if signal['sl'] else '—'} | R:R 1:{signal['risk_reward']}",
+            ts.bar(),
+            "  ALPHA-SENTI MATRIX:",
+            " [TEMPORAL MOMENTUM RESONANCE]",
+            f"   ↳ {indicators['rsi']}",
+            " [DUAL-PHASE CONVERGENCE MANIFOLD]",
+            f"   ↳ {indicators['macd_hist']:+.2f}",
+            " [SYNAPTIC TREND ALIGNMENT]",
+            f"   ↳ {_esc(indicators['ema_trend']).upper()}",
+            " [PROBABILISTIC FLUX]",
+            f"   ↳ {indicators['stoch_k']}",
+            ts.bar(),
+            "  LOG: PROJECTION LAYER ACTIVE",
+        ]
         text = (
             f"<b>{intel_header()}</b>\n"
-            f"<i>{stamp()} // NEURAL SIGNAL ENGINE</i>\n"
-            f"<pre>◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥\n"
-            f"   NEURAL SIGNAL // ALGO-READ : XAU_USD\n"
-            f"   OPERATIONAL STATUS: SCANNING...\n"
-            f"◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢\n"
-            f"  VECTOR:      {icon} {direction}\n"
-            f"  COORDINATE:  [{_esc(setup)}]\n"
-            f"  CONFIDENCE_LEVEL: {confidence:.1f}% [{confidence_tag}]\n"
-            f"  TIMEFRAME:   INTRADAY // {SIGNAL_VALIDITY_MINUTES} MIN WINDOW\n"
-            f"  MOMENTUM:    {_esc(signal['momentum'])}\n"
-            f"  LIQUIDITY:   {_esc(signal['liquidity'])}\n"
-            f"  VOLATILITY:   {_esc(signal['volatility'])}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  EXECUTION MAP:\n"
-            f"  ▸ TP_1:     {_money(signal['tp1']) if signal['tp1'] else '—'}  |  TP_2: {_money(signal['tp2']) if signal['tp2'] else '—'}  |  TP_3: {_money(signal['tp3']) if signal['tp3'] else '—'}\n"
-            f"  ▸ STOP_LOSS: {_money(signal['sl']) if signal['sl'] else '—'}  |  R:R: 1 : {signal['risk_reward']}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  ALPHA-SENTI MATRIX:\n"
-            f"  [TEMPORAL MOMENTUM RESONANCE]: {indicators['rsi']}\n"
-            f"  [DUAL-PHASE CONVERGENCE MANIFOLD]: {indicators['macd_hist']:+.2f}\n"
-            f"  [SYNAPTIC TREND ALIGNMENT]: {_esc(indicators['ema_trend']).upper()}\n"
-            f"  [PROBABILISTIC FLUX]: {indicators['stoch_k']} | [SYNAPTIC ALIGNMENT]: {align}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  LOG: Algorithmic projection layer active.\n"
-            f"</pre>"
+            f"<i>{icon} {stamp()} // NEURAL SIGNAL ENGINE</i>\n"
+            "<pre>◤" + ts.bar("━") + "◥\n"
+            + "\n".join(ts.prow(r) for r in rows)
+            + "\n◣" + ts.bar("━") + "◢</pre>\n"
             f"{intel_footer()}\n"
             f"<i>{t(_lang(update), 'signal_disclaimer')}</i>"
         )
@@ -382,28 +395,36 @@ async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         stoch = float(indicators["stoch_k"])
         rsi_state = "OVERSOLD" if rsi < 30 else ("OVERBOUGHT" if rsi > 70 else "NEUTRAL")
         stoch_state = "OVERSOLD" if stoch < 20 else ("OVERBOUGHT" if stoch > 80 else "NEUTRAL")
+        rows = [
+            "  ANALYSIS :: MOMENTUM/VOLATILITY",
+            ts.bar(),
+            f"  MARKET BIAS: {bias.upper()}",
+            ts.bar(),
+            "  ALPHA-SENTI MATRIX:",
+            " [TEMPORAL MOMENTUM RESONANCE]",
+            f"   ↳ {indicators['rsi']} [{rsi_state}]",
+            " [DUAL-PHASE CONVERGENCE MANIFOLD]",
+            f"   ↳ {indicators['macd_hist']:+.2f}",
+            " [SYNAPTIC TREND ALIGNMENT]",
+            f"   ↳ {_esc(indicators['ema_trend']).upper()}",
+            " [PROBABILISTIC FLUX]",
+            f"   ↳ {indicators['stoch_k']} [{stoch_state}]",
+            " [VOLATILITY VARIANCE]",
+            f"   ↳ {indicators['atr']}",
+            " [QUANTUM ENVELOPE POSITION]",
+            f"   ↳ {_esc(indicators['bb_position']).upper()}",
+            ts.bar(),
+            "  LIQUIDITY MODEL:",
+            f"  LEVEL {_esc(signal['liquidity']).upper()} | CONF {signal['confidence']}%",
+            ts.bar(),
+            "  SOURCE: SIGNAL_ENGINE // LIVE",
+        ]
         text = (
-            f"<b>[ NEURAL-MAP ]: MARKET ANALYSIS</b>\n"
+            f"<b>[ NEURAL-MAP ]: MARKET ANALYSIS {bias_icon}</b>\n"
             f"<i>{stamp()} // QUANTITATIVE DEEP-DIVE</i>\n"
-            f"<pre>⌁─────────────────────────────────────────────⌁\n"
-            f"  ANALYSIS_STRUCTURE :: MOMENTUM &amp; VOLATILITY\n"
-            f"⌁─────────────────────────────────────────────⌁\n"
-            f"  MARKET BIAS:   {bias_icon} {bias.upper()}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  ALPHA-SENTI MATRIX:\n"
-            f"  ▸ TEMPORAL MOMENTUM RESONANCE:    {indicators['rsi']} [{rsi_state}]\n"
-            f"  ▸ DUAL-PHASE CONVERGENCE MANIFOLD: {indicators['macd_hist']:+.2f}\n"
-            f"  ▸ SYNAPTIC TREND ALIGNMENT:        {_esc(indicators['ema_trend'])}\n"
-            f"  ▸ PROBABILISTIC FLUX:               {indicators['stoch_k']} [{stoch_state}]\n"
-            f"  ▸ VOLATILITY VARIANCE:               {indicators['atr']}\n"
-            f"  ▸ QUANTUM ENVELOPE POSITION:        {_esc(indicators['bb_position']).upper()}\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  LIQUIDITY MODEL:\n"
-            f"  ▸ LEVEL:         {_esc(signal['liquidity']).upper()}\n"
-            f"  ▸ CONFIDENCE:    {signal['confidence']}%\n"
-            f"  ─────────────────────────────────────────────\n"
-            f"  SOURCE: SIGNAL_ENGINE_C2 // LIVE FEED LINKED\n"
-            f"</pre>"
+            "<pre>⌁" + ts.bar("━") + "⌁\n"
+            + "\n".join(ts.prow(r) for r in rows)
+            + "\n⌁" + ts.bar("━") + "⌁</pre>\n"
             f">> [ CORE ]: STRUCTURE SCAN COMPLETE // {stamp()}\n"
             f"<i>{t(_lang(update), 'analysis_note')}</i>"
         )
@@ -482,6 +503,24 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"<i>Enter your single-use activation token after purchase.</i>"
     )
     await _present(update, text, access_keyboard(update))
+
+
+async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Console submenu (operator fix): Language / Help / Uplink / System Sync live here."""
+    lang = _lang(update)
+    text = (
+        f"<b>[ CONSOLE ]: MENU // NEURAL GOLD {NEURAL_VERSION}</b>\n"
+        f"{DIVIDER}\n\n"
+        f"<pre>{_esc(t(lang, 'menu_body'))}</pre>"
+    )
+    rows = [
+        [InlineKeyboardButton(f"🌐 {t(lang, 'language')}", callback_data="settings:language")],
+        [InlineKeyboardButton(f"❓ {t(lang, 'help')}", callback_data="screen:help")],
+        [InlineKeyboardButton(f"🌐 {t(lang, 'support')}", callback_data="screen:support")],
+        [InlineKeyboardButton(f"⚙️ {t(lang, 'settings')}", callback_data="screen:settings")],
+        [InlineKeyboardButton(t(lang, "back"), callback_data="nav:home")],
+    ]
+    await _present(update, text, InlineKeyboardMarkup(rows))
 
 
 async def render_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -563,16 +602,29 @@ async def _present(
     keyboard: InlineKeyboardMarkup,
     edit: bool = True,
 ) -> None:
+    """Operator rule: clicking a button changes ONLY that screen.
+    Edit in place; if the edit fails, deliver the new screen as a fresh
+    message so a click never silently does nothing."""
     query = update.callback_query
+    localized = _localized_text(update, text)
     if query and edit:
         try:
-            await query.edit_message_text(text=_localized_text(update, text), parse_mode="HTML", reply_markup=keyboard)
+            await query.edit_message_text(text=localized, parse_mode="HTML", reply_markup=keyboard)
             return
+        except BadRequest as exc:
+            if "not modified" in str(exc).lower():
+                return
+            logger.debug("Could not edit callback message: %s", exc)
         except Exception as exc:
             logger.debug("Could not edit callback message: %s", exc)
-
+    try:
+        if query and query.message:
+            await query.message.reply_text(localized, parse_mode="HTML", reply_markup=keyboard)
+            return
+    except Exception as exc:
+        logger.debug("Callback reply fallback failed: %s", exc)
     if update.message:
-        await update.message.reply_text(_localized_text(update, text), parse_mode="HTML", reply_markup=keyboard)
+        await update.message.reply_text(localized, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -813,8 +865,8 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception:
             pass
         target = data.split(":", 1)[1]
-        if target == "home":
-            await render_home(update, context)
+        if target == "menu":
+            await render_menu(update, context)
         else:
             await render_home(update, context)
         return
