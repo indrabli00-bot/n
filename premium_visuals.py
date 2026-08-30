@@ -21,17 +21,15 @@ def _checkout(update, days: int) -> str:
 
 
 def home_keyboard(update):
-    active = _active(update)
-    rows = []
-    if active:
-        rows.append([InlineKeyboardButton("📈 Market Pulse", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes", callback_data="screen:signal")])
-        rows.append([InlineKeyboardButton("📊 Structure Map", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
-    else:
-        rows.append([InlineKeyboardButton("📈 Market Pulse 🔒", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes 🔒", callback_data="screen:signal")])
-        rows.append([InlineKeyboardButton("📊 Structure Map 🔒", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")])
-    rows.append([InlineKeyboardButton("💎 ACCESS & PLANS", callback_data="screen:access")])
-    rows.append([InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")])
-    return InlineKeyboardMarkup(rows)
+    import main
+    lang = main._lang(update)
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📈 Market Pulse", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes", callback_data="screen:signal")],
+        [InlineKeyboardButton("📊 Structure Map", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")],
+        [InlineKeyboardButton("⚙️ System Sync", callback_data="screen:settings"), InlineKeyboardButton("🌐 Language", callback_data="settings:language")],
+        [InlineKeyboardButton("💎 ACCESS & PLANS", callback_data="screen:access")],
+        [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")],
+    ])
 
 
 def access_keyboard(update):
@@ -116,10 +114,6 @@ async def render_home(update, context, edit: bool = True):
     import main
     user = update.effective_user
     if user is None:
-        return
-    if not _active(update):
-        # Operator fix: inactive operators land on the single purchase surface
-        await render_access(update, context)
         return
     lang = main._lang(update)
     text = (

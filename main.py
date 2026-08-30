@@ -153,6 +153,7 @@ def home_keyboard(update: Update) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton(t(lang,"price"), callback_data="screen:price"), InlineKeyboardButton(t(lang,"signal"), callback_data="screen:signal")],
         [InlineKeyboardButton(t(lang,"analysis"), callback_data="screen:analysis"), InlineKeyboardButton(t(lang,"account"), callback_data="screen:account")],
+        [InlineKeyboardButton(t(lang,"settings"), callback_data="screen:settings"), InlineKeyboardButton(f"🌐 {t(lang,'language')}", callback_data="settings:language")],
         [InlineKeyboardButton(t(lang,"access"), callback_data="screen:access")],
         [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")]])
 
@@ -227,10 +228,6 @@ async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: 
     active = False
     if db_user:
         active, _ = auth.verify_token(user.id)
-
-    if not active:
-        await render_access(update, context)
-        return
 
     text = (
         f"{boot(granted=True)}\n"
@@ -514,10 +511,8 @@ async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"<pre>{_esc(t(lang, 'menu_body'))}</pre>"
     )
     rows = [
-        [InlineKeyboardButton(f"🌐 {t(lang, 'language')}", callback_data="settings:language")],
         [InlineKeyboardButton(f"❓ {t(lang, 'help')}", callback_data="screen:help")],
         [InlineKeyboardButton(f"🌐 {t(lang, 'support')}", callback_data="screen:support")],
-        [InlineKeyboardButton(f"⚙️ {t(lang, 'settings')}", callback_data="screen:settings")],
         [InlineKeyboardButton(t(lang, "back"), callback_data="nav:home")],
     ]
     await _present(update, text, InlineKeyboardMarkup(rows))
@@ -643,9 +638,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as exc:
         logger.exception("Failed to register user during /start: %s", exc)
     active, _ = auth.verify_token(user.id)
-    if not active:
-        await render_access(update, context)
-        return
     await render_home(update, context, edit=False)
 
 
