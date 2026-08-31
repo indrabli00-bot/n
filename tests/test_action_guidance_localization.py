@@ -1,8 +1,17 @@
+import base64
+import os
 import pathlib
 import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")
+os.environ.setdefault("GOLDAPI_API_KEY", "phase0-test-goldapi-key")
+os.environ.setdefault(
+    "WHOP_WEBHOOK_SECRET",
+    "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("="),
+)
 
 import i18n
 import terminal_style
