@@ -247,7 +247,7 @@ def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment
         conn.execute(
             text("""
                 INSERT INTO token_pool (token_hash, duration_days, is_used, created_at, used_at, used_by_telegram_id)
-                VALUES (:h, :d, 1, :now, :now, :tid)
+                VALUES (:h, :d, TRUE, :now, :now, :tid)
             """),
             {"h": token_hash, "d": duration_days, "now": now, "tid": telegram_id},
         )
@@ -260,7 +260,7 @@ def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment
             conn.execute(
                 text("""
                     INSERT INTO users (telegram_id, language, is_active, subscription_expiry, token, created_at, updated_at)
-                    VALUES (:tid, :lang, 1, :exp, :h, :now, :now)
+                    VALUES (:tid, :lang, TRUE, :exp, :h, :now, :now)
                 """),
                 {"tid": telegram_id, "lang": "en", "exp": new_expiry, "h": token_hash, "now": now},
             )
@@ -275,7 +275,7 @@ def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment
             base = current if user["is_active"] and current and current > now else now
             new_expiry = base + timedelta(days=duration_days)
             conn.execute(
-                text("UPDATE users SET token = :h, is_active = 1, subscription_expiry = :exp, updated_at = :now WHERE telegram_id = :tid"),
+                text("UPDATE users SET token = :h, is_active = TRUE, subscription_expiry = :exp, updated_at = :now WHERE telegram_id = :tid"),
                 {"h": token_hash, "exp": new_expiry, "tid": telegram_id, "now": now},
             )
         order_row = conn.execute(
