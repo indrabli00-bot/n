@@ -11,8 +11,11 @@ def _active(update) -> bool:
     return bool(user and auth.verify_token(user.id)[0])
 
 
-def _days_label(days: int) -> str:
-    return {7: "🕐 7 DAYS — TACTICAL TRIAL", 14: "📅 14 DAYS — STRATEGIC ENTRY", 30: "🗓️ 30 DAYS — FULL OPERATIONAL CONTROL"}[days]
+def _days_label(update, days: int) -> str:
+    import main
+    lang = main._lang(update)
+    key = {7: "days7", 14: "days14", 30: "days30"}[days]
+    return main.t(lang, key)
 
 
 def _checkout(update, days: int) -> str:
@@ -24,11 +27,11 @@ def home_keyboard(update):
     import main
     lang = main._lang(update)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📈 Market Pulse", callback_data="screen:price"), InlineKeyboardButton("🧠 Neural Strikes", callback_data="screen:signal")],
-        [InlineKeyboardButton("📊 Structure Map", callback_data="screen:analysis"), InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")],
-        [InlineKeyboardButton("⚙️ System Sync", callback_data="screen:settings"), InlineKeyboardButton("🌐 Language", callback_data="settings:language")],
-        [InlineKeyboardButton("💎 ACCESS & PLANS", callback_data="screen:access")],
-        [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")],
+        [InlineKeyboardButton(f"📈 {main.t(lang, 'price')}", callback_data="screen:price"), InlineKeyboardButton(f"🧠 {main.t(lang, 'signal')}", callback_data="screen:signal")],
+        [InlineKeyboardButton(f"📊 {main.t(lang, 'analysis')}", callback_data="screen:analysis"), InlineKeyboardButton(f"👑 {main.t(lang, 'account')}", callback_data="screen:account")],
+        [InlineKeyboardButton(f"⚙️ {main.t(lang, 'settings')}", callback_data="screen:settings"), InlineKeyboardButton(f"🌐 {main.t(lang, 'language')}", callback_data="settings:language")],
+        [InlineKeyboardButton(f"💎 {main.t(lang, 'access')}", callback_data="screen:access")],
+        [InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:menu")],
     ])
 
 
@@ -38,9 +41,9 @@ def access_keyboard(update):
     lang = main._lang(update)
     telegram_id = update.effective_user.id
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🟢 7 DAYS — TACTICAL TRIAL", url=phase2_bot.checkout_link(telegram_id, 7))],
-        [InlineKeyboardButton("🟡 14 DAYS — STRATEGIC ENTRY", url=phase2_bot.checkout_link(telegram_id, 14))],
-        [InlineKeyboardButton("🔵 30 DAYS — FULL OPERATIONAL CONTROL", url=phase2_bot.checkout_link(telegram_id, 30))],
+        [InlineKeyboardButton(f"🟢 {_days_label(update, 7)}", url=phase2_bot.checkout_link(telegram_id, 7))],
+        [InlineKeyboardButton(f"🟡 {_days_label(update, 14)}", url=phase2_bot.checkout_link(telegram_id, 14))],
+        [InlineKeyboardButton(f"🔵 {_days_label(update, 30)}", url=phase2_bot.checkout_link(telegram_id, 30))],
         [InlineKeyboardButton(main.t(lang, "activate"), callback_data="action:token"), InlineKeyboardButton(main.t(lang, "paid"), callback_data="paid:menu")],
         [InlineKeyboardButton(main.t(lang, "back"), callback_data="nav:home"), InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:home")],
     ])
@@ -51,15 +54,16 @@ def price_keyboard(update):
     if _active(update):
         return main._original_price_keyboard(update)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(_days_label(7), url=_checkout(update, 7))],
-        [InlineKeyboardButton(_days_label(14), url=_checkout(update, 14))],
-        [InlineKeyboardButton(_days_label(30), url=_checkout(update, 30))],
-        [InlineKeyboardButton("← BACK", callback_data="screen:access"), InlineKeyboardButton("⌂ MENU", callback_data="nav:home")],
+        [InlineKeyboardButton(f"🟢 {_days_label(update, 7)}", url=_checkout(update, 7))],
+        [InlineKeyboardButton(f"🟡 {_days_label(update, 14)}", url=_checkout(update, 14))],
+        [InlineKeyboardButton(f"🔵 {_days_label(update, 30)}", url=_checkout(update, 30))],
+        [InlineKeyboardButton(main.t(main._lang(update), "back"), callback_data="screen:access"), InlineKeyboardButton(main.t(main._lang(update), "menu"), callback_data="nav:home")],
     ])
 
 
 async def render_access(update, context):
     import main
+    lang = main._lang(update)
     active = _active(update)
     if active:
         user = update.effective_user
@@ -67,37 +71,32 @@ async def render_access(update, context):
         expiry = main.database.normalize_datetime_utc(db_user.subscription_expiry) if db_user else None
         expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
         text = (
-            "<b>[ CLEARANCE ]: PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
+            "<b>[ CLEARANCE ]: NEURAL GOLD v3.2</b>\n"
             f"{ts.stamp()}\n"
             f"{main.DIVIDER}\n\n"
-            "[ ACCESS ]: GRANTED. WELCOME, OPERATOR.\n\n"
-            f"CLEARANCE: <b>🟢 ACTIVE</b>\n\n"
-            f"ACCESS_UNTIL: <code>{expiry_text}</code>\n\n"
-            "[ CORE ]: YOUR OPERATOR HUB IS SYNCHRONIZED."
+            f"[ ACCESS ]: GRANTED. {main.t(lang, 'welcome').upper() if lang == 'id' else 'WELCOME, OPERATOR.'}\n\n"
+            f"CLEARANCE: <b>🟢 {main.t(lang, 'active')}</b>\n\n"
+            f"{main.t(lang, 'access_until').upper()}: <code>{expiry_text}</code>\n\n"
+            f"[ CORE ]: {main.t(lang, 'home_pitch')}"
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👑 Operator Hub", callback_data="screen:account")],
-            [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")],
+            [InlineKeyboardButton(f"👑 {main.t(lang, 'account')}", callback_data="screen:account")],
+            [InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:menu")],
         ])
     else:
-        lang = main._lang(update)
         text = (
-            "<b>[ CLEARANCE ]: PREMIUM ACCESS NEURAL GOLD v3.2</b>\n"
+            "<b>[ CLEARANCE ]: NEURAL GOLD v3.2</b>\n"
             f"{ts.stamp()}\n"
             f"{main.DIVIDER}\n\n"
             "[ ACCESS ]: PENDING // OPERATOR NOT YET CONNECTED\n\n"
-            "<pre>  ENCRYPTED PREMIUM MODULES:\n"
-            "   ▸ Market Pulse (Live XAU/USD)\n"
-            "   ▸ Neural Strikes (Signals)\n"
-            "   ▸ Structure Map (Analysis)\n"
-            "   ▸ Operator Hub (Dashboard)</pre>\n\n"
+            f"<pre>  {main.t(lang, 'price')} — XAU/USD\n"
+            f"  {main.t(lang, 'signal')} — Neural Signal\n"
+            f"  {main.t(lang, 'analysis')} — {main.t(lang, 'analysis')}\n"
+            f"  {main.t(lang, 'account')} — {main.t(lang, 'account')}</pre>\n\n"
             f"{main.t(lang, 'market_pitch')}\n\n"
-            "<b>>> SELECT PACKAGE ↓</b>\n"
-            f"{main.t(lang, 'select_package_hint')}\n\n"
-            f"{main.t(lang, 'activation_route')}\n\n"
-            f"{main.t(lang, 'fallback_hint')}"
+            f"<b>>> {main.t(lang, 'select_plan').upper()}</b>\n"
+            f"{main.t(lang, 'select_package_hint')}"
         )
-    if not active:
         kb = access_keyboard(update)
     await main._present(update, text, kb)
 
@@ -107,7 +106,6 @@ async def render_price(update, context):
     if _active(update):
         await main._original_render_price(update, context)
         return
-    # Single purchase surface (audit fix: no duplicate package screen)
     await render_access(update, context)
 
 
@@ -119,14 +117,16 @@ async def render_home(update, context, edit: bool = True):
     lang = main._lang(update)
     granted = _active(update)
     pitch = main.t(lang, "home_pitch") if granted else main.t(lang, "market_pitch")
+    status = main.t(lang, "premium_active") if granted else "[ ACCESS ]: PENDING // CLEARANCE REQUIRED"
     text = (
         "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
         f"{'━' * 28}\n"
         f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
         f"{ts.stamp()}\n\n"
-        f"{ts.boot(granted=granted)}\n\n"
+        f"{ts.boot(granted=granted)}\n"
+        f"{status}\n\n"
         f"<i>{pitch}</i>\n\n"
-        "<b>>> SELECT A MODULE</b>"
+        f"<b>>> {main.t(lang, 'select_module')}</b>"
     )
     await main._present(update, text, home_keyboard(update), edit=edit)
 
@@ -166,19 +166,18 @@ async def callback_router(update, context):
         await query.answer()
         context.user_data["awaiting_token"] = True
         lang = main._lang(update)
-        await main._present(update, f"<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n>> {main.t(lang, 'enter_activation')}\n<i>{main.t(lang, 'token_note')}</i>", access_keyboard(update))
+        await main._present(update, f"<b>[ KEYGEN ]: {main.t(lang, 'activate')}</b>\n\n>> {main.t(lang, 'enter_activation')}\n<i>{main.t(lang, 'token_note')}</i>", access_keyboard(update))
         return
     if data == "screen:signal" and not auth.verify_token(user.id)[0]:
-        await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)
+        await query.answer(f"🔒 {main.t(main._lang(update), 'access_required')}", show_alert=True)
         await render_access(update, context)
         return
     if data == "screen:analysis" and not auth.verify_token(user.id)[0]:
-        await query.answer("🔒 CLEARANCE REQUIRED", show_alert=True)
+        await query.answer(f"🔒 {main.t(main._lang(update), 'access_required')}", show_alert=True)
         await render_access(update, context)
         return
 
-    # Phase-2 retains payment confirmation, language, support, and token
-    # service callbacks without taking ownership of the main UI.
+    # Phase-2 retains payment confirmation, language, support, and token service callbacks.
     await phase2_bot._callback_router(update, context)
 
 
