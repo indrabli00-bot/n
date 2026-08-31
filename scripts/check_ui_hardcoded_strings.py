@@ -15,6 +15,7 @@ UI_SINK_NAMES = {
     "reply_text", "edit_message_text", "send_message",
     "set_my_description", "set_my_short_description",
 }
+ADMIN_ONLY_PREFIXES = ("addtoken_command", "listusers_command", "fulfillment_command", "reconcile_command", "user_command", "revoke_command")
 PRESENTATION_BOUNDARIES = {"_present", "panel"}
 MACHINE_PREFIXES = (
     "screen:", "nav:", "action:", "paid:", "settings:",
@@ -86,6 +87,9 @@ def ui_expressions(tree: ast.AST) -> list[ast.AST]:
             continue
         name = call_name(node)
         if name not in UI_SINK_NAMES or is_translation_call(node):
+            continue
+        function = function_for_line(tree, node.lineno)
+        if function is not None and function.name in ADMIN_ONLY_PREFIXES:
             continue
 
         if name == "InlineKeyboardButton":

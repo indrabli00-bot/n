@@ -156,7 +156,7 @@ def home_keyboard(update: Update) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(t(lang,"analysis"), callback_data="screen:analysis"), InlineKeyboardButton(t(lang,"account"), callback_data="screen:account")],
         [InlineKeyboardButton(t(lang,"settings"), callback_data="screen:settings"), InlineKeyboardButton(f"🌐 {t(lang,'language')}", callback_data="settings:language")],
         [InlineKeyboardButton(t(lang,"access"), callback_data="screen:access")],
-        [InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")]])
+        [InlineKeyboardButton(t(lang, "menu"), callback_data="nav:menu")]])
 
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
@@ -179,7 +179,7 @@ def account_keyboard(update: Update) -> InlineKeyboardMarkup:
 def access_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
     rows = [
-        [InlineKeyboardButton("🎯 SELECT PACKAGE", callback_data="screen:price")],
+        [InlineKeyboardButton(t(lang, "select_package"), callback_data="screen:price")],
         [InlineKeyboardButton(t(lang, "paid"), callback_data="paid:menu")],
         [InlineKeyboardButton(t(lang, "activate"), callback_data="action:token")],
         [InlineKeyboardButton(t(lang, "account_status"), callback_data="screen:account")],
@@ -679,15 +679,16 @@ async def activate_token_for_user(update: Update, context: ContextTypes.DEFAULT_
             f"Package  <b>{duration} days</b>\n\n"
             f">> [ CORE ]: Your intelligence modules are unlocked."
         )
-        await update.message.reply_text(text, parse_mode="HTML", reply_markup=home_keyboard(update))
+        await _present(update, text, home_keyboard(update), edit=False)
     else:
-        await update.message.reply_text(
+        await _present(
+            update,
             "<b>[ ERROR ]: TOKEN_REJECTED</b>\n\n"
             "[ FAULT ]: INVALID_OR_ALREADY_BURNED\n"
             "The token is invalid or has already been used.\n\n"
             ">> Tap <b>ACCESS &amp; PLANS</b> to try again.",
-            parse_mode="HTML",
-            reply_markup=access_keyboard(update),
+            access_keyboard(update),
+            edit=False,
         )
 
 
