@@ -169,7 +169,7 @@ async def whop_webhook(request: Request, background: BackgroundTasks):
 
     payment_id = str(data.get("id") or "") or None
     if not whop_storage.claim_webhook(event_id, event_type, payment_id):
-        return Response(status_code=200)
+        return JSONResponse(status_code=200, content={"received": True, "duplicate": True})
 
     try:
         result = handle_event(event_type, data)
@@ -179,8 +179,8 @@ async def whop_webhook(request: Request, background: BackgroundTasks):
             order = whop_storage.get_order(order_id)
             if order is not None:
                 background.add_task(notify_customer, telegram_app.bot, order["telegram_id"], raw_token, duration, order_id)
-        return Response(status_code=200)
+        return JSONResponse(status_code=200, content={"received": True, "processed": True})
     except Exception as exc:
         logger.exception("Whop event processing failed event=%s", event_id)
         whop_storage.mark_webhook(event_id, "failed", str(exc)[:1000])
-        return Response(status_code=500)
+        return JSONResponse(status_code=500, content={"received": True, "retry": True})
