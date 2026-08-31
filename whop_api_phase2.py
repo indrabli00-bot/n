@@ -9,6 +9,7 @@ import whop_storage
 from config import BELMO_PUBLIC_URL, WHOP_API_KEY
 
 WHOP_API_BASE = "https://api.whop.com/api/v1"
+WHOP_API_V2 = "https://api.whop.com/api/v2"
 PLAN_IDS = {
     7: "plan_ksl11weFJ0z41",
     14: "plan_Yc1JnCIP8jgII",
@@ -18,6 +19,26 @@ PLAN_IDS = {
 
 def plan_id_for_days(days: int) -> str | None:
     return PLAN_IDS.get(days)
+
+
+async def fetch_payment(payment_id: str) -> dict[str, Any]:
+    """Whop API v2: ambil detail payment untuk revalidation (Kelompok 1).
+
+    Dipakai /reconcile saat payment tidak ada di DB lokal (webhook hilang):
+    sistem bertanya langsung ke Whop alih-alih bergantung pada delivery.
+    """
+    if not WHOP_API_KEY:
+        raise RuntimeError("WHOP_API_KEY_not_configured")
+    headers = {"Authorization": f"Bearer {WHOP_API_KEY}", "Accept": "application/json"}
+    timeout = aiohttp.ClientTimeout(total=15)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(
+            f"{WHOP_API_V2}/payments/{payment_id}", headers=headers
+        ) as response:
+            if response.status == 404:
+                raise RuntimeError("payment_not_found_on_whop")
+            response.raise_for_status()
+            return await response.json(content_type=None)
 
 
 async def create_checkout_for_user(

@@ -811,7 +811,7 @@ async def reconcile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     payment_id = context.args[0].strip()
     import whop_webhook_phase2
     try:
-        result = whop_webhook_phase2.reconcile_payment(payment_id)
+        result = await whop_webhook_phase2.reconcile_payment_full(payment_id)
     except Exception as exc:
         logger.exception("reconcile_command failed")
         result = {"ok": False, "reason": str(exc)[:120]}

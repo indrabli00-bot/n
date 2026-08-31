@@ -334,3 +334,67 @@ def reconcile_payment(payment_id: str) -> dict:
     except Exception as exc:
         whop_storage.record_fulfillment_failure(payment_id, str(exc)[:200])
         return {"ok": False, "reason": str(exc)[:160]}
+
+
+# ---------------------------------------------------------------------------
+# Whop revalidation (Kelompok 1): recovery tanpa bergantung pada webhook delivery
+# ---------------------------------------------------------------------------
+
+import whop_api_phase2  # noqa: E402  (setelah definisi agar bebas circular import parsial)
+
+
+async def reconcile_payment_remote(payment_id: str) -> dict:
+    """Revalidasi via Whop API v2: tanya langsung status payment ke Whop.
+
+    Dipakai ketika payment TIDAK ada di DB lokal (webhook hilang saat server
+    crash/redeploy). Satu payment_id tetap maksimal satu fulfillment
+    (whop_fulfillment lock + fencing claim_id berlaku sama).
+    """
+    payment = await whop_api_phase2.fetch_payment(payment_id)
+    status = str(payment.get("status") or payment.get("substatus") or "").lower()
+    if status not in ("paid", "succeeded"):
+        return {"ok": False, "reason": f"WHOP_STATUS_{status.upper() or 'UNKNOWN'} (bukan pembayaran sukses)"}
+
+    metadata = payment.get("metadata") or {}
+    order_id = str(metadata.get("neural_order_id") or "") or f"ng_rec_{payment_id[-12:].lower()}"
+    telegram_raw = str(metadata.get("telegram_id") or "")
+    try:
+        telegram_id = int(telegram_raw)
+    except ValueError:
+        return {"ok": False, "reason": "METADATA_TELEGRAM_ID_TIDAK_ADA — hubungi admin untuk aktivasi manual"}
+    plan = payment.get("plan") or {}
+    plan_id = str(plan.get("id") or "")
+    try:
+        days = int(metadata.get("plan_days") or 0)
+    except ValueError:
+        days = 0
+    duration = days or PLAN_DURATIONS.get(plan_id, 30)
+    membership_id = str((payment.get("membership") or {}).get("id") or "") or None
+
+    if not whop_storage.get_order(order_id):
+        if not whop_storage.create_order(order_id, telegram_id, plan_id or "unknown", duration):
+            return {"ok": False, "reason": "GAGAL MEMBUAT ORDER LOKAL"}
+    whop_storage.update_order(order_id, payment_id=payment_id, membership_id=membership_id)
+
+    claim_id = whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=0)
+    if not claim_id:
+        return {"ok": True, "status": "ALREADY FULFILLED", "telegram_id": telegram_id}
+    database.fulfill_payment(telegram_id, duration, order_id, payment_id, claim_id)
+    return {"ok": True, "status": "FULFILLED VIA WHOP REVALIDATION",
+            "telegram_id": telegram_id, "duration_days": duration}
+
+
+async def reconcile_payment_full(payment_id: str) -> dict:
+    """Urutan reconcile: DB lokal dulu -> revalidasi ke Whop API bila perlu."""
+    local = reconcile_payment(payment_id)
+    if local.get("ok"):
+        return local
+    local_reason = local.get("reason", "")
+    if not payment_id.startswith("pay_"):
+        return local
+    remote = await reconcile_payment_remote(payment_id)
+    if remote.get("ok"):
+        return remote
+    if "NOT_FOUND" in str(remote.get("reason", "")):
+        return {"ok": False, "reason": f"{local_reason} | Whop: payment tidak ditemukan"}
+    return {"ok": False, "reason": f"{local_reason} | Whop: {remote.get('reason', '')}"}

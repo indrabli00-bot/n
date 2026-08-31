@@ -165,3 +165,96 @@ class FulfillmentOpsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    # 11. ws_ secret (format Whop): raw penuh + tanpa prefix + salah secret
+    def test_ws_secret_variants(self):
+        import time as _time
+        payload = json.dumps({"type": "payment.succeeded", "data": {"id": "pay_ws"}}, separators=(",", ":")).encode()
+        webhook_id, ts = "msg_ws", str(int(_time.time()))
+        signed = f"{webhook_id}.{ts}.".encode() + payload
+        full = "ws_" + "c" * 64
+        stripped = full[3:]
+        wrong = "ws_" + "d" * 64
+        for secret, expect_ok in ((full, True), (stripped, True), (wrong, False)):
+            digest = base64.b64encode(hmac.new(secret.encode(), signed, hashlib.sha256).digest()).decode()
+            headers = {"webhook-id": webhook_id, "webhook-timestamp": ts, "webhook-signature": f"v1,{digest}"}
+            # verifikasi harus menerima kunci full maupun stripped, menolak yang salah
+            with __import__("unittest").mock.patch.object(wh, "WHOP_WEBHOOK_SECRET", full):
+                if expect_ok:
+                    ev = wh.verify_signature(payload, headers)
+                    self.assertEqual(ev["type"], "payment.succeeded")
+                else:
+                    with self.assertRaises(ValueError):
+                        wh.verify_signature(payload, headers)
+        # stripped sebagai secret terpasang juga harus diterima
+        digest = base64.b64encode(hmac.new(stripped.encode(), signed, hashlib.sha256).digest()).decode()
+        headers = {"webhook-id": webhook_id, "webhook-timestamp": ts, "webhook-signature": f"v1,{digest}"}
+        with __import__("unittest").mock.patch.object(wh, "WHOP_WEBHOOK_SECRET", stripped):
+            ev = wh.verify_signature(payload, headers)
+            self.assertEqual(ev["type"], "payment.succeeded")
+
+
+    # Kelompok 1: Whop revalidation — webhook hilang, sistem bertanya ke Whop
+    def test_remote_reconcile_via_whop_api(self):
+        import whop_api_phase2
+        payment = {
+            "id": "pay_remote_1",
+            "status": "paid",
+            "metadata": {"neural_order_id": "ng_remote_1", "telegram_id": "210",
+                         "plan_days": "7", "source": "neural_gold"},
+            "plan": {"id": "plan_ksl11weFJ0z41"},
+            "membership": {"id": "mem_remote_1"},
+        }
+        orig = whop_api_phase2.fetch_payment
+        async def _fake(pid): return payment
+        whop_api_phase2.fetch_payment = _fake
+        try:
+            result = asyncio.run(wh.reconcile_payment_full("pay_remote_1"))
+        finally:
+            whop_api_phase2.fetch_payment = orig
+        self.assertTrue(result["ok"], result)
+        self.assertIn("REVALIDATION", result["status"])
+        user = database.get_user_by_telegram_id(210)
+        self.assertTrue(user.is_active)
+        order = whop_storage.get_order("ng_remote_1")
+        self.assertEqual(order["payment_id"], "pay_remote_1")
+        self.assertEqual(whop_storage.get_fulfillment("pay_remote_1")["status"], "fulfilled")
+
+    def test_remote_reconcile_refuses_unpaid(self):
+        import whop_api_phase2
+        payment = {"id": "pay_remote_2", "status": "failed",
+                   "metadata": {"neural_order_id": "ng_remote_2", "telegram_id": "211"},
+                   "plan": {"id": "plan_ksl11weFJ0z41"}}
+        orig = whop_api_phase2.fetch_payment
+        async def _fake(pid): return payment
+        whop_api_phase2.fetch_payment = _fake
+        try:
+            result = asyncio.run(wh.reconcile_payment_full("pay_remote_2"))
+        finally:
+            whop_api_phase2.fetch_payment = orig
+        self.assertFalse(result["ok"])
+        self.assertIn("WHOP_STATUS_FAILED", result["reason"])
+        self.assertIsNone(database.get_user_by_telegram_id(211))
+
+    def test_remote_reconcile_duplicate_payment_fenced(self):
+        import whop_api_phase2
+        whop_storage.create_order("ops_r3", 212, "plan_ksl11weFJ0z41", 7)
+        cid = whop_storage.claim_fulfillment("pay_r3", "ops_r3", stale_minutes=0)
+        database.fulfill_payment(212, 7, "ops_r3", "pay_r3", cid)
+        payment = {"id": "pay_r3", "status": "paid",
+                   "metadata": {"neural_order_id": "ops_r3", "telegram_id": "212"},
+                   "plan": {"id": "plan_ksl11weFJ0z41"}}
+        orig = whop_api_phase2.fetch_payment
+        async def _fake(pid): return payment
+        whop_api_phase2.fetch_payment = _fake
+        try:
+            result = asyncio.run(wh.reconcile_payment_full("pay_r3"))
+        finally:
+            whop_api_phase2.fetch_payment = orig
+        self.assertTrue(result["ok"] and "ALREADY" in result["status"])
+        exp = database.get_user_by_telegram_id(212).subscription_expiry
+        # reconcile ulang tidak menambah durasi
+        result2 = asyncio.run(wh.reconcile_payment_full("pay_r3"))
+        self.assertTrue(result2["ok"])
+        self.assertEqual(database.get_user_by_telegram_id(212).subscription_expiry, exp)
