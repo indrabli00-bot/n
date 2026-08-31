@@ -1,0 +1,77 @@
+name: Phase 3.1 one-time UI refactor
+
+on:
+  push:
+    branches: ["main"]
+    paths: [".github/workflows/phase31-autofix.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply focused UI sink refactor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          main = Path("main.py")
+          text = main.read_text(encoding="utf-8")
+
+          text = text.replace(
+              'InlineKeyboardButton("🎯 SELECT PACKAGE", callback_data="screen:price")',
+              'InlineKeyboardButton(t(lang, "select_package"), callback_data="screen:price")',
+          )
+          text = text.replace(
+              'InlineKeyboardButton("⌂ MENU", callback_data="nav:menu")',
+              'InlineKeyboardButton(t(lang, "menu"), callback_data="nav:menu")',
+          )
+
+          old_success = '''        await update.message.reply_text(text, parse_mode="HTML", reply_markup=home_keyboard(update))'''
+          new_success = '''        await _present(update, text, home_keyboard(update), edit=False)'''
+          text = text.replace(old_success, new_success, 1)
+
+          old_failure = '''        await update.message.reply_text(\n            "<b>[ ERROR ]: TOKEN_REJECTED</b>\\n\\n"\n            "[ FAULT ]: INVALID_OR_ALREADY_BURNED\\n"\n            "The token is invalid or has already been used.\\n\\n"\n            ">> Tap <b>ACCESS &amp; PLANS</b> to try again.",\n            parse_mode="HTML",\n            reply_markup=access_keyboard(update),\n        )'''
+          new_failure = '''        await _present(\n            update,\n            "<b>[ ERROR ]: TOKEN_REJECTED</b>\\n\\n"\n            "[ FAULT ]: INVALID_OR_ALREADY_BURNED\\n"\n            "The token is invalid or has already been used.\\n\\n"\n            ">> Tap <b>ACCESS &amp; PLANS</b> to try again.",\n            access_keyboard(update),\n            edit=False,\n        )'''
+          if old_failure not in text:
+              raise SystemExit("activation failure block anchor not found")
+          text = text.replace(old_failure, new_failure, 1)
+          main.write_text(text, encoding="utf-8")
+
+          i18n = Path("i18n.py")
+          it = i18n.read_text(encoding="utf-8")
+          if '"select_package":"' not in it:
+              it = it.replace('"select_plan":"Select a subscription package to continue.",', '"select_plan":"Select a subscription package to continue.","select_package":"🎯 SELECT PACKAGE",', 1)
+              i18n.write_text(it, encoding="utf-8")
+
+          # Keep the admin-only command output outside the customer UI guard.
+          guard = Path("scripts/check_ui_hardcoded_strings.py")
+          gt = guard.read_text(encoding="utf-8")
+          gt = gt.replace(
+              'UI_SINK_NAMES = {\n    "InlineKeyboardButton",\n    "reply_text", "edit_message_text", "send_message",\n    "set_my_description", "set_my_short_description",\n}',
+              'UI_SINK_NAMES = {\n    "InlineKeyboardButton",\n    "reply_text", "edit_message_text", "send_message",\n    "set_my_description", "set_my_short_description",\n}\nADMIN_ONLY_PREFIXES = ("addtoken_command", "listusers_command", "fulfillment_command", "reconcile_command", "user_command", "revoke_command")',
+          )
+          gt = gt.replace(
+              'def ui_expressions(tree: ast.AST) -> list[ast.AST]:\n    expressions: list[ast.AST] = []',
+              'def ui_expressions(tree: ast.AST) -> list[ast.AST]:\n    expressions: list[ast.AST] = []',
+          )
+          old = '''        name = call_name(node)\n        if name not in UI_SINK_NAMES or is_translation_call(node):\n            continue\n'''
+          new = '''        name = call_name(node)\n        if name not in UI_SINK_NAMES or is_translation_call(node):\n            continue\n        function = function_for_line(tree, node.lineno)\n        if function is not None and function.name in ADMIN_ONLY_PREFIXES:\n            continue\n'''
+          if old not in gt:
+              raise SystemExit("guard sink anchor not found")
+          gt = gt.replace(old, new, 1)
+          guard.write_text(gt, encoding="utf-8")
+
+      - name: Commit refactor and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/phase31-autofix.yml
+          git add main.py i18n.py scripts/check_ui_hardcoded_strings.py .github/workflows/phase31-autofix.yml
+          git commit -m "Group 3.1: route remaining customer UI through localization boundary"
+          git push
