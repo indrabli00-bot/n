@@ -25,6 +25,10 @@ from i18n import t
 # Core terminal primitives
 # ---------------------------------------------------------------------------
 
+# Standard panel geometry: ONE width everywhere, fits small screens.
+PANEL_W = 36   # total visual width including borders
+INNER_W = 34   # usable inner width for content rows
+
 
 def stamp() -> str:
     """UTC timestamp for terminal aesthetics."""
@@ -36,19 +40,6 @@ def line(tag: str, msg: str) -> str:
     return f"[ {tag} ]: {msg}"
 
 
-def panel(rows, escape: bool = False) -> str:
-    """Monospaced terminal panel. Set escape=True for raw (unescaped) rows."""
-    if escape:
-        import html as _html
-        rows = [_html.escape(str(r)) for r in rows]
-    return "<pre>" + "\n".join(rows) + "</pre>"
-
-
-# ── Standard panel geometry: ONE width everywhere, fits small screens.
-PANEL_W = 36   # total visual width including borders
-INNER_W = 34   # usable inner width for content rows
-
-
 def prow(text: str, inner: int = INNER_W) -> str:
     """Pad (or hard-trim) a panel row to the standard inner width."""
     s = str(text)
@@ -58,6 +49,14 @@ def prow(text: str, inner: int = INNER_W) -> str:
 def bar(ch: str = "─", inner: int = INNER_W) -> str:
     """Horizontal rule of the standard inner width."""
     return ch * inner
+
+
+def panel(rows, escape: bool = False) -> str:
+    """Render a monospaced panel with the standard fixed inner width."""
+    if escape:
+        import html as _html
+        rows = [_html.escape(str(r)) for r in rows]
+    return "<pre>" + "\n".join(prow(r) for r in rows) + "</pre>"
 
 
 def boot(granted: bool) -> str:
