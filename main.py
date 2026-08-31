@@ -30,6 +30,7 @@ import api_handler
 import auth
 import database
 import terminal_style as ts
+import whop_storage
 from i18n import LANGUAGES, detect_language, language_buttons, t
 from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp
 from config import (
@@ -778,6 +779,89 @@ async def listusers_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 @auth.require_admin
+async def fulfillment_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        q = whop_storage.fulfillment_queue()
+    except Exception:
+        logger.exception("fulfillment_command failed")
+        await update.message.reply_text("<b>[ ERROR ]: OPS QUEUE UNAVAILABLE</b>", parse_mode="HTML")
+        return
+    counts = q["counts"]
+    lines = [
+        "<b>[ OPS ]: FULFILLMENT QUEUE</b>",
+        f"FULFILLED {counts.get('fulfilled', 0)} · PROCESSING {counts.get('processing', 0)} · FAILED {counts.get('failed', 0)}",
+        DIVIDER,
+    ]
+    rows = q["rows"]
+    if not rows:
+        lines.append(">> [ CORE ]: EXCEPTION QUEUE EMPTY. ALL PAYMENTS AUTOMATIC.")
+    for r in rows:
+        tg = r.get("telegram_id") or "?"
+        lines.append(f"⚠ <code>{_esc(str(r['payment_id'])[:20])}</code> · {_esc(str(r['status']).upper())} · attempts {r['attempts']} · user <code>{tg}</code> · {r.get('duration_days') or '?'}d")
+    lines.append(">> /reconcile &lt;payment_id&gt; to force re-check.")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+@auth.require_admin
+async def reconcile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text(">> USAGE: <code>/reconcile PAYMENT_ID</code>", parse_mode="HTML")
+        return
+    payment_id = context.args[0].strip()
+    import whop_webhook_phase2
+    try:
+        result = whop_webhook_phase2.reconcile_payment(payment_id)
+    except Exception as exc:
+        logger.exception("reconcile_command failed")
+        result = {"ok": False, "reason": str(exc)[:120]}
+    if result.get("ok"):
+        expiry_line = f"\nEXPIRY: <code>{_esc(result.get('expiry'))}</code>" if result.get("expiry") else ""
+        await update.message.reply_text(
+            f"<b>[ OPS ]: RECONCILE OK</b>\nSTATUS: <b>{_esc(result.get('status'))}</b>\nUSER: <code>{result.get('telegram_id')}</code>{expiry_line}",
+            parse_mode="HTML",
+        )
+    else:
+        await update.message.reply_text(
+            f"<b>[ OPS ]: RECONCILE FAILED</b>\n[ ERROR ]: {_esc(result.get('reason'))}",
+            parse_mode="HTML",
+        )
+
+
+@auth.require_admin
+async def user_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args or not context.args[0].strip().lstrip("-").isdigit():
+        await update.message.reply_text(">> USAGE: <code>/user TELEGRAM_ID</code>", parse_mode="HTML")
+        return
+    tid = int(context.args[0].strip())
+    user = database.get_user_by_telegram_id(tid)
+    if user is None:
+        await update.message.reply_text(f"<b>[ FILE ]: USER <code>{tid}</code></b>\n[ ERROR ]: NOT_FOUND", parse_mode="HTML")
+        return
+    expiry = database.normalize_datetime_utc(user.subscription_expiry)
+    expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "Not activated"
+    lines = [
+        "<b>[ FILE ]: OPERATOR DOSSIER</b>",
+        f"TELEGRAM_ID: <code>{tid}</code>",
+        f"USERNAME: <code>@{_esc(user.username or 'N/A')}</code>",
+        f"STATUS: <b>{'🟢 ACTIVE' if user.is_active else '○ INACTIVE'}</b>",
+        f"EXPIRY: <code>{expiry_text}</code>",
+        DIVIDER,
+    ]
+    orders = whop_storage.recent_orders_for(tid, 3)
+    if orders:
+        lines.append("<b>RECENT ORDERS:</b>")
+        for o in orders:
+            lines.append(f"• <code>{_esc(str(o['id'])[:18])}</code> · {_esc(o['status'])} · {o['duration_days']}d")
+        latest_payment = orders[0].get("payment_id")
+        latest = whop_storage.get_fulfillment(latest_payment) if latest_payment else None
+        if latest:
+            lines.append(f"FULFILLMENT: {_esc(str(latest['status']).upper())} (attempts {latest['attempts']})")
+    else:
+        lines.append("RECENT ORDERS: —")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+@auth.require_admin
 async def revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args or not context.args[0].strip().lstrip("-").isdigit():
         await update.message.reply_text(">> USAGE: <code>/revoke TELEGRAM_ID</code>", parse_mode="HTML")
@@ -815,6 +899,11 @@ async def paid_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         ">> Customer reports that a Whop payment was completed.\n"
         ">> Verify the Whop order manually, then issue the matching token via /addtoken."
     )
+    recent = whop_storage.recent_orders_for(user.id, 3)
+    if recent:
+        text += "\n\n<b>RECENT ORDERS (THIS USER):</b>\n" + "\n".join(
+            f"• <code>{_esc(str(o['id'])[:20])}</code> · {_esc(o['status'])} · {o['duration_days']}d" for o in recent
+        )
     if ADMIN_TELEGRAM_ID:
         try:
             await context.bot.send_message(
@@ -1013,6 +1102,9 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("addtoken", addtoken_command))
     application.add_handler(CommandHandler("listusers", listusers_command))
     application.add_handler(CommandHandler("revoke", revoke_command))
+    application.add_handler(CommandHandler("fulfillment", fulfillment_command))
+    application.add_handler(CommandHandler("reconcile", reconcile_command))
+    application.add_handler(CommandHandler("user", user_command))
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command_handler))
     application.add_handler(MessageHandler(filters.TEXT, unknown_text_handler))
     application.add_handler(CallbackQueryHandler(callback_router))

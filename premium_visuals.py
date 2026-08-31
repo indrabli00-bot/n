@@ -94,7 +94,8 @@ async def render_access(update, context):
             f"{main.t(lang, 'market_pitch')}\n\n"
             "<b>>> SELECT PACKAGE ↓</b>\n"
             f"{main.t(lang, 'select_package_hint')}\n\n"
-            f"{main.t(lang, 'activation_route')}"
+            f"{main.t(lang, 'activation_route')}\n\n"
+            f"{main.t(lang, 'fallback_hint')}"
         )
     if not active:
         kb = access_keyboard(update)
