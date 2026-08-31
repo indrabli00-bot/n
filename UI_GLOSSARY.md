@@ -64,4 +64,6 @@ Human-language action copy, sentences, button labels, package descriptions, help
 
 The presentation boundary accepts already-localized text. Rendering modules call the localization catalog before passing text into the presentation boundary.
 
+The Group 3.1 direct-localization refactor is validated in the isolated branch with static guard and the full 43-test suite before promotion to `main`.
+
 When a literal is not listed here and is intended for the user, add a translation key instead of embedding the sentence directly in a rendering module.
