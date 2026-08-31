@@ -14,7 +14,7 @@ logger = logging.getLogger("neural_gold.whop_storage")
 CREATE_SQL = """
 CREATE TABLE IF NOT EXISTS whop_orders (
     id VARCHAR(64) PRIMARY KEY,
-    telegram_id INTEGER NOT NULL,
+    telegram_id BIGINT NOT NULL,
     plan_id VARCHAR(128) NOT NULL,
     duration_days INTEGER NOT NULL,
     checkout_id VARCHAR(128) UNIQUE,
@@ -68,16 +68,21 @@ def init_phase2_db() -> None:
             statement = statement.strip()
             if statement:
                 conn.execute(text(statement))
-    # Additive migrations (fulfillment ops): kolom fencing claim_id + attempts.
-    for migration in (
+
+    migrations = [
         "ALTER TABLE whop_fulfillment ADD COLUMN claim_id VARCHAR(64)",
         "ALTER TABLE whop_fulfillment ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
-    ):
+    ]
+    if database.engine.dialect.name == "postgresql":
+        migrations.append(
+            "ALTER TABLE whop_orders ALTER COLUMN telegram_id TYPE BIGINT"
+        )
+    for migration in migrations:
         try:
             with database.engine.begin() as conn:
                 conn.execute(text(migration))
         except Exception:
-            pass  # kolom sudah ada (fresh install / migrasi sebelumnya)
+            pass
     logger.info("Whop Phase 2 tables initialised.")
 
 
@@ -87,9 +92,10 @@ def create_order(order_id: str, telegram_id: int, plan_id: str, duration_days: i
         with database.engine.begin() as conn:
             result = conn.execute(
                 text("""
-                    INSERT OR IGNORE INTO whop_orders
+                    INSERT INTO whop_orders
                     (id, telegram_id, plan_id, duration_days, status, created_at, updated_at)
                     VALUES (:id, :telegram_id, :plan_id, :duration_days, 'pending', :created_at, :updated_at)
+                    ON CONFLICT (id) DO NOTHING
                 """),
                 {"id": order_id, "telegram_id": telegram_id, "plan_id": plan_id,
                  "duration_days": duration_days, "created_at": now, "updated_at": now},
@@ -155,9 +161,10 @@ def claim_webhook(event_id: str, event_type: str, payment_id: str | None = None)
         with database.engine.begin() as conn:
             inserted = conn.execute(
                 text("""
-                    INSERT OR IGNORE INTO whop_webhook_events
+                    INSERT INTO whop_webhook_events
                     (id, event_type, payment_id, status, created_at)
                     VALUES (:id, :event_type, :payment_id, 'processing', :created_at)
+                    ON CONFLICT (id) DO NOTHING
                 """),
                 {"id": event_id, "event_type": event_type, "payment_id": payment_id, "created_at": now},
             )
@@ -199,55 +206,6 @@ def get_fulfillment(payment_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-def claim_fulfillment(payment_id: str, order_id: str, stale_minutes: int = 10) -> bool:
-    """Atomic fulfillment lock keyed by payment_id (audit round-2).
-
-    Returns True when THIS caller owns the fulfillment. One payment_id can
-    only ever reach 'fulfilled' once. Stale 'processing' claims older than
-    stale_minutes are reclaimable so crashed fulfillments can recover without
-    opening a double-fulfillment path.
-    """
-    now = _now()
-    cutoff = now - timedelta(minutes=stale_minutes)
-    try:
-        with database.engine.begin() as conn:
-            row = conn.execute(
-                text("SELECT status FROM whop_fulfillment WHERE payment_id = :pid"),
-                {"pid": payment_id},
-            ).mappings().first()
-            if row is None:
-                conn.execute(
-                    text("""
-                        INSERT INTO whop_fulfillment (payment_id, order_id, status, claimed_at, updated_at)
-                        VALUES (:pid, :oid, 'processing', :now, :now)
-                    """),
-                    {"pid": payment_id, "oid": order_id, "now": now},
-                )
-                return True
-            status = row["status"]
-            if status == "fulfilled":
-                return False
-            if status == "failed":
-                conn.execute(
-                    text("UPDATE whop_fulfillment SET status = 'processing', claimed_at = :now, updated_at = :now WHERE payment_id = :pid"),
-                    {"pid": payment_id, "now": now},
-                )
-                return True
-            if status in ("processing", "pending"):
-                # 'processing' is reclaimable only when the claim is stale; the
-                # stale comparison is done in SQL so storage-format differences
-                # (SQLite string timestamps vs Postgres timestamps) stay safe.
-                reclaimed = conn.execute(
-                    text("UPDATE whop_fulfillment SET status = 'processing', claimed_at = :now, updated_at = :now WHERE payment_id = :pid AND status = :st AND claimed_at <= :cutoff"),
-                    {"pid": payment_id, "now": now, "st": status, "cutoff": cutoff},
-                )
-                return reclaimed.rowcount == 1
-            return False
-    except Exception:
-        logger.exception("claim_fulfillment failed payment=%s", payment_id)
-        return False
-
-
 def mark_fulfillment(payment_id: str, status: str, error_message: str | None = None) -> None:
     try:
         with database.engine.begin() as conn:
@@ -265,16 +223,7 @@ def mark_fulfillment(payment_id: str, status: str, error_message: str | None = N
 
 
 def claim_fulfillment(payment_id: str, order_id: str, stale_minutes: int = 10) -> str | None:
-    """Atomic fulfillment lock keyed by payment_id, WITH fencing (fulfillment ops).
-
-    Returns a claim_id (lease) when THIS caller owns the fulfillment, else None.
-    One payment_id can only ever reach 'fulfilled' once. Reclaim rules:
-      - 'fulfilled'        -> never
-      - 'failed'           -> immediately (retry)
-      - 'processing' stale -> after stale_minutes (recovery worker)
-    The claim_id MUST be passed to fulfill_payment: a stale worker holding an
-    old claim_id loses its lease once a newer claim exists (fencing).
-    """
+    """Atomic fulfillment lock keyed by payment_id, WITH fencing."""
     claim_id = uuid.uuid4().hex
     now = _now()
     cutoff = now - timedelta(minutes=stale_minutes)
@@ -297,11 +246,11 @@ def claim_fulfillment(payment_id: str, order_id: str, stale_minutes: int = 10) -
             if status == "fulfilled":
                 return None
             if status == "failed":
-                conn.execute(
-                    text("UPDATE whop_fulfillment SET status = 'processing', claim_id = :cid, claimed_at = :now, updated_at = :now WHERE payment_id = :pid"),
+                updated = conn.execute(
+                    text("UPDATE whop_fulfillment SET status = 'processing', claim_id = :cid, claimed_at = :now, updated_at = :now WHERE payment_id = :pid AND status = 'failed'"),
                     {"pid": payment_id, "cid": claim_id, "now": now},
                 )
-                return claim_id
+                return claim_id if updated.rowcount == 1 else None
             if status in ("processing", "pending"):
                 reclaimed = conn.execute(
                     text("UPDATE whop_fulfillment SET status = 'processing', claim_id = :cid, claimed_at = :now, updated_at = :now WHERE payment_id = :pid AND status = :st AND claimed_at <= :cutoff"),
@@ -315,8 +264,7 @@ def claim_fulfillment(payment_id: str, order_id: str, stale_minutes: int = 10) -
 
 
 def record_fulfillment_failure(payment_id: str, error_message: str) -> int:
-    """Catat kegagalan fulfillment: attempts + 1, status = 'failed'.
-    Mengembalikan jumlah attempts terkini (untuk keputusan alert admin)."""
+    """Catat kegagalan fulfillment: attempts + 1, status = 'failed'."""
     try:
         with database.engine.begin() as conn:
             row = conn.execute(
