@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
@@ -47,6 +48,8 @@ CREATE TABLE IF NOT EXISTS whop_fulfillment (
     payment_id VARCHAR(128) PRIMARY KEY,
     order_id VARCHAR(64) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'processing',
+    claim_id VARCHAR(64),
+    attempts INTEGER NOT NULL DEFAULT 0,
     claimed_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     error_message VARCHAR(500)
@@ -65,6 +68,16 @@ def init_phase2_db() -> None:
             statement = statement.strip()
             if statement:
                 conn.execute(text(statement))
+    # Additive migrations (fulfillment ops): kolom fencing claim_id + attempts.
+    for migration in (
+        "ALTER TABLE whop_fulfillment ADD COLUMN claim_id VARCHAR(64)",
+        "ALTER TABLE whop_fulfillment ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+    ):
+        try:
+            with database.engine.begin() as conn:
+                conn.execute(text(migration))
+        except Exception:
+            pass  # kolom sudah ada (fresh install / migrasi sebelumnya)
     logger.info("Whop Phase 2 tables initialised.")
 
 
@@ -249,6 +262,141 @@ def mark_fulfillment(payment_id: str, status: str, error_message: str | None = N
             )
     except Exception:
         logger.exception("mark_fulfillment failed payment=%s", payment_id)
+
+
+def claim_fulfillment(payment_id: str, order_id: str, stale_minutes: int = 10) -> str | None:
+    """Atomic fulfillment lock keyed by payment_id, WITH fencing (fulfillment ops).
+
+    Returns a claim_id (lease) when THIS caller owns the fulfillment, else None.
+    One payment_id can only ever reach 'fulfilled' once. Reclaim rules:
+      - 'fulfilled'        -> never
+      - 'failed'           -> immediately (retry)
+      - 'processing' stale -> after stale_minutes (recovery worker)
+    The claim_id MUST be passed to fulfill_payment: a stale worker holding an
+    old claim_id loses its lease once a newer claim exists (fencing).
+    """
+    claim_id = uuid.uuid4().hex
+    now = _now()
+    cutoff = now - timedelta(minutes=stale_minutes)
+    try:
+        with database.engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT status FROM whop_fulfillment WHERE payment_id = :pid"),
+                {"pid": payment_id},
+            ).mappings().first()
+            if row is None:
+                conn.execute(
+                    text("""
+                        INSERT INTO whop_fulfillment (payment_id, order_id, status, claim_id, claimed_at, updated_at)
+                        VALUES (:pid, :oid, 'processing', :cid, :now, :now)
+                    """),
+                    {"pid": payment_id, "oid": order_id, "cid": claim_id, "now": now},
+                )
+                return claim_id
+            status = row["status"]
+            if status == "fulfilled":
+                return None
+            if status == "failed":
+                conn.execute(
+                    text("UPDATE whop_fulfillment SET status = 'processing', claim_id = :cid, claimed_at = :now, updated_at = :now WHERE payment_id = :pid"),
+                    {"pid": payment_id, "cid": claim_id, "now": now},
+                )
+                return claim_id
+            if status in ("processing", "pending"):
+                reclaimed = conn.execute(
+                    text("UPDATE whop_fulfillment SET status = 'processing', claim_id = :cid, claimed_at = :now, updated_at = :now WHERE payment_id = :pid AND status = :st AND claimed_at <= :cutoff"),
+                    {"pid": payment_id, "cid": claim_id, "now": now, "st": status, "cutoff": cutoff},
+                )
+                return claim_id if reclaimed.rowcount == 1 else None
+            return None
+    except Exception:
+        logger.exception("claim_fulfillment failed payment=%s", payment_id)
+        return None
+
+
+def record_fulfillment_failure(payment_id: str, error_message: str) -> int:
+    """Catat kegagalan fulfillment: attempts + 1, status = 'failed'.
+    Mengembalikan jumlah attempts terkini (untuk keputusan alert admin)."""
+    try:
+        with database.engine.begin() as conn:
+            row = conn.execute(
+                text("""
+                    UPDATE whop_fulfillment
+                    SET status = 'failed', attempts = attempts + 1,
+                        error_message = :err, updated_at = :now
+                    WHERE payment_id = :pid
+                    RETURNING attempts
+                """),
+                {"pid": payment_id, "err": error_message[:500], "now": _now()},
+            ).mappings().first()
+            return int(row["attempts"]) if row else 0
+    except Exception:
+        logger.exception("record_fulfillment_failure failed payment=%s", payment_id)
+        return -1
+
+
+def list_stale_claims(stale_minutes: int = 10, max_attempts: int = 3) -> list[dict]:
+    """Kandidat recovery worker: processing stale + failed yang belum mencapai max_attempts."""
+    cutoff = _now() - timedelta(minutes=stale_minutes)
+    try:
+        with database.engine.begin() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT payment_id, order_id, status, attempts, claimed_at, updated_at
+                    FROM whop_fulfillment
+                    WHERE (status = 'processing' AND claimed_at <= :cutoff)
+                       OR (status = 'failed' AND attempts < :max_attempts)
+                    ORDER BY claimed_at ASC
+                    LIMIT 50
+                """),
+                {"cutoff": cutoff, "max_attempts": max_attempts},
+            ).mappings().all()
+            return [dict(r) for r in rows]
+    except Exception:
+        logger.exception("list_stale_claims failed")
+        return []
+
+
+def fulfillment_queue(limit: int = 20) -> dict:
+    """Admin exception queue: hitungan per status + daftar yang belum fulfilled."""
+    try:
+        with database.engine.begin() as conn:
+            counts = {r["status"]: r["c"] for r in conn.execute(
+                text("SELECT status, COUNT(*) AS c FROM whop_fulfillment GROUP BY status"),
+            ).mappings().all()}
+            rows = conn.execute(
+                text("""
+                    SELECT f.payment_id, f.order_id, f.status, f.attempts, f.claimed_at,
+                           o.telegram_id, o.duration_days
+                    FROM whop_fulfillment f
+                    LEFT JOIN whop_orders o ON o.id = f.order_id
+                    WHERE f.status != 'fulfilled'
+                    ORDER BY f.claimed_at DESC
+                    LIMIT :limit
+                """),
+                {"limit": limit},
+            ).mappings().all()
+            return {"counts": counts, "rows": [dict(r) for r in rows]}
+    except Exception:
+        logger.exception("fulfillment_queue failed")
+        return {"counts": {}, "rows": []}
+
+
+def recent_orders_for(telegram_id: int, limit: int = 3) -> list[dict]:
+    try:
+        with database.engine.begin() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT id, status, duration_days, payment_id, created_at
+                    FROM whop_orders WHERE telegram_id = :tid
+                    ORDER BY created_at DESC LIMIT :limit
+                """),
+                {"tid": telegram_id, "limit": limit},
+            ).mappings().all()
+            return [dict(r) for r in rows]
+    except Exception:
+        logger.exception("recent_orders_for failed tid=%s", telegram_id)
+        return []
 
 
 def revoke_order_access(order_id: str) -> bool:

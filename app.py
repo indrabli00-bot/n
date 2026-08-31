@@ -15,6 +15,7 @@ from telegram import Update
 import command_localization
 import database
 import expiry_notifier
+import fulfillment_recovery
 import premium_visuals
 import whop_api_phase2
 import whop_storage
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     await post_init(telegram_app)
     await command_localization.install(telegram_app.bot, database_admin_id())
     expiry_notifier.schedule(telegram_app)
+    fulfillment_recovery.schedule(telegram_app)
     await telegram_app.start()
 
     if BELMO_PUBLIC_URL:

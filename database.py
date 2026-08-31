@@ -212,13 +212,13 @@ def activate_user_token(telegram_id: int, raw_token: str, duration_days: int) ->
         session.close()
 
 
-def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment_id: str) -> tuple[str, str]:
-    """Atomic Whop fulfillment (audit round-2).
+def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment_id: str, claim_id: str) -> tuple[str, str]:
+    """Atomic Whop fulfillment WITH fencing (fulfillment ops).
 
     ONE transaction: create + consume the entitlement token, activate/extend
     the user, mark the order fulfilled-by-payment, and close the fulfillment
-    lock. Any failure rolls EVERYTHING back — no orphan tokens, no partially
-    updated accounts, no double credit on retry.
+    lock — the lock update is FENCED by claim_id: a stale worker whose lease
+    was taken over matches 0 rows and loses (rollback, no double credit).
     Returns (raw_token, token_hash).
     """
     raw_token = f"XAU-NEURAL-{secrets.token_hex(8).upper()}"
@@ -247,7 +247,13 @@ def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment
                 {"tid": telegram_id, "lang": "en", "exp": new_expiry, "h": token_hash, "now": now},
             )
         else:
-            current = normalize_datetime_utc(user["subscription_expiry"])
+            current_raw = user["subscription_expiry"]
+            if isinstance(current_raw, str):
+                try:
+                    current_raw = datetime.fromisoformat(current_raw)
+                except ValueError:
+                    current_raw = None
+            current = normalize_datetime_utc(current_raw)
             base = current if user["is_active"] and current and current > now else now
             new_expiry = base + timedelta(days=duration_days)
             conn.execute(
@@ -261,11 +267,11 @@ def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment
         if order_row.rowcount != 1:
             raise RuntimeError(f"Fulfillment target order not found: {order_id}")
         lock_row = conn.execute(
-            text("UPDATE whop_fulfillment SET status = 'fulfilled', updated_at = :now WHERE payment_id = :pid"),
-            {"pid": payment_id, "now": now},
+            text("UPDATE whop_fulfillment SET status = 'fulfilled', updated_at = :now WHERE payment_id = :pid AND claim_id = :cid"),
+            {"pid": payment_id, "cid": claim_id, "now": now},
         )
         if lock_row.rowcount != 1:
-            raise RuntimeError(f"Fulfillment lock row missing: {payment_id}")
+            raise RuntimeError(f"Fulfillment lease lost (stale claim fencing): payment={payment_id} claim={claim_id}")
 
     logger.info(
         "Atomic fulfillment complete telegram=%d order=%s payment=%s duration=%dd",

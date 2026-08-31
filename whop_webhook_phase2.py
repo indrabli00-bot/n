@@ -102,8 +102,9 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     if existing is not None and existing.get("token_hash"):
         return None
 
-    # Fulfillment lock (audit round-2): atomic + payment_id-keyed idempotency.
-    if not whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=STALE_FULFILLMENT_MINUTES):
+    # Fulfillment lock + fencing (fulfillment ops): atomic, payment_id-keyed idempotency.
+    claim_id = whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=STALE_FULFILLMENT_MINUTES)
+    if not claim_id:
         logger.info(
             "Fulfillment skipped payment=%s order=%s (already fulfilled or being processed).",
             payment_id, order_id,
@@ -111,12 +112,12 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
         return None
     try:
         raw_token, token_hash = database.fulfill_payment(
-            int(order["telegram_id"]), duration, order_id, payment_id
+            int(order["telegram_id"]), duration, order_id, payment_id, claim_id
         )
     except Exception as exc:
-        whop_storage.mark_fulfillment(payment_id, "failed", str(exc)[:200])
+        attempts = whop_storage.record_fulfillment_failure(payment_id, str(exc)[:200])
         whop_storage.update_order(order_id, status="fulfillment_failed", payment_id=payment_id)
-        logger.exception("Atomic fulfillment failed order=%s payment=%s", order_id, payment_id)
+        logger.exception("Atomic fulfillment failed order=%s payment=%s attempts=%s", order_id, payment_id, attempts)
         raise FulfillmentRetryableError(
             f"Atomic fulfillment failed order={order_id} payment={payment_id}"
         )
@@ -247,3 +248,75 @@ async def notify_customer(
             exc,
         )
         whop_storage.update_order(order_id, status="active_notification_failed")
+
+
+# ---------------------------------------------------------------------------
+# Fulfillment ops (audit round-2): recovery worker + admin reconciliation
+# ---------------------------------------------------------------------------
+
+STALE_FULFILLMENT_MINUTES = 10
+MAX_FULFILLMENT_ATTEMPTS = 3
+
+
+def recover_stale_fulfillments(stale_minutes: int = STALE_FULFILLMENT_MINUTES,
+                               max_attempts: int = MAX_FULFILLMENT_ATTEMPTS) -> dict:
+    """Recovery worker: reclaim stale/failed claims and finish fulfillment.
+
+    Returns a report dict:
+      recovered  -> payment yang berhasil dipulihkan (user aktif)
+      skipped    -> claim tidak bisa diambil (masih diproses worker lain)
+      exhausted  -> attempts mencapai MAX -> butuh alert admin
+    Normal Whop retry tetap berjalan seperti biasa; worker ini menutup celah
+    'crash setelah claim' yang tidak akan pernah di-retry Whop.
+    """
+    report = {"recovered": [], "skipped": [], "exhausted": []}
+    for row in whop_storage.list_stale_claims(stale_minutes=stale_minutes, max_attempts=max_attempts):
+        payment_id, order_id = row["payment_id"], row["order_id"]
+        claim_id = whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=stale_minutes)
+        if not claim_id:
+            report["skipped"].append(payment_id)
+            continue
+        try:
+            order = whop_storage.get_order(order_id) or {}
+            database.fulfill_payment(int(order["telegram_id"]), int(order["duration_days"]), order_id, payment_id, claim_id)
+            report["recovered"].append({"payment_id": payment_id, "order_id": order_id,
+                                        "telegram_id": order.get("telegram_id"), "duration_days": order.get("duration_days")})
+            logger.info("Recovery worker fulfilled payment=%s order=%s", payment_id, order_id)
+        except Exception as exc:
+            attempts = whop_storage.record_fulfillment_failure(payment_id, str(exc)[:200])
+            item = {"payment_id": payment_id, "order_id": order_id, "attempts": attempts,
+                    "error": str(exc)[:160]}
+            if attempts >= max_attempts:
+                report["exhausted"].append(item)
+            else:
+                report["skipped"].append(payment_id)
+            logger.warning("Recovery attempt failed payment=%s attempts=%s", payment_id, attempts)
+    return report
+
+
+def reconcile_payment(payment_id: str) -> dict:
+    """Admin reconciliation: paksa pemeriksaan ulang satu payment (fenced)."""
+    fulfillment = whop_storage.get_fulfillment(payment_id)
+    order = whop_storage.get_order_by_payment(payment_id)
+    if order is None and fulfillment:
+        order = whop_storage.get_order(fulfillment["order_id"])
+    if order is None:
+        return {"ok": False, "reason": "ORDER/PAYMENT NOT FOUND"}
+
+    if fulfillment and fulfillment.get("status") == "fulfilled":
+        user = database.get_user_by_telegram_id(int(order["telegram_id"]))
+        return {"ok": True, "status": "ALREADY FULFILLED",
+                "telegram_id": order["telegram_id"],
+                "expiry": user.subscription_expiry.isoformat() if user and user.subscription_expiry else None}
+
+    claim_id = whop_storage.claim_fulfillment(payment_id, order["id"], stale_minutes=0)
+    if not claim_id:
+        return {"ok": False, "reason": "CLAIM GAGAL — sedang diproses worker lain, coba lagi nanti"}
+    try:
+        database.fulfill_payment(int(order["telegram_id"]), int(order["duration_days"]), order["id"], payment_id, claim_id)
+        user = database.get_user_by_telegram_id(int(order["telegram_id"]))
+        return {"ok": True, "status": "FULFILLED", "telegram_id": order["telegram_id"],
+                "expiry": user.subscription_expiry.isoformat() if user and user.subscription_expiry else None}
+    except Exception as exc:
+        whop_storage.record_fulfillment_failure(payment_id, str(exc)[:200])
+        return {"ok": False, "reason": str(exc)[:160]}
