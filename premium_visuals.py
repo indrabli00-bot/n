@@ -117,13 +117,15 @@ async def render_home(update, context, edit: bool = True):
     if user is None:
         return
     lang = main._lang(update)
+    granted = _active(update)
+    pitch = main.t(lang, "home_pitch") if granted else main.t(lang, "market_pitch")
     text = (
         "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
-        "\u2501" * 28 + "\n"
+        f"{'━' * 28}\n"
         f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
         f"{ts.stamp()}\n\n"
-        f"{ts.boot(granted=True)}\n\n"
-        f"<i>{main.t(lang, 'home_pitch')}</i>\n\n"
+        f"{ts.boot(granted=granted)}\n\n"
+        f"<i>{pitch}</i>\n\n"
         "<b>>> SELECT A MODULE</b>"
     )
     await main._present(update, text, home_keyboard(update), edit=edit)

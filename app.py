@@ -129,15 +129,17 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
         raise HTTPException(status_code=403, detail="Forbidden")
     if telegram_app is None:
         raise HTTPException(status_code=503, detail="Bot is starting")
+    started = time.perf_counter()
     try:
         data = await request.json()
         update = Update.de_json(data, telegram_app.bot)
         if update is None:
             raise ValueError("Invalid Telegram update")
         await telegram_app.process_update(update)
+        logger.info("WEBHOOK_OK update_id=%s latency_ms=%.0f", data.get("update_id"), (time.perf_counter() - started) * 1000)
         return {"ok": True}
-    except Exception:
-        logger.exception("Telegram webhook processing failed")
+    except Exception as exc:
+        logger.error("WEBHOOK_FAIL latency_ms=%.0f error=%s", (time.perf_counter() - started) * 1000, exc)
         return JSONResponse(status_code=200, content={"ok": False})
 
 

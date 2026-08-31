@@ -1045,6 +1045,21 @@ async def unknown_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     error = context.error
     logger.error("Unhandled exception: %s", error, exc_info=error)
+    # Phase 0.1: alert admin via bot (exception queue — bukan transaksi normal)
+    if ADMIN_TELEGRAM_ID:
+        try:
+            who = "?"
+            if isinstance(update, Update) and update.effective_user:
+                who = str(update.effective_user.id)
+            await context.bot.send_message(
+                chat_id=ADMIN_TELEGRAM_ID,
+                text=(f"<b>⚠ UNHANDLED ERROR</b>\n{DIVIDER}\n"
+                      f"{_esc(error.__class__.__name__)}: {_esc(str(error))[:300]}\n"
+                      f"USER: <code>{who}</code>"),
+                parse_mode="HTML",
+            )
+        except Exception:
+            logger.exception("Failed to alert admin about unhandled error")
     if isinstance(update, Update):
         query = update.callback_query
         if query:
