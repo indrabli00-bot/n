@@ -57,6 +57,25 @@ class TerminalStyleTests(unittest.TestCase):
         self.assertEqual(len(row), ts.INNER_W)
         self.assertIn("&lt;b&gt;A&lt;/b&gt;", row)
 
+    def test_canonical_terminal_box_geometry(self):
+        box = ts.render_terminal_box("[ SYSTEM ]: TEST")
+        rows = box.split("\n")
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(len(row) == ts.PANEL_W for row in rows))
+        self.assertEqual(rows[0], "┍" + "━" * ts.INNER_W + "┑")
+        self.assertEqual(rows[-1], "┕" + "━" * ts.INNER_W + "┙")
+        self.assertEqual(rows[1], "│[ SYSTEM ]: TEST".ljust(ts.PANEL_W - 1) + "│")
+
+    def test_word_wrap_long_word(self):
+        result = ts.word_wrap("A" * 40, ts.INNER_W)
+        self.assertEqual([len(line) for line in result], [34, 6])
+        self.assertEqual("".join(result), "A" * 40)
+
+    def test_unicode_character_count(self):
+        self.assertEqual(len("🟢"), 1)
+        self.assertEqual(len("│"), 1)
+        self.assertEqual(len("中文"), 2)
+
     def test_pay_guide_localized_for_all_languages(self):
         for lang in ("en", "vi", "hi", "id", "zh"):
             guide = ts.pay_guide(lang)
