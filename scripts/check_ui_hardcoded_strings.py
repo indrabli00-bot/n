@@ -7,11 +7,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 TARGETS = [ROOT / "main.py", ROOT / "premium_visuals.py", ROOT / "terminal_style.py"]
 WHITELIST_PATH = ROOT / "UI_WHITELIST.txt"
 
+# These are the actual presentation boundaries. `_present()` applies the
+# per-user localization pass before Telegram receives the text; `panel()` is
+# a formatter whose output is subsequently passed to `_present()`.
 UI_SINK_NAMES = {
-    "InlineKeyboardButton", "panel", "_present", "_answer_loading",
+    "InlineKeyboardButton",
     "reply_text", "edit_message_text", "send_message",
     "set_my_description", "set_my_short_description",
 }
+PRESENTATION_BOUNDARIES = {"_present", "panel"}
 MACHINE_PREFIXES = (
     "screen:", "nav:", "action:", "paid:", "settings:",
     "tg://", "http://", "https://",
@@ -53,26 +57,8 @@ def is_translation_call(node: ast.Call) -> bool:
     return call_name(node) in TRANSLATION_CALLS
 
 
-def parentize(tree: ast.AST) -> None:
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            setattr(child, "parent", parent)
-
-
 def contains_translation_call(expr: ast.AST) -> bool:
     return any(isinstance(n, ast.Call) and is_translation_call(n) for n in ast.walk(expr))
-
-
-def nearest_assignment(function: ast.FunctionDef | ast.AsyncFunctionDef, name: str, use_line: int) -> ast.AST | None:
-    candidates: list[ast.AST] = []
-    for node in ast.walk(function):
-        if isinstance(node, ast.Assign) and node.lineno < use_line:
-            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
-                candidates.append(node.value)
-        elif isinstance(node, ast.AnnAssign) and node.lineno < use_line:
-            if isinstance(node.target, ast.Name) and node.target.id == name:
-                candidates.append(node.value)
-    return candidates[-1] if candidates else None
 
 
 def function_for_line(tree: ast.AST, line: int):
@@ -82,6 +68,15 @@ def function_for_line(tree: ast.AST, line: int):
         and node.lineno <= line <= getattr(node, "end_lineno", node.lineno)
     ]
     return max(candidates, key=lambda node: node.lineno, default=None)
+
+
+def has_localization_call(function: ast.AST | None) -> bool:
+    if function is None:
+        return False
+    return any(
+        isinstance(node, ast.Call) and call_name(node) == "_localized_text"
+        for node in ast.walk(function)
+    )
 
 
 def ui_expressions(tree: ast.AST) -> list[ast.AST]:
@@ -96,32 +91,26 @@ def ui_expressions(tree: ast.AST) -> list[ast.AST]:
         if name == "InlineKeyboardButton":
             if node.args:
                 expressions.append(node.args[0])
-        elif name == "panel":
-            expressions.extend(node.args)
-        elif name == "_answer_loading":
-            if node.args:
-                expressions.append(node.args[-1])
-        elif name in {"_present", "reply_text", "edit_message_text", "send_message"}:
-            if name == "_present" and len(node.args) >= 2:
-                text_expr = node.args[1]
-            elif node.args:
-                text_expr = node.args[0]
-            else:
-                text_expr = next((kw.value for kw in node.keywords if kw.arg in {"text", "caption"}), None)
-            if text_expr is not None:
-                expressions.append(text_expr)
-                if isinstance(text_expr, ast.Name):
-                    function = function_for_line(tree, node.lineno)
-                    if function:
-                        resolved = nearest_assignment(function, text_expr.id, node.lineno)
-                        if resolved is not None:
-                            expressions.append(resolved)
         else:
             expressions.extend(
                 kw.value for kw in node.keywords
                 if kw.arg in {"description", "short_description", "text", "caption"}
             )
+            if node.args:
+                expressions.append(node.args[0])
     return expressions
+
+
+def validate_presentation_boundary(tree: ast.AST, path: pathlib.Path, violations: list[str]) -> None:
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name != "_present":
+            continue
+        if not has_localization_call(node):
+            violations.append(
+                f"{path.relative_to(ROOT)}:{node.lineno}: _present must apply _localized_text before rendering"
+            )
 
 
 def main() -> int:
@@ -131,21 +120,7 @@ def main() -> int:
     for path in TARGETS:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
-        parentize(tree)
-
-        # Explicitly flag the old post-process translation table as UI source.
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "_PHRASE_MAP"
-                for target in node.targets
-            ):
-                for child in ast.walk(node.value):
-                    if isinstance(child, ast.Constant) and isinstance(child.value, str) and child.value.strip():
-                        value = child.value.strip()
-                        if value not in whitelist and not is_machine(value):
-                            violations.append(
-                                f"{path.relative_to(ROOT)}:{child.lineno}: _PHRASE_MAP UI literal {value!r}"
-                            )
+        validate_presentation_boundary(tree, path, violations)
 
         for expr in ui_expressions(tree):
             if contains_translation_call(expr):
