@@ -22,6 +22,13 @@ PRICE_SYMBOL = "XAU/USD"
 GOLDAPI_ENDPOINT = "https://www.goldapi.io/api/price/XAU/USD"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///xauusd_bot.db").strip()
+# SQLAlchemy's generic postgresql:// URL selects psycopg2 by default.
+# The project ships psycopg 3, so explicitly select the psycopg driver.
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgresql://") :]
+elif DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgres://") :]
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip()
 LOG_FILE = str(BASE_DIR / "bot_logs.log")
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
