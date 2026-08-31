@@ -14,26 +14,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Transform and validate
+      - name: Refactor and validate
         run: |
           python - <<'PY'
           from pathlib import Path
           import ast
 
-          path = Path('main.py')
-          src = path.read_text(encoding='utf-8')
+          main_path = Path('main.py')
+          pv_path = Path('premium_visuals.py')
+          src = main_path.read_text(encoding='utf-8')
           tree = ast.parse(src)
           map_node = next((n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_PHRASE_MAP' for t in n.targets)), None)
           if map_node is None:
-              print('No _PHRASE_MAP found')
-              raise SystemExit(0)
-          mapping = {k.value: v.value for k,v in zip(map_node.value.keys,map_node.value.values) if isinstance(k,ast.Constant) and isinstance(k.value,str) and isinstance(v,ast.Constant) and isinstance(v.value,str)}
-          targets = {'render_home','render_price','render_signal','render_analysis','render_account','render_access','render_settings','render_support','render_locked','activate_token_for_user','token_text_handler','token_command'}
+              print('No _PHRASE_MAP found; refusing to mutate.')
+              raise SystemExit(1)
+          mapping = {k.value:v.value for k,v in zip(map_node.value.keys,map_node.value.values) if isinstance(k,ast.Constant) and isinstance(k.value,str) and isinstance(v,ast.Constant) and isinstance(v.value,str)}
 
-          def tcall(key):
+          def main_call(key):
               return ast.Call(func=ast.Name(id='t',ctx=ast.Load()), args=[ast.Call(func=ast.Name(id='_lang',ctx=ast.Load()),args=[ast.Name(id='update',ctx=ast.Load())],keywords=[]), ast.Constant(value=key)], keywords=[])
+          def pv_call(key):
+              return ast.Call(func=ast.Name(id='_t',ctx=ast.Load()), args=[ast.Name(id='update',ctx=ast.Load()), ast.Constant(value=key)], keywords=[])
 
-          def split(value):
+          def split(value, call):
               out=[]; cursor=0
               while cursor < len(value):
                   found=None
@@ -44,16 +46,17 @@ jobs:
                       out.append(ast.Constant(value=value[cursor:])); break
                   p,phrase,key=found
                   if p>cursor: out.append(ast.Constant(value=value[cursor:p]))
-                  out.append(ast.FormattedValue(value=tcall(key), conversion=-1, format_spec=None))
+                  out.append(ast.FormattedValue(value=call(key), conversion=-1, format_spec=None))
                   cursor=p+len(phrase)
               return out
 
-          class T(ast.NodeTransformer):
+          class Localize(ast.NodeTransformer):
+              def __init__(self, call): self.call=call
               def visit_JoinedStr(self,node):
                   node=self.generic_visit(node); vals=[]; changed=False
                   for v in node.values:
                       if isinstance(v,ast.Constant) and isinstance(v.value,str):
-                          pieces=split(v.value)
+                          pieces=split(v.value,self.call)
                           if len(pieces)>1 or (pieces and isinstance(pieces[0],ast.Constant) and pieces[0].value!=v.value): vals.extend(pieces); changed=True
                           else: vals.append(v)
                       else: vals.append(v)
@@ -62,24 +65,37 @@ jobs:
               def visit_Constant(self,node):
                   if isinstance(node.value,str):
                       for phrase,key in mapping.items():
-                          if node.value==phrase: return tcall(key)
+                          if node.value==phrase: return self.call(key)
                   return node
 
-          class Select(ast.NodeTransformer):
+          main_targets={'render_home','render_price','render_signal','render_analysis','render_account','render_access','render_settings','render_support','render_locked','activate_token_for_user','token_text_handler','token_command'}
+          class MainSelect(ast.NodeTransformer):
               def visit_FunctionDef(self,node):
-                  if node.name in targets: node=T().visit(node)
-                  return node
+                  return Localize(main_call).visit(node) if node.name in main_targets else node
               def visit_AsyncFunctionDef(self,node):
-                  if node.name in targets: node=T().visit(node)
-                  return node
+                  return Localize(main_call).visit(node) if node.name in main_targets else node
 
           tree.body=[n for n in tree.body if not (n is map_node or (isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_PHRASE_RE' for t in n.targets)) or (isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=='_localized_text'))]
-          tree=Select().visit(tree); ast.fix_missing_locations(tree)
-          new=ast.unparse(tree)+'\n'; ast.parse(new,filename='main.py'); path.write_text(new,encoding='utf-8')
-          print('Refactor parse: PASS')
+          tree=MainSelect().visit(tree); ast.fix_missing_locations(tree)
+          # _present must become a pure presentation boundary after direct localization.
+          for n in ast.walk(tree):
+              if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=='_present':
+                  for stmt in ast.walk(n):
+                      if isinstance(stmt,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='localized' for t in stmt.targets):
+                          stmt.value=ast.Name(id='text',ctx=ast.Load())
+          main_new=ast.unparse(tree)+'\n'; ast.parse(main_new,filename='main.py'); main_path.write_text(main_new,encoding='utf-8')
+
+          # Apply the same legacy phrase mapping to all premium_visuals functions using its existing _t boundary.
+          psrc=pv_path.read_text(encoding='utf-8'); ptree=ast.parse(psrc)
+          class PVSelect(ast.NodeTransformer):
+              def visit_FunctionDef(self,node): return Localize(pv_call).visit(node)
+              def visit_AsyncFunctionDef(self,node): return Localize(pv_call).visit(node)
+          ptree=PVSelect().visit(ptree); ast.fix_missing_locations(ptree)
+          pv_new=ast.unparse(ptree)+'\n'; ast.parse(pv_new,filename='premium_visuals.py'); pv_path.write_text(pv_new,encoding='utf-8')
+          print('Direct i18n refactor parse: PASS')
           PY
           python -m compileall -q .
-          if grep -n -E '_PHRASE_MAP|_PHRASE_RE|def _localized_text' main.py; then exit 1; fi
+          if grep -n -E '_PHRASE_MAP|_PHRASE_RE|def _localized_text|_localized_text\(' main.py premium_visuals.py; then exit 1; fi
           python scripts/check_ui_hardcoded_strings.py
           python -m unittest discover -s tests -p 'test_*.py' -q
       - name: Commit validated refactor
@@ -87,6 +103,6 @@ jobs:
           if git diff --quiet; then echo 'No generated changes'; exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add main.py
-          git commit -m 'Group 3.1: remove legacy phrase map safely'
+          git add main.py premium_visuals.py
+          git commit -m 'Group 3.1: remove legacy phrase map'
           git push
