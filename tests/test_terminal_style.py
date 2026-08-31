@@ -41,6 +41,22 @@ class TerminalStyleTests(unittest.TestCase):
         self.assertTrue(panel.endswith("</pre>"))
         self.assertIn("\n", panel)
 
+    def test_panel_geometry_uses_standard_width(self):
+        self.assertEqual(ts.PANEL_W, ts.INNER_W + 2)
+        self.assertEqual(len(ts.bar()), ts.INNER_W)
+        self.assertEqual(len(ts.prow("A")), ts.INNER_W)
+        self.assertEqual(len(ts.prow("X" * (ts.INNER_W + 9))), ts.INNER_W)
+
+        panel = ts.panel(["A", "B" * (ts.INNER_W + 9)])
+        rows = panel.removeprefix("<pre>").removesuffix("</pre>").splitlines()
+        self.assertEqual([len(row) for row in rows], [ts.INNER_W, ts.INNER_W])
+
+    def test_panel_escape_preserves_fixed_geometry(self):
+        panel = ts.panel(["<b>A</b>"], escape=True)
+        row = panel.removeprefix("<pre>").removesuffix("</pre>")
+        self.assertEqual(len(row), ts.INNER_W)
+        self.assertIn("&lt;b&gt;A&lt;/b&gt;", row)
+
     def test_pay_guide_localized_for_all_languages(self):
         for lang in ("en", "vi", "hi", "id", "zh"):
             guide = ts.pay_guide(lang)
