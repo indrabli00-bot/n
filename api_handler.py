@@ -1,8 +1,9 @@
 """Market data and Neural Signal engine for NEURAL GOLD v3.2.
 
-Market data is sourced only from GoldAPI.io. No MT5 and no fabricated prices.
-Signal values are model projections derived from the live feed; they are not
-claims of guaranteed trading outcomes.
+Market data uses a multi-source cascade (GoldAPI -> gold-api.com -> goldprice.org
+-> stale cache). No MT5 and no fabricated prices. Signal values are model
+projections derived from the live feed; they are not claims of guaranteed
+trading outcomes.
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ async def get_cached_or_fresh_price(user_id: int) -> dict[str, Any]:
         age = (datetime.now(timezone.utc) - last_fetch).total_seconds() if last_fetch else float("inf")
         if age < SESSION_CACHE_TTL and sess.last_price_bid is not None and sess.last_price_ask is not None:
             return {
-                "source": "GOLD_API",
+                "source": "SESSION_CACHE",
                 "symbol": "XAU/USD",
                 "bid": float(sess.last_price_bid),
                 "ask": float(sess.last_price_ask),

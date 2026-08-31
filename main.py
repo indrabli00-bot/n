@@ -276,9 +276,10 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         raw_ts = str(data.get("timestamp", "—"))
         timestamp = _format_timestamp(raw_ts)
         move_icon = "📈" if change > 0 else ("📉" if change < 0 else "⚡️")
+        status_label = "[STALE]" if data.get("stale") else "[LIVE]"
         rows = [
             "  SYSTEM: MARKET_DATA_SATELLITE",
-            f"  STATUS: [LIVE]      FEED_TIME: {timestamp}",
+            f"  STATUS: {status_label}  FEED_TIME: {timestamp}",
             ts.bar(),
             "  SYMBOL      XAU/USD · GOLD SPOT",
             f"  PRICE       {_money(mid)} [STABLE]",
