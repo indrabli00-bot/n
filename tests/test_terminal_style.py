@@ -8,13 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")
 os.environ.setdefault("GOLDAPI_API_KEY", "phase0-test-goldapi-key")
-# Set the SAME secret test_phase2.py uses, BEFORE config is imported, so both
-# suites stay green when pytest runs them in one process (import-order safety).
 os.environ.setdefault(
     "WHOP_WEBHOOK_SECRET",
     "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("="),
 )
 
+import i18n
 import terminal_style as ts
 
 
@@ -48,10 +47,13 @@ class TerminalStyleTests(unittest.TestCase):
             self.assertIn("[ PAYMENT ]", guide)
             self.assertIn("1.", guide)
             self.assertIn("5.", guide)
-            self.assertIn("ACTIVATE TOKEN", guide)
+            for key in ("select_plan", "use_package_buttons", "paid", "verified_auto", "activate"):
+                self.assertIn(i18n.t(lang, key), guide)
             buy = ts.buy_guide(lang)
             self.assertIn("[ PAYMENT ]", buy)
             self.assertIn("3.", buy)
+            for key in ("select_plan", "use_package_buttons", "paid"):
+                self.assertIn(i18n.t(lang, key), buy)
         self.assertEqual(ts.pay_guide("xx"), ts.pay_guide("en"))
 
     def test_stamp_shape(self):
