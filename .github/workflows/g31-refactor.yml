@@ -1,0 +1,90 @@
+name: Group 3.1 Isolated Refactor
+
+on:
+  push:
+    branches: [g31-refactor]
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Transform and validate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+
+          path = Path('main.py')
+          src = path.read_text(encoding='utf-8')
+          tree = ast.parse(src)
+          map_node = next((n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_PHRASE_MAP' for t in n.targets)), None)
+          if map_node is None:
+              print('No _PHRASE_MAP found')
+              raise SystemExit(0)
+          mapping = {k.value: v.value for k,v in zip(map_node.value.keys,map_node.value.values) if isinstance(k,ast.Constant) and isinstance(k.value,str) and isinstance(v,ast.Constant) and isinstance(v.value,str)}
+          targets = {'render_home','render_price','render_signal','render_analysis','render_account','render_access','render_settings','render_support','render_locked','activate_token_for_user','token_text_handler','token_command'}
+
+          def tcall(key):
+              return ast.Call(func=ast.Name(id='t',ctx=ast.Load()), args=[ast.Call(func=ast.Name(id='_lang',ctx=ast.Load()),args=[ast.Name(id='update',ctx=ast.Load())],keywords=[]), ast.Constant(value=key)], keywords=[])
+
+          def split(value):
+              out=[]; cursor=0
+              while cursor < len(value):
+                  found=None
+                  for phrase,key in sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True):
+                      p=value.find(phrase,cursor)
+                      if p>=0 and (found is None or p<found[0] or (p==found[0] and len(phrase)>len(found[1]))): found=(p,phrase,key)
+                  if found is None:
+                      out.append(ast.Constant(value=value[cursor:])); break
+                  p,phrase,key=found
+                  if p>cursor: out.append(ast.Constant(value=value[cursor:p]))
+                  out.append(ast.FormattedValue(value=tcall(key), conversion=-1, format_spec=None))
+                  cursor=p+len(phrase)
+              return out
+
+          class T(ast.NodeTransformer):
+              def visit_JoinedStr(self,node):
+                  node=self.generic_visit(node); vals=[]; changed=False
+                  for v in node.values:
+                      if isinstance(v,ast.Constant) and isinstance(v.value,str):
+                          pieces=split(v.value)
+                          if len(pieces)>1 or (pieces and isinstance(pieces[0],ast.Constant) and pieces[0].value!=v.value): vals.extend(pieces); changed=True
+                          else: vals.append(v)
+                      else: vals.append(v)
+                  if changed: node.values=vals
+                  return node
+              def visit_Constant(self,node):
+                  if isinstance(node.value,str):
+                      for phrase,key in mapping.items():
+                          if node.value==phrase: return tcall(key)
+                  return node
+
+          class Select(ast.NodeTransformer):
+              def visit_FunctionDef(self,node):
+                  if node.name in targets: node=T().visit(node)
+                  return node
+              def visit_AsyncFunctionDef(self,node):
+                  if node.name in targets: node=T().visit(node)
+                  return node
+
+          tree.body=[n for n in tree.body if not (n is map_node or (isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_PHRASE_RE' for t in n.targets)) or (isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=='_localized_text'))]
+          tree=Select().visit(tree); ast.fix_missing_locations(tree)
+          new=ast.unparse(tree)+'\n'; ast.parse(new,filename='main.py'); path.write_text(new,encoding='utf-8')
+          print('Refactor parse: PASS')
+          PY
+          python -m compileall -q .
+          if grep -n -E '_PHRASE_MAP|_PHRASE_RE|def _localized_text' main.py; then exit 1; fi
+          python scripts/check_ui_hardcoded_strings.py
+          python -m unittest discover -s tests -p 'test_*.py' -q
+      - name: Commit validated refactor
+        run: |
+          if git diff --quiet; then echo 'No generated changes'; exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.py
+          git commit -m 'Group 3.1: remove legacy phrase map safely'
+          git push
