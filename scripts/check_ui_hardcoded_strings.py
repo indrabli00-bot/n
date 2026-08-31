@@ -15,7 +15,7 @@ UI_SINK_NAMES = {
     "reply_text", "edit_message_text", "send_message",
     "set_my_description", "set_my_short_description",
 }
-ADMIN_ONLY_PREFIXES = ("addtoken_command", "listusers_command", "fulfillment_command", "reconcile_command", "user_command", "revoke_command")
+ADMIN_ONLY_PREFIXES = ("addtoken_command", "listusers_command", "fulfillment_command", "reconcile_command", "user_command", "revoke_command", "global_error_handler")
 PRESENTATION_BOUNDARIES = {"_present", "panel"}
 MACHINE_PREFIXES = (
     "screen:", "nav:", "action:", "paid:", "settings:",
