@@ -11,11 +11,19 @@ def _active(update) -> bool:
     return bool(user and auth.verify_token(user.id)[0])
 
 
-def _days_label(update, days: int) -> str:
+def _lang(update) -> str:
     import main
-    lang = main._lang(update)
+    return main._lang(update)
+
+
+def _t(update, key: str) -> str:
+    import main
+    return main.t(_lang(update), key)
+
+
+def _days_label(update, days: int) -> str:
     key = {7: "days7", 14: "days14", 30: "days30"}[days]
-    return main.t(lang, key)
+    return _t(update, key)
 
 
 def _checkout(update, days: int) -> str:
@@ -23,29 +31,34 @@ def _checkout(update, days: int) -> str:
     return phase2_bot.checkout_link(update.effective_user.id, days)
 
 
+def _pending_modules(update) -> str:
+    return "\n".join([
+        f"  { _t(update, 'price') } — XAU/USD",
+        f"  { _t(update, 'signal') }",
+        f"  { _t(update, 'analysis') }",
+        f"  { _t(update, 'account') }",
+    ])
+
+
 def home_keyboard(update):
-    import main
-    lang = main._lang(update)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"📈 {main.t(lang, 'price')}", callback_data="screen:price"), InlineKeyboardButton(f"🧠 {main.t(lang, 'signal')}", callback_data="screen:signal")],
-        [InlineKeyboardButton(f"📊 {main.t(lang, 'analysis')}", callback_data="screen:analysis"), InlineKeyboardButton(f"👑 {main.t(lang, 'account')}", callback_data="screen:account")],
-        [InlineKeyboardButton(f"⚙️ {main.t(lang, 'settings')}", callback_data="screen:settings"), InlineKeyboardButton(f"🌐 {main.t(lang, 'language')}", callback_data="settings:language")],
-        [InlineKeyboardButton(f"💎 {main.t(lang, 'access')}", callback_data="screen:access")],
-        [InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:menu")],
+        [InlineKeyboardButton(f"📈 {_t(update, 'price')}", callback_data="screen:price"), InlineKeyboardButton(f"🧠 {_t(update, 'signal')}", callback_data="screen:signal")],
+        [InlineKeyboardButton(f"📊 {_t(update, 'analysis')}", callback_data="screen:analysis"), InlineKeyboardButton(f"👑 {_t(update, 'account')}", callback_data="screen:account")],
+        [InlineKeyboardButton(f"⚙️ {_t(update, 'settings')}", callback_data="screen:settings"), InlineKeyboardButton(f"🌐 {_t(update, 'language')}", callback_data="settings:language")],
+        [InlineKeyboardButton(f"💎 {_t(update, 'access')}", callback_data="screen:access")],
+        [InlineKeyboardButton(_t(update, "menu"), callback_data="nav:menu")],
     ])
 
 
 def access_keyboard(update):
-    import main
     import phase2_bot
-    lang = main._lang(update)
     telegram_id = update.effective_user.id
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"🟢 {_days_label(update, 7)}", url=phase2_bot.checkout_link(telegram_id, 7))],
         [InlineKeyboardButton(f"🟡 {_days_label(update, 14)}", url=phase2_bot.checkout_link(telegram_id, 14))],
         [InlineKeyboardButton(f"🔵 {_days_label(update, 30)}", url=phase2_bot.checkout_link(telegram_id, 30))],
-        [InlineKeyboardButton(main.t(lang, "activate"), callback_data="action:token"), InlineKeyboardButton(main.t(lang, "paid"), callback_data="paid:menu")],
-        [InlineKeyboardButton(main.t(lang, "back"), callback_data="nav:home"), InlineKeyboardButton(main.t(lang, "menu"), callback_data="nav:home")],
+        [InlineKeyboardButton(_t(update, "activate"), callback_data="action:token"), InlineKeyboardButton(_t(update, "paid"), callback_data="paid:menu")],
+        [InlineKeyboardButton(_t(update, "back"), callback_data="nav:home"), InlineKeyboardButton(_t(update, "menu"), callback_data="nav:home")],
     ])
 
 
@@ -57,14 +70,14 @@ def price_keyboard(update):
         [InlineKeyboardButton(f"🟢 {_days_label(update, 7)}", url=_checkout(update, 7))],
         [InlineKeyboardButton(f"🟡 {_days_label(update, 14)}", url=_checkout(update, 14))],
         [InlineKeyboardButton(f"🔵 {_days_label(update, 30)}", url=_checkout(update, 30))],
-        [InlineKeyboardButton(main.t(main._lang(update), "back"), callback_data="screen:access"), InlineKeyboardButton(main.t(main._lang(update), "menu"), callback_data="nav:home")],
+        [InlineKeyboardButton(_t(update, "back"), callback_data="screen:access"), InlineKeyboardButton(_t(update, "menu"), callback_data="nav:home")],
     ])
 
 
 async def render_access(update, context):
     import main
-    lang = main._lang(update)
     active = _active(update)
+    lang = _lang(update)
     if active:
         user = update.effective_user
         db_user = main.database.get_user_by_telegram_id(user.id)
@@ -74,7 +87,7 @@ async def render_access(update, context):
             "<b>[ CLEARANCE ]: NEURAL GOLD v3.2</b>\n"
             f"{ts.stamp()}\n"
             f"{main.DIVIDER}\n\n"
-            f"[ ACCESS ]: GRANTED. {main.t(lang, 'welcome').upper() if lang == 'id' else 'WELCOME, OPERATOR.'}\n\n"
+            f"[ ACCESS ]: {main.t(lang, 'premium_active')}\n\n"
             f"CLEARANCE: <b>🟢 {main.t(lang, 'active')}</b>\n\n"
             f"{main.t(lang, 'access_until').upper()}: <code>{expiry_text}</code>\n\n"
             f"[ CORE ]: {main.t(lang, 'home_pitch')}"
@@ -89,13 +102,11 @@ async def render_access(update, context):
             f"{ts.stamp()}\n"
             f"{main.DIVIDER}\n\n"
             "[ ACCESS ]: PENDING // OPERATOR NOT YET CONNECTED\n\n"
-            f"<pre>  {main.t(lang, 'price')} — XAU/USD\n"
-            f"  {main.t(lang, 'signal')} — Neural Signal\n"
-            f"  {main.t(lang, 'analysis')} — {main.t(lang, 'analysis')}\n"
-            f"  {main.t(lang, 'account')} — {main.t(lang, 'account')}</pre>\n\n"
-            f"{main.t(lang, 'market_pitch')}\n\n"
-            f"<b>>> {main.t(lang, 'select_plan').upper()}</b>\n"
-            f"{main.t(lang, 'select_package_hint')}"
+            f"<pre>{_pending_modules(update)}</pre>\n\n"
+            f"<b>>> {main.t(lang, 'access')}</b>\n"
+            f"{main.t(lang, 'days7')}\n"
+            f"{main.t(lang, 'days14')}\n"
+            f"{main.t(lang, 'days30')}"
         )
         kb = access_keyboard(update)
     await main._present(update, text, kb)
@@ -114,19 +125,16 @@ async def render_home(update, context, edit: bool = True):
     user = update.effective_user
     if user is None:
         return
-    lang = main._lang(update)
     granted = _active(update)
-    pitch = main.t(lang, "home_pitch") if granted else main.t(lang, "market_pitch")
-    status = main.t(lang, "premium_active") if granted else "[ ACCESS ]: PENDING // CLEARANCE REQUIRED"
     text = (
         "<b>NEURAL GOLD v3.2 // OPERATOR CONSOLE</b>\n"
         f"{'━' * 28}\n"
         f"OPERATOR: <b>{main._safe_user_name(user)}</b>\n"
         f"{ts.stamp()}\n\n"
         f"{ts.boot(granted=granted)}\n"
-        f"{status}\n\n"
-        f"<i>{pitch}</i>\n\n"
-        f"<b>>> {main.t(lang, 'select_module')}</b>"
+        f"{main.t(main._lang(update), 'premium_active') if granted else '[ ACCESS ]: PENDING // CLEARANCE REQUIRED'}\n\n"
+        f"<i>{main.t(main._lang(update), 'home_pitch')}</i>\n\n"
+        f"<b>>> {main.t(main._lang(update), 'select_module')}</b>"
     )
     await main._present(update, text, home_keyboard(update), edit=edit)
 
@@ -150,7 +158,7 @@ async def callback_router(update, context):
         await query.answer()
         await main.render_menu(update, context)
         return
-    if data == "nav:access" or data == "screen:access":
+    if data in {"nav:access", "screen:access"}:
         await query.answer()
         await render_access(update, context)
         return
@@ -165,19 +173,17 @@ async def callback_router(update, context):
     if data == "action:token":
         await query.answer()
         context.user_data["awaiting_token"] = True
-        lang = main._lang(update)
-        await main._present(update, f"<b>[ KEYGEN ]: {main.t(lang, 'activate')}</b>\n\n>> {main.t(lang, 'enter_activation')}\n<i>{main.t(lang, 'token_note')}</i>", access_keyboard(update))
+        await main._present(update, f"<b>[ KEYGEN ]: {_t(update, 'activate')}</b>\n\n>> {_t(update, 'enter_activation')}\n<i>{_t(update, 'token_note')}</i>", access_keyboard(update))
         return
     if data == "screen:signal" and not auth.verify_token(user.id)[0]:
-        await query.answer(f"🔒 {main.t(main._lang(update), 'access_required')}", show_alert=True)
+        await query.answer(f"🔒 {_t(update, 'access_required')}", show_alert=True)
         await render_access(update, context)
         return
     if data == "screen:analysis" and not auth.verify_token(user.id)[0]:
-        await query.answer(f"🔒 {main.t(main._lang(update), 'access_required')}", show_alert=True)
+        await query.answer(f"🔒 {_t(update, 'access_required')}", show_alert=True)
         await render_access(update, context)
         return
 
-    # Phase-2 retains payment confirmation, language, support, and token service callbacks.
     await phase2_bot._callback_router(update, context)
 
 
