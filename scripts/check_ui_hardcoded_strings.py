@@ -7,16 +7,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 TARGETS = [ROOT / "main.py", ROOT / "premium_visuals.py", ROOT / "terminal_style.py"]
 WHITELIST_PATH = ROOT / "UI_WHITELIST.txt"
 
-# These are the actual presentation boundaries. `_present()` applies the
-# per-user localization pass before Telegram receives the text; `panel()` is
-# a formatter whose output is subsequently passed to `_present()`.
+# Presentation sinks are checked for customer-facing literals. Localization is
+# expected to happen before the presentation boundary via t() or _t().
 UI_SINK_NAMES = {
     "InlineKeyboardButton",
     "reply_text", "edit_message_text", "send_message",
     "set_my_description", "set_my_short_description",
 }
 ADMIN_ONLY_PREFIXES = ("addtoken_command", "listusers_command", "fulfillment_command", "reconcile_command", "user_command", "revoke_command", "global_error_handler")
-PRESENTATION_BOUNDARIES = {"_present", "panel"}
 MACHINE_PREFIXES = (
     "screen:", "nav:", "action:", "paid:", "settings:",
     "tg://", "http://", "https://",
@@ -71,15 +69,6 @@ def function_for_line(tree: ast.AST, line: int):
     return max(candidates, key=lambda node: node.lineno, default=None)
 
 
-def has_localization_call(function: ast.AST | None) -> bool:
-    if function is None:
-        return False
-    return any(
-        isinstance(node, ast.Call) and call_name(node) == "_localized_text"
-        for node in ast.walk(function)
-    )
-
-
 def ui_expressions(tree: ast.AST) -> list[ast.AST]:
     expressions: list[ast.AST] = []
     for node in ast.walk(tree):
@@ -105,18 +94,6 @@ def ui_expressions(tree: ast.AST) -> list[ast.AST]:
     return expressions
 
 
-def validate_presentation_boundary(tree: ast.AST, path: pathlib.Path, violations: list[str]) -> None:
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if node.name != "_present":
-            continue
-        if not has_localization_call(node):
-            violations.append(
-                f"{path.relative_to(ROOT)}:{node.lineno}: _present must apply _localized_text before rendering"
-            )
-
-
 def main() -> int:
     whitelist = load_whitelist()
     violations: list[str] = []
@@ -124,7 +101,6 @@ def main() -> int:
     for path in TARGETS:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
-        validate_presentation_boundary(tree, path, violations)
 
         for expr in ui_expressions(tree):
             if contains_translation_call(expr):
