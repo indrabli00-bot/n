@@ -83,7 +83,7 @@ app = FastAPI(title="NEURAL GOLD v3.2", version="3.2.0", lifespan=lifespan)
 @app.get("/")
 async def root(request: Request):
     # Whop mengarahkan customer ke sini setelah checkout sukses.
-    if request.url.query.get("checkout_status") == "success":
+    if request.query_params.get("checkout_status") == "success":
         return HTMLResponse("""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NEURAL GOLD — PAYMENT OK</title>

@@ -32,19 +32,28 @@ class FulfillmentRetryableError(RuntimeError):
     """Signal that Whop should retry a payment webhook."""
 
 
-def _signing_key(secret: str) -> bytes:
-    """Decode Standard Webhooks secrets; support Whop production and sandbox prefixes."""
+def _signing_key_candidates(secret: str) -> list[bytes]:
+    """Kandidat kunci HMAC untuk berbagai konvensi prefix (fulfillment ops).
+
+    Standard Webhooks: 'whsec_' = base64-encoded key.
+    Whop: 'ws_' = secret string mentah (RAW) — tanpa base64.
+    Semua kandidat dicoba agar perbedaan konvensi tidak memblokir fulfillment.
+    """
     value = secret.strip()
+    candidates: list[bytes] = []
     if value.startswith("whsec_"):
         encoded = value[6:]
+        try:
+            candidates.append(base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True))
+        except (binascii.Error, ValueError):
+            candidates.append(encoded.encode("utf-8"))
+        candidates.append(value.encode("utf-8"))
     elif value.startswith("ws_"):
-        encoded = value[3:]
+        candidates.append(value.encode("utf-8"))       # full string termasuk prefix
+        candidates.append(value[3:].encode("utf-8"))   # tanpa prefix
     else:
-        return value.encode("utf-8")
-    try:
-        return base64.b64decode(encoded + "=" * (-len(encoded) % 4), validate=True)
-    except (binascii.Error, ValueError):
-        return encoded.encode("utf-8")
+        candidates.append(value.encode("utf-8"))
+    return candidates
 
 
 def verify_signature(payload: bytes, headers: dict) -> dict:
@@ -64,14 +73,19 @@ def verify_signature(payload: bytes, headers: dict) -> dict:
         raise ValueError("Webhook timestamp outside 5 minute tolerance")
 
     signed = f"{webhook_id}.{timestamp}.".encode("utf-8") + payload
-    digest = base64.b64encode(
-        hmac.new(_signing_key(WHOP_WEBHOOK_SECRET), signed, hashlib.sha256).digest()
-    ).decode("ascii")
     passed = signature.split()
-    if not any(
-        item.startswith("v1,") and hmac.compare_digest(item[3:], digest)
-        for item in passed
-    ):
+    matched = False
+    for key in _signing_key_candidates(WHOP_WEBHOOK_SECRET):
+        digest = base64.b64encode(
+            hmac.new(key, signed, hashlib.sha256).digest()
+        ).decode("ascii")
+        if any(
+            item.startswith("v1,") and hmac.compare_digest(item[3:], digest)
+            for item in passed
+        ):
+            matched = True
+            break
+    if not matched:
         raise ValueError("Invalid webhook signature")
     return json.loads(payload.decode("utf-8"))
 
