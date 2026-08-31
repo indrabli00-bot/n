@@ -62,4 +62,6 @@ These terms are retained as a deliberate terminal/product vocabulary. Customer-f
 
 Human-language action copy, sentences, button labels, package descriptions, help text, status explanations, and payment instructions belong in `i18n.py` and are retrieved with the active language.
 
+The presentation boundary accepts already-localized text. Rendering modules call the localization catalog before passing text into the presentation boundary.
+
 When a literal is not listed here and is intended for the user, add a translation key instead of embedding the sentence directly in a rendering module.
