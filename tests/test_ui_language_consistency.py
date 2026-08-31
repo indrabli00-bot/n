@@ -5,6 +5,7 @@ import os
 import sys
 import types
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -49,14 +50,22 @@ class UILanguageConsistencyTests(unittest.TestCase):
             sys.modules["main"] = self.original_main
 
     def test_home_keyboard_uses_selected_language_for_core_labels(self):
-        expected = {
-            "en": ["PRICE", "SIGNAL", "ANALYSIS", "ACCOUNT", "SETTINGS", "LANGUAGE", "ACCESS & PLANS", "⌂ MENU"],
-            "id": ["HARGA", "SINYAL", "ANALISIS", "AKUN", "PENGATURAN", "BAHASA", "AKSES & PAKET", "⌂ MENU"],
-        }
-        for lang, labels in expected.items():
+        keys = ["price", "signal", "analysis", "account", "settings", "language", "access", "menu"]
+        for lang in ("en", "id", "vi", "hi", "zh"):
             kb = pv.home_keyboard(FakeUpdate(lang))
             actual = [button.text for row in kb.inline_keyboard for button in row]
-            self.assertEqual(actual, [f"📈 {labels[0]}", f"🧠 {labels[1]}", f"📊 {labels[2]}", f"👑 {labels[3]}", f"⚙️ {labels[4]}", f"🌐 {labels[5]}", f"💎 {labels[6]}", labels[7]])
+            expected = [
+                f"📈 {i18n.t(lang, 'price')}",
+                f"🧠 {i18n.t(lang, 'signal')}",
+                f"📊 {i18n.t(lang, 'analysis')}",
+                f"👑 {i18n.t(lang, 'account')}",
+                f"⚙️ {i18n.t(lang, 'settings')}",
+                f"🌐 {i18n.t(lang, 'language')}",
+                f"💎 {i18n.t(lang, 'access')}",
+                i18n.t(lang, "menu"),
+            ]
+            self.assertEqual(len(keys), len(expected))
+            self.assertEqual(actual, expected)
 
     def test_package_labels_are_resolved_from_translation_table(self):
         for lang in ("en", "id", "vi", "hi", "zh"):
@@ -64,7 +73,7 @@ class UILanguageConsistencyTests(unittest.TestCase):
                 self.assertEqual(pv._days_label(FakeUpdate(lang), days), i18n.t(lang, key))
 
     def test_premium_visuals_has_no_legacy_hardcoded_ui_labels(self):
-        source = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "premium_visuals.py", encoding="utf-8").read()
+        source = Path(__file__).resolve().parents[1].joinpath("premium_visuals.py").read_text(encoding="utf-8")
         for phrase in (
             "📈 Market Pulse",
             "🧠 Neural Strikes",
@@ -80,6 +89,12 @@ class UILanguageConsistencyTests(unittest.TestCase):
             '"⌂ MENU"',
         ):
             self.assertNotIn(phrase, source, phrase)
+
+    def test_pending_module_labels_are_localized(self):
+        for lang in ("en", "id", "vi", "hi", "zh"):
+            text = pv._pending_modules(FakeUpdate(lang))
+            for key in ("price", "signal", "analysis", "account"):
+                self.assertIn(i18n.t(lang, key), text)
 
 
 if __name__ == "__main__":
