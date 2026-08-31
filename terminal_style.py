@@ -106,7 +106,7 @@ def _guide(lang: str, keys: tuple[str, ...], tag: str) -> str:
     body = "\n".join(
         f"{i}. {t(lang, key)}" for i, key in enumerate(keys, 1)
     )
-    return f"{line(tag, t(lang, 'action_route_header'))}\n{body}"
+    return f"{line(tag, t(lang, 'select_plan'))}\n{body}"
 
 
 def buy_guide(lang: str, tag: str = "PAYMENT") -> str:
