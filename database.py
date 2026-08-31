@@ -53,7 +53,8 @@ class User(Base):
 class UserSession(Base):
     __tablename__ = "user_sessions"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False, index=True)
+    # Telegram user IDs exceed PostgreSQL's 32-bit INTEGER range.
+    user_id = Column(BigInteger, nullable=False, index=True)
     state = Column(String(64), default="idle", nullable=False)
     last_price_bid = Column(Float, nullable=True)
     last_price_ask = Column(Float, nullable=True)
@@ -87,6 +88,7 @@ def _migrate_postgres_bigint_columns() -> None:
     inspector = inspect(engine)
     migrations = {
         "users": ("telegram_id",),
+        "user_sessions": ("user_id",),
         "token_pool": ("used_by_telegram_id",),
     }
     for table, columns in migrations.items():
