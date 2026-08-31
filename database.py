@@ -16,7 +16,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine, select, text
+from sqlalchemy import Boolean, BigInteger, Column, DateTime, Float, Integer, String, create_engine, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import DATABASE_URL
@@ -39,7 +39,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    telegram_id = Column(Integer, unique=True, nullable=False, index=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
     username = Column(String(128), nullable=True)
     first_name = Column(String(128), nullable=True)
     language = Column(String(8), default="en", nullable=False)
@@ -73,24 +73,51 @@ class TokenPool(Base):
     is_used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     used_at = Column(DateTime, nullable=True)
-    used_by_telegram_id = Column(Integer, nullable=True)
+    used_by_telegram_id = Column(BigInteger, nullable=True)
 
 
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
+def _migrate_postgres_bigint_columns() -> None:
+    """Upgrade Telegram IDs from 32-bit INTEGER to 64-bit BIGINT on PostgreSQL."""
+    if engine.dialect.name != "postgresql":
+        return
+    inspector = inspect(engine)
+    migrations = {
+        "users": ("telegram_id",),
+        "token_pool": ("used_by_telegram_id",),
+    }
+    for table, columns in migrations.items():
+        if table not in inspector.get_table_names():
+            continue
+        existing = {column["name"] for column in inspector.get_columns(table)}
+        for column in columns:
+            if column not in existing:
+                continue
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f'ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE BIGINT'))
+                logger.info("Database migration applied: %s.%s INTEGER -> BIGINT", table, column)
+            except Exception as exc:
+                message = str(exc).lower()
+                if "already" not in message and "bigint" not in message:
+                    raise
+
+
 def init_db() -> None:
     try:
         Base.metadata.create_all(bind=engine)
         if DATABASE_URL.startswith("sqlite"):
-            from sqlalchemy import inspect, text
             inspector = inspect(engine)
             cols = {c["name"] for c in inspector.get_columns("users")}
             if "language" not in cols:
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE users ADD COLUMN language VARCHAR(8) NOT NULL DEFAULT 'en'"))
                 logger.info("Database migration applied: users.language")
+        else:
+            _migrate_postgres_bigint_columns()
         logger.info("Database tables initialised successfully.")
     except Exception as exc:
         logger.exception("Failed to initialise database tables: %s", exc)
@@ -192,11 +219,9 @@ def activate_user_token(telegram_id: int, raw_token: str, duration_days: int) ->
             session.add(user)
             session.flush()
 
-        # Extend an existing active subscription instead of replacing unused time.
         now = datetime.now(timezone.utc)
         current_expiry = normalize_datetime_utc(user.subscription_expiry)
         base_time = current_expiry if user.is_active and current_expiry and current_expiry > now else now
-        from datetime import timedelta
         user.token = token_hash
         user.is_active = True
         user.subscription_expiry = base_time + timedelta(days=duration_days)
@@ -213,14 +238,7 @@ def activate_user_token(telegram_id: int, raw_token: str, duration_days: int) ->
 
 
 def fulfill_payment(telegram_id: int, duration_days: int, order_id: str, payment_id: str, claim_id: str) -> tuple[str, str]:
-    """Atomic Whop fulfillment WITH fencing (fulfillment ops).
-
-    ONE transaction: create + consume the entitlement token, activate/extend
-    the user, mark the order fulfilled-by-payment, and close the fulfillment
-    lock — the lock update is FENCED by claim_id: a stale worker whose lease
-    was taken over matches 0 rows and loses (rollback, no double credit).
-    Returns (raw_token, token_hash).
-    """
+    """Atomic Whop fulfillment WITH fencing."""
     raw_token = f"XAU-NEURAL-{secrets.token_hex(8).upper()}"
     token_hash = _hash_token(raw_token)
     now = datetime.now(timezone.utc)
