@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from telegram import Update
 
 import command_localization
@@ -81,7 +81,16 @@ app = FastAPI(title="NEURAL GOLD v3.2", version="3.2.0", lifespan=lifespan)
 
 
 @app.get("/")
-async def root():
+async def root(request: Request):
+    # Whop mengarahkan customer ke sini setelah checkout sukses.
+    if request.url.query.get("checkout_status") == "success":
+        return HTMLResponse("""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEURAL GOLD — PAYMENT OK</title>
+<style>body{background:#0b0c0e;color:#f3d778;font-family:Consolas,monospace;display:flex;min-height:100vh;align-items:center;justify-content:center}div{max-width:560px;border:1px solid #d69a19;border-radius:10px;padding:28px}</style></head>
+<body><div><h2>[ ACCESS ]: PAYMENT SUCCESSFUL</h2>
+<p>Your Whop payment was received.<br>Automatic fulfillment is in progress —<br>your Telegram access activates within seconds to minutes.</p>
+<p>>> Return to Telegram and press /start.<br>Still locked after 10 minutes? → MENU → Uplink.</p></div></body></html>""")
     return {"service": "NEURAL GOLD v3.2", "status": "online"}
 
 
@@ -148,9 +157,9 @@ async def whop_webhook(request: Request, background: BackgroundTasks):
     payload = await request.body()
     try:
         event = verify_signature(payload, dict(request.headers))
-    except Exception:
-        logger.exception("Whop webhook verification failed")
-        return Response(status_code=401)
+    except Exception as exc:
+        logger.error("Whop webhook REJECTED (%s) — periksa WHOP_WEBHOOK_SECRET: harus persis secret dari dashboard Whop", exc)
+        return JSONResponse(status_code=401, content={"ok": False})
 
     event_id = str(event.get("id") or request.headers.get("webhook-id") or "")
     event_type = str(event.get("type") or "")
