@@ -258,3 +258,31 @@ if __name__ == "__main__":
         result2 = asyncio.run(wh.reconcile_payment_full("pay_r3"))
         self.assertTrue(result2["ok"])
         self.assertEqual(database.get_user_by_telegram_id(212).subscription_expiry, exp)
+
+
+    # 11. DB wiped setelah redeploy: webhook self-heal dari metadata Whop
+    def test_webhook_self_heals_after_db_wipe(self):
+        # Simulasi: order TIDAK ada (DB fresh pasca redeploy), Whop mengirim payment.succeeded dengan metadata lengkap
+        payment = {
+            "id": "pay_wipe", "status": "paid",
+            "metadata": {"neural_order_id": "ng_wiped_1", "telegram_id": "213",
+                         "plan_days": "7", "source": "neural_gold"},
+            "plan": {"id": "plan_ksl11weFJ0z41"},
+            "membership": {"id": "mem_w1"},
+        }
+        result = wh.handle_payment_succeeded(payment)  # sync, langsung
+        self.assertTrue(result)
+        raw_token, days, order_id = result
+        self.assertEqual(order_id, "ng_wiped_1")
+        order = whop_storage.get_order("ng_wiped_1")
+        self.assertEqual(order["payment_id"], "pay_wipe")
+        self.assertTrue(database.get_user_by_telegram_id(213).is_active)
+        self.assertEqual(whop_storage.get_fulfillment("pay_wipe")["status"], "fulfilled")
+
+    # 12. metadata rusak (tanpa telegram_id) -> retryable, bukan crash
+    def test_webhook_bad_metadata_is_retryable(self):
+        payment = {"id": "pay_badmeta", "status": "paid",
+                   "metadata": {"neural_order_id": "ng_badmeta"},
+                   "plan": {"id": "plan_ksl11weFJ0z41"}}
+        with self.assertRaises(wh.FulfillmentRetryableError):
+            wh.handle_payment_succeeded(payment)

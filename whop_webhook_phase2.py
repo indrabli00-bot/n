@@ -101,12 +101,29 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
             f"Payment missing order/payment identity payment={payment_id}"
         )
 
+    duration = PLAN_DURATIONS.get(plan_id)
     order = whop_storage.get_order(order_id)
     if order is None:
-        raise FulfillmentRetryableError(f"Unknown Neural Gold order_id={order_id}")
-
-    duration = PLAN_DURATIONS.get(plan_id) or PLAN_DURATIONS.get(order["plan_id"])
-    if duration is None or duration != order["duration_days"]:
+        # State sync (fulfillment ops): DB non-durable / redeploy bisa menghapus
+        # order lokal. Buat ulang dari metadata Whop agar retry TETAP memfulfill
+        # (tanpa ini, customer sudah bayar tapi order hilang selamanya).
+        tid_raw = str(metadata.get("telegram_id") or "")
+        try:
+            tid = int(tid_raw)
+        except ValueError:
+            raise FulfillmentRetryableError(
+                f"Order {order_id} tidak ada di DB dan metadata.telegram_id tidak valid"
+            )
+        if duration is None:
+            raise FulfillmentRetryableError(f"Plan {plan_id} tidak dikenal untuk order {order_id}")
+        if not whop_storage.create_order(order_id, tid, plan_id or "unknown", duration):
+            raise FulfillmentRetryableError(f"Gagal membuat ulang order {order_id}")
+        order = whop_storage.get_order(order_id)
+        if order is None:
+            raise FulfillmentRetryableError(f"Order {order_id} gagal dibuat ulang")
+    if duration is None:
+        duration = int(order["duration_days"])
+    if duration != order["duration_days"]:
         whop_storage.update_order(
             order_id, status="rejected_plan_mismatch", payment_id=payment_id
         )
