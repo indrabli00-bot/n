@@ -1,0 +1,75 @@
+name: Group 3.3 Refactor
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+env:
+  TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
+  GOLDAPI_API_KEY: "test-goldapi-api-key"
+  DATABASE_URL: "sqlite:///:memory:"
+  WHOP_WEBHOOK_SECRET: "whsec_cGhhc2UyLXRlc3Qtc2VjcmV0"
+
+jobs:
+  refactor:
+    if: github.event.head_commit.message == 'chore: run Group 3.3 verification'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt && python -m pip install pytest
+      - name: Apply source refactor
+        run: python scripts/group33_refactor.py
+      - name: Compile Python sources
+        run: python -m compileall -q .
+      - name: Static UI hardcode guard
+        run: python scripts/check_ui_hardcoded_strings.py
+      - name: Pytest pass 1
+        run: python -m pytest -q
+      - name: Pytest pass 2
+        run: python -m pytest -q
+      - name: Pytest pass 3
+        run: python -m pytest -q
+      - name: Pytest pass 4
+        run: python -m pytest -q
+      - name: Pytest pass 5
+        run: python -m pytest -q
+      - name: Full unittest regression
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Canonical source audit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          main = Path('main.py').read_text(encoding='utf-8')
+          term = Path('terminal_style.py').read_text(encoding='utf-8')
+          premium = Path('premium_visuals.py').read_text(encoding='utf-8')
+          assert 'PANEL_W' not in term and 'INNER_W' not in term
+          assert 'def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH)' in term
+          assert 'return formatted_content' not in term
+          assert '<pre>' not in term
+          assert 'nav:home' in term and 'screen:account' in term
+          assert 'def _nav_keyboard' not in main
+          assert 'GOLD = ' not in main
+          assert '┍' not in main and '┕' not in main
+          assert 'main.render_' not in premium and 'main.home_keyboard' not in premium
+          assert 't(_lang(update), "loading")' in main
+          ast.parse(main); ast.parse(term); ast.parse(premium)
+          print('GROUP 3.3 SOURCE AUDIT: PASS')
+          PY
+      - name: Commit final Group 3.3
+        run: |
+          rm -f .github/workflows/group33-run.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Group 3.3: render ownership and canonical UI'
+          git push origin main
