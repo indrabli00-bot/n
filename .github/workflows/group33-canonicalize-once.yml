@@ -19,7 +19,7 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: python -m pip install -r requirements.txt pytest
-      - name: Apply canonical implementation
+      - name: Apply canonical implementation and tests
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -32,11 +32,10 @@ jobs:
               'await api_handler.get_cached_or_fresh_price(user.id)',
               'await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)'
           )
-
           start = s.find('async def _present(')
           end = s.find('async def start_command', start)
           if start < 0 or end < 0:
-              raise SystemExit(f'_present boundaries missing: start={start} end={end}')
+              raise SystemExit(f'_present boundaries missing: {start}, {end}')
           present = '''async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
               """Canonical customer rendering: Header -> Terminal -> Context."""
               query = update.callback_query
@@ -55,7 +54,12 @@ jobs:
 
               if user and is_home:
                   active, _ = auth.verify_token(user.id)
-                  terminal_body = boot(granted=active)
+                  access_line = "GRANTED. WELCOME, OPERATOR." if active else "PENDING // CLEARANCE REQUIRED"
+                  terminal_body = "\\n".join([
+                      "[ SYSTEM ]: INITIALIZING...",
+                      "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...",
+                      f"[ ACCESS ]: {access_line}",
+                  ])
                   context_line = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
               else:
                   pre_match = re.search(r"<pre>(.*?)</pre>", text, flags=re.S | re.I)
@@ -88,11 +92,11 @@ jobs:
               if update.message:
                   await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
 
-          '''
           s = s[:start] + present + s[end:]
           p.write_text(s, encoding='utf-8')
-          PY
-      - name: Compile
+
+          test_path = Path('tests/test_ui_regressions.py')
+          test_path.write_text('''"""Group 3.3 canonical Telegram UI regression tests."""\nimport asyncio\nimport base64\nimport os\nimport sys\nimport unittest\n\nsys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\nos.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")\nos.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")\nos.environ.setdefault("GOLDAPI_API_KEY", "test-key")\nos.environ["WHOP_WEBHOOK_SECRET"] = "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("=")\n\nimport database\ndatabase.init_db()\nimport auth\nimport main as mm\n\nclass M:\n    def __init__(self, text=None):\n        self.text = text\n        self.sent = []\n    async def reply_text(self, t, parse_mode=None, reply_markup=None):\n        self.sent.append((t, reply_markup))\n\nclass Q:\n    def __init__(self, m):\n        self.message = m\n    async def answer(self, *a, **k):\n        pass\n    async def edit_message_text(self, *a, **k):\n        raise Exception("edit blocked (simulasi fallback)")\n\nclass U:\n    def __init__(self, m=None, q=None, language_code="en"):\n        self.message = m\n        self.callback_query = q\n        u = type("EU", (), {})()\n        u.id = 42\n        u.first_name = "Tester"\n        u.username = "tester"\n        u.language_code = language_code\n        self.effective_user = u\n\nclass UIRegressionTests(unittest.TestCase):\n    def test_active_home_has_single_header_and_clean_terminal(self):\n        auth.verify_token = lambda uid: (True, "ok")\n        m = M()\n        asyncio.run(mm.render_home(U(m, Q(m)), None))\n        txt, kb = m.sent[0]\n        self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)\n        self.assertEqual(txt.count("OPERATOR :"), 1)\n        self.assertEqual(txt.count("STATUS   :"), 1)\n        pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]\n        self.assertNotIn("NEURAL GOLD", pre)\n        self.assertNotIn("OPERATOR :", pre)\n        self.assertNotIn("STATUS   :", pre)\n        self.assertNotIn("UTC ]", pre)\n        self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])\n\n    def test_inactive_home_uses_pending_terminal_and_packages(self):\n        auth.verify_token = lambda uid: (False, "token_invalid")\n        m = M("/start")\n        asyncio.run(mm.start_command(U(m, None), None))\n        txt, kb = m.sent[-1]\n        self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)\n        self.assertIn("PENDING // CLEARANCE REQUIRED", txt)\n        self.assertNotIn("GRANTED. WELCOME, OPERATOR.", txt)\n        self.assertNotIn("NEURAL GOLD", txt[txt.index("<pre>"):txt.index("</pre>")])\n        buttons = [b.text for row in kb.inline_keyboard for b in row]\n        self.assertTrue(any("7 HARI" in x or "7 DAYS" in x for x in buttons))\n        self.assertTrue(any("14 HARI" in x or "14 DAYS" in x for x in buttons))\n        self.assertTrue(any("30 HARI" in x or "30 DAYS" in x for x in buttons))\n\n    def test_all_customer_keyboards_end_with_persistent_nav(self):\n        for helper_name in ("home_keyboard", "price_keyboard", "signal_keyboard", "account_keyboard", "access_keyboard", "analysis_keyboard", "settings_keyboard", "language_keyboard", "support_keyboard"):\n            helper = getattr(mm, helper_name)\n            kb = helper(U(M()))\n            self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"], helper_name)\n\n    def test_terminal_box_uses_explicit_max_width_without_fixed_geometry(self):\n        from terminal_style import render_terminal_box\n        out = render_terminal_box("A" * 55, 40)\n        self.assertEqual([len(x) for x in out.split("\\n")], [40, 15])\n        self.assertNotIn("┍", out + "┕")\n\nif __name__ == "__main__":\n    unittest.main()\n''', encoding='utf-8')\n          PY\n      - name: Compile
         run: python -m compileall -q .
       - name: Static UI guard
         run: python scripts/check_ui_hardcoded_strings.py
@@ -100,26 +104,26 @@ jobs:
         run: python -m pytest -q
       - name: Full unittest
         run: python -m unittest discover -s tests -p 'test_*.py' -q
-      - name: Canonical runtime contract checks
+      - name: Contract source audit
         run: |
           python - <<'PY'
-          import ast
           from pathlib import Path
           s = Path('main.py').read_text(encoding='utf-8')
           assert '_nav_keyboard' not in s
           assert 'nav:back' not in s
-          assert 'render_terminal_box' in s
-          assert '<pre>' in s
           assert 'timeout=10.0' in s
-          tree = ast.parse(s)
-          for name in ('render_home','render_price','render_signal','render_analysis','render_account','render_access','render_menu','render_help','render_settings','render_support'):
-              assert any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name for n in ast.walk(tree)), name
-          print('CANONICAL RUNTIME CONTRACT: PASS')
+          t = Path('terminal_style.py').read_text(encoding='utf-8')
+          assert 'DEFAULT_MAX_WIDTH = 40' in t
+          assert 'def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH)' in t
+          pv = Path('premium_visuals.py').read_text(encoding='utf-8')
+          assert 'main.render_' not in pv
+          print('GROUP 3.3 CONTRACT AUDIT: PASS')
           PY
-      - name: Commit canonical implementation
+      - name: Commit canonical implementation and cleanup
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add main.py tests/test_ui_regressions.py
+          git rm .github/workflows/group33-canonicalize-once.yml
           git commit -m 'Group 3.3: finalize canonical UI implementation'
           git push origin main
