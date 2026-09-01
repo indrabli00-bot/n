@@ -5,6 +5,7 @@ The bot is intentionally command-light: customers navigate the product with
 inline buttons instead of memorising commands. Commands remain available for
 administration and token activation.
 """
+import asyncio
 import html
 import logging
 import os
@@ -166,7 +167,7 @@ async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     await _answer_loading(update, '[ CORE ]: SYNCING XAU/USD FEED...')
     try:
-        data = await api_handler.get_cached_or_fresh_price(user.id)
+        data = await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)
         bid = float(data['bid'])
         ask = float(data['ask'])
         mid = (bid + ask) / 2
@@ -195,7 +196,7 @@ async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     await _answer_loading(update, '[ NEURAL-MAP ]: COMPUTING SIGNAL VECTOR...')
     try:
-        data = await api_handler.get_cached_or_fresh_price(user.id)
+        data = await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)
         indicators = api_handler._simulate_technical_indicators(float(data['bid']), float(data.get('change_percent', 0)))
         signal = api_handler._determine_signal(float(data['bid']), indicators)
         direction = signal['direction']
@@ -221,7 +222,7 @@ async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     await _answer_loading(update, '[ EXTRACTING ]: MARKET STRUCTURE...')
     try:
-        data = await api_handler.get_cached_or_fresh_price(user.id)
+        data = await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)
         bid = float(data['bid'])
         pct = float(data.get('change_percent', 0))
         indicators = api_handler._simulate_technical_indicators(bid, pct)
@@ -308,44 +309,67 @@ async def _answer_loading(update: Update, text: str) -> None:
             pass
 
 async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
-    """Canonical customer rendering: Header -> Terminal -> optional Action -> Nav."""
+    """Canonical customer rendering: Header -> Terminal -> Context."""
     query = update.callback_query
     user = update.effective_user
     lang = _lang(update)
-    plain = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+    plain = html.unescape(re.sub(r"<[^>]+>", "", text))
     is_home = "OPERATOR CONSOLE" in plain
+
+    def clean_terminal(value: str) -> str:
+        value = re.sub(r"(?im)^\s*NEURAL GOLD(?: v3\.2)?[^\n]*$", "", value)
+        value = re.sub(r"(?im)^\s*\[ ?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC ?\]\s*$", "", value)
+        value = re.sub(r"(?im)^\s*OPERATOR\s*:\s*.*$", "", value)
+        value = re.sub(r"(?im)^\s*STATUS\s*:\s*.*$", "", value)
+        value = value.translate(str.maketrans("", "", "┍┑┕┙│◤◥◣◢━"))
+        return "\n".join(line.rstrip() for line in value.split("\n")).strip()
+
     if user and is_home:
         active, _ = auth.verify_token(user.id)
-        terminal = f"NEURAL GOLD v3.2 // OPERATOR CONSOLE\n\n{boot(granted=active)}"
-        action = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
+        access_line = "GRANTED. WELCOME, OPERATOR." if active else "PENDING // CLEARANCE REQUIRED"
+        terminal_body = "\n".join([
+            "[ SYSTEM ]: INITIALIZING...",
+            "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...",
+            f"[ ACCESS ]: {access_line}",
+        ])
+        context_line = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
     else:
-        body = re.sub(r"\[ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \]", "", plain)
-        body = re.sub(r"(?im)^\s*(OPERATOR|STATUS)\s*:\s*.*$", "", body)
-        body = re.sub(r"(?im)^\s*TELEGRAM_ID\s*:\s*.*$", "", body)
-        body = body.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━'))
-        terminal = render_terminal_box(body.strip(), 40)
-        action = ""
-    canonical = f"{render_header(user, lang)}\n<pre>{render_terminal_box(terminal, 40)}</pre>" if user else f"<pre>{terminal}</pre>"
-    if action:
-        canonical += f"\n\n{action}"
+        pre_match = re.search(r"<pre>(.*?)</pre>", text, flags=re.S | re.I)
+        terminal_body = clean_terminal(pre_match.group(1) if pre_match else plain)
+        context_matches = re.findall(r"(?m)^\s*>>[^\n]*", plain)
+        context_line = context_matches[0].strip() if context_matches else ""
+        context_line = re.sub(r"\s*//\s*\[?\s*\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\s*\]?", "", context_line).strip()
+
+    if not terminal_body:
+        terminal_body = t(lang, "ready")
+
+    canonical = (
+        f"{render_header(user, lang)}\n\n<pre>{render_terminal_box(terminal_body, 40)}</pre>"
+        if user
+        else f"<pre>{render_terminal_box(terminal_body, 40)}</pre>"
+    )
+    if context_line:
+        canonical += f"\n\n{context_line}"
+    
     if query and edit:
         try:
-            await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
+            await query.edit_message_text(text=canonical, parse_mode="HTML", reply_markup=keyboard)
             return
         except BadRequest as exc:
-            if 'not modified' in str(exc).lower():
+            if "not modified" in str(exc).lower():
                 return
         except Exception as exc:
-            logger.debug('Could not edit callback message: %s', exc)
+            logger.debug("Could not edit callback message: %s", exc)
+
     try:
         if query and query.message:
-            await query.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
+            await query.message.reply_text(canonical, parse_mode="HTML", reply_markup=keyboard)
             return
     except Exception as exc:
-        logger.debug('Callback reply fallback failed: %s', exc)
-    if update.message:
-        await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
+        logger.debug("Callback reply fallback failed: %s", exc)
 
+    if update.message:
+        await update.message.reply_text(canonical, parse_mode="HTML", reply_markup=keyboard)
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if user is None:
