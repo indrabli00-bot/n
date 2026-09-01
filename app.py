@@ -16,10 +16,11 @@ import command_localization
 import database
 import expiry_notifier
 import fulfillment_recovery
+import main
+import ui_contract
 import whop_api_phase2
 import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
-from main import build_application, post_init, setup_logging
 from whop_webhook_phase2 import handle_event, notify_customer, verify_signature
 
 logger = logging.getLogger("neural_gold.belmo")
@@ -29,12 +30,13 @@ telegram_app = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global telegram_app
-    setup_logging()
+    main.setup_logging()
     database.init_db()
     whop_storage.init_phase2_db()
-    telegram_app = build_application()
+    ui_contract.install(main)
+    telegram_app = main.build_application()
     await telegram_app.initialize()
-    await post_init(telegram_app)
+    await main.post_init(telegram_app)
     await command_localization.install(telegram_app.bot, database_admin_id())
     expiry_notifier.schedule(telegram_app)
     fulfillment_recovery.schedule(telegram_app)
@@ -67,7 +69,6 @@ async def lifespan(app: FastAPI):
 
 
 def database_admin_id() -> int | None:
-    """Return the configured admin Telegram ID without duplicating config logic."""
     try:
         from config import ADMIN_TELEGRAM_ID
         return ADMIN_TELEGRAM_ID
@@ -80,7 +81,6 @@ app = FastAPI(title="NEURAL GOLD v3.2", version="3.2.0", lifespan=lifespan)
 
 @app.get("/")
 async def root(request: Request):
-    # Whop mengarahkan customer ke sini setelah checkout sukses.
     if request.query_params.get("checkout_status") == "success":
         return HTMLResponse("""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -99,9 +99,6 @@ async def health():
 
 @app.get("/checkout/{days}")
 async def checkout_redirect(days: int, token: str):
-    """Validate the short-lived Telegram plan link, create a Whop checkout,
-    and redirect directly to Whop.
-    """
     if days not in (7, 14, 30):
         raise HTTPException(status_code=404, detail="Plan not found")
     try:
@@ -113,20 +110,16 @@ async def checkout_redirect(days: int, token: str):
         expires = int(expires_text)
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid payment link")
-
     if signed_days != days or expires < int(time.time()):
         raise HTTPException(status_code=410, detail="Payment link expired")
-
     key = (TELEGRAM_BOT_TOKEN or "neural-gold").encode("utf-8")
     expected = hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=403, detail="Invalid payment link")
-
     purchase_url, order_id, error = await whop_api_phase2.create_checkout_for_user(telegram_id, days)
     if not purchase_url:
         logger.error("Direct checkout creation failed telegram=%s order=%s error=%s", telegram_id, order_id, error)
         raise HTTPException(status_code=503, detail="Checkout temporarily unavailable")
-
     return RedirectResponse(url=purchase_url, status_code=303)
 
 
