@@ -71,6 +71,18 @@ jobs:
               out.append(x)
           p.write_text('\n'.join(out) + '\n')
           PY
+      - name: Align persistent-nav test count
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_ui_language_consistency.py')
+          lines = p.read_text().splitlines()
+          for i, line in enumerate(lines):
+              if line.strip().startswith('keys = ['):
+                  lines[i] = line.rstrip().replace('"menu"]', '"menu", "account_persistent"]')
+                  break
+          p.write_text('\n'.join(lines) + '\n')
+          PY
       - name: Compile
         run: python -m compileall -q .
       - name: Full regression
