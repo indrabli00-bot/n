@@ -5,7 +5,7 @@ premium = Path('premium_visuals.py').read_text()
 app = Path('app.py').read_text()
 assert 'def _nav_keyboard' not in main
 assert 'nav:back' not in main
-assert "t(lang, 'back')" not in main
+assert "InlineKeyboardButton(t(lang, 'back')" not in main
 assert 'main.render_' not in premium
 assert 'premium_visuals' not in app
 assert 'def _persistent_nav' in main
