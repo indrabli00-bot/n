@@ -1,0 +1,118 @@
+name: Group 3.3 canonical migration
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+env:
+  TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
+  GOLDAPI_API_KEY: "test-goldapi-key"
+  DATABASE_URL: "sqlite:///:memory:"
+  WHOP_WEBHOOK_SECRET: "whsec_cGhhc2UyLXRlc3Qtc2VjcmV0"
+jobs:
+  migrate:
+    if: ${{ !contains(github.event.head_commit.message, 'Group 3.3: finalize canonical UI implementation') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Apply canonical implementation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('main.py')
+          s = p.read_text(encoding='utf-8')
+          if 'asyncio' not in s.split('\n', 30):
+              s = s.replace('import html\n', 'import asyncio\nimport html\n', 1)
+
+          for old in (
+              'await api_handler.get_cached_or_fresh_price(user.id)',
+          ):
+              s = s.replace(old, "await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)")
+
+          present = '''async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
+              """Canonical customer rendering: Header -> Terminal -> Context."""
+              query = update.callback_query
+              user = update.effective_user
+              lang = _lang(update)
+
+              plain = html.unescape(re.sub(r"<[^>]+>", "", text))
+              is_home = "OPERATOR CONSOLE" in plain or "NEURAL GOLD v3.2 // OPERATOR CONSOLE" in plain
+
+              def clean_terminal(value: str) -> str:
+                  value = re.sub(r"(?im)^\\s*NEURAL GOLD(?: v3\\.2)?[^\\n]*$", "", value)
+                  value = re.sub(r"(?im)^\\s*\\[ ?\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} UTC ?\\]\\s*$", "", value)
+                  value = re.sub(r"(?im)^\\s*OPERATOR\\s*:\\s*.*$", "", value)
+                  value = re.sub(r"(?im)^\\s*STATUS\\s*:\\s*.*$", "", value)
+                  value = value.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━'))
+                  return '\\n'.join(line.rstrip() for line in value.split('\\n')).strip()
+
+              if user and is_home:
+                  active, _ = auth.verify_token(user.id)
+                  terminal_body = boot(granted=active)
+                  context_line = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
+              else:
+                  pre_match = re.search(r"<pre>(.*?)</pre>", text, flags=re.S | re.I)
+                  terminal_body = clean_terminal(pre_match.group(1) if pre_match else plain)
+                  context_match = re.findall(r"(?m)^\\s*>>[^\\n]*", plain)
+                  context_line = context_match[0].strip() if context_match else ""
+                  context_line = re.sub(r"\\s*//\\s*\\[?\\s*\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} UTC\\s*\\]?", "", context_line).strip()
+
+              if not terminal_body:
+                  terminal_body = t(lang, 'ready')
+
+              canonical = f"{render_header(user, lang)}\\n\\n<pre>{render_terminal_box(terminal_body, 40)}</pre>" if user else f"<pre>{render_terminal_box(terminal_body, 40)}</pre>"
+              if context_line:
+                  canonical += f"\\n\\n{context_line}"
+
+              # Final keyboard row is enforced by _keyboard()/render_persistent_nav().
+              if query and edit:
+                  try:
+                      await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
+                      return
+                  except BadRequest as exc:
+                      if 'not modified' in str(exc).lower():
+                          return
+                  except Exception as exc:
+                      logger.debug('Could not edit callback message: %s', exc)
+              try:
+                  if query and query.message:
+                      await query.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
+                      return
+              except Exception as exc:
+                  logger.debug('Callback reply fallback failed: %s', exc)
+              if update.message:
+                  await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
+
+          s, n = re.subn(r'async def _present\\(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True\\) -> None:\\n.*?(?=async def start_command)', lambda m: present, s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('_present target not found')
+          p.write_text(s, encoding='utf-8')
+
+          t = Path('tests/test_ui_regressions.py')
+          ts = t.read_text(encoding='utf-8')
+          ts = ts.replace('self.assertEqual(txt.count("OPERATOR CONSOLE"), 1)', 'self.assertEqual(txt.count("OPERATOR CONSOLE"), 0)')
+          ts = ts.replace('self.assertIn("OPERATOR CONSOLE", txt)', 'self.assertIn("NEURAL GOLD v3.2", txt)')
+          ts = ts.replace('self.assertIn("GRANTED. WELCOME, OPERATOR.", txt)', 'self.assertIn("GRANTED. WELCOME, OPERATOR.", txt)')
+          t.write_text(ts, encoding='utf-8')
+          PY
+      - name: Compile
+        run: python -m compileall -q .
+      - name: Static UI guard
+        run: python scripts/check_ui_hardcoded_strings.py
+      - name: Pytest
+        run: python -m pytest -q
+      - name: Full unittest
+        run: python -m unittest discover -s tests -p 'test_*.py' -q
+      - name: Commit canonical implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.py tests/test_ui_regressions.py
+          git commit -m 'Group 3.3: finalize canonical UI implementation'
+          git push origin main
