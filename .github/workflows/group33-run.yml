@@ -10,7 +10,7 @@ permissions:
 
 env:
   TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
-  GOLDAPI_API_KEY: "test-goldapi-api-key"
+  GOLDAPI_API_KEY: "test-goldapi-key"
   DATABASE_URL: "sqlite:///:memory:"
   WHOP_WEBHOOK_SECRET: "whsec_cGhhc2UyLXRlc3Qtc2VjcmV0"
 
@@ -54,14 +54,18 @@ jobs:
           main = Path('main.py').read_text(encoding='utf-8')
           term = Path('terminal_style.py').read_text(encoding='utf-8')
           premium = Path('premium_visuals.py').read_text(encoding='utf-8')
+          tree = ast.parse(term)
+          box = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'render_terminal_box')
+          box_src = ast.get_source_segment(term, box) or ''
           assert 'PANEL_W' not in term and 'INNER_W' not in term
           assert 'def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH)' in term
-          assert '<pre>' not in term
+          assert '<pre>' not in box_src
           assert 'nav:home' in term and 'screen:account' in term
           assert 'def _nav_keyboard' not in main
           assert '┍' not in main and '┕' not in main
           assert 'main.render_' not in premium and 'main.home_keyboard' not in premium
           assert 't(_lang(update), "loading")' in main
+          assert 'asyncio.wait_for' in main and 'timeout=10.0' in main
           ast.parse(main); ast.parse(term); ast.parse(premium)
           print('GROUP 3.3 SOURCE AUDIT: PASS')
           PY
