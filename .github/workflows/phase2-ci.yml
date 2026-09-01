@@ -37,3 +37,4 @@ jobs:
           python -m pytest -q
       - name: Full unittest regression
         run: python -m unittest discover -s tests -p "test_*.py" -v
+      # Group 3.3: read-only validation baseline after History screen fix.
