@@ -140,7 +140,7 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
         return {"ok": True}
     except Exception as exc:
         logger.error("WEBHOOK_FAIL latency_ms=%.0f error=%s", (time.perf_counter() - started) * 1000, exc)
-        return JSONResponse(status_code=200, content={"ok": False})
+        return JSONResponse(status_code=500, content={"ok": False})
 
 
 @app.post("/webhooks/whop")
