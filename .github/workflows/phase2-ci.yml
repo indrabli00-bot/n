@@ -12,7 +12,7 @@ permissions:
 env:
   TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
   GOLDAPI_API_KEY: "test-goldapi-key"
-  DATABASE_URL: "sqlite:///xauusd_bot_ci.db"
+  DATABASE_URL: "sqlite:///:memory:"
   WHOP_WEBHOOK_SECRET: "whsec_cGhhc2UyLXRlc3Qtc2VjcmV0"
 
 jobs:
