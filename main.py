@@ -278,7 +278,7 @@ async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """Console submenu (operator fix): Language / Help / Uplink / System Sync live here."""
     lang = _lang(update)
     text = f'<b>[ CONSOLE ]: MENU // NEURAL GOLD {NEURAL_VERSION}</b>\n{DIVIDER}\n\n<pre>{_esc(t(lang, 'menu_body'))}</pre>'
-    rows = [[InlineKeyboardButton(f'❓ {t(lang, 'help')}', callback_data='screen:help')], [InlineKeyboardButton(f'🌐 {t(lang, 'support')}', callback_data='screen:support')], []]
+    rows = [[InlineKeyboardButton(f'❓ {t(lang, 'help')}', callback_data='screen:help')], [InlineKeyboardButton(f'🌐 {t(lang, 'support')}', callback_data='screen:support')]]
     await _present(update, text, _keyboard(update, rows))
 
 async def render_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
