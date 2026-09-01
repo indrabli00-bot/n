@@ -8,6 +8,9 @@ from config import NEURAL_VERSION
 from i18n import t
 
 
+DEFAULT_MAX_WIDTH = 40
+
+
 def stamp() -> str:
     """Return the canonical UTC timestamp."""
     return datetime.now(timezone.utc).strftime("[ %Y-%m-%d %H:%M:%S UTC ]")
@@ -17,10 +20,8 @@ def line(tag: str, msg: str) -> str:
     return f"[ {tag} ]: {msg}"
 
 
-def word_wrap(text: str, max_width: int | None = None) -> list[str]:
-    """Wrap text only when an explicit maximum width is supplied."""
-    if max_width is None:
-        return [text]
+def word_wrap(text: str, max_width: int = DEFAULT_MAX_WIDTH) -> list[str]:
+    """Wrap text by character count and split overlong tokens."""
     if max_width <= 0:
         raise ValueError("max_width must be positive")
     if len(text) <= max_width:
@@ -56,13 +57,8 @@ def render_header(user, lang: str) -> str:
     return f"{stamp()}\nOPERATOR : {operator}\nSTATUS   : {status}"
 
 
-def render_terminal_box(content: str, max_width: int | None = None) -> str:
-    """Return preformatted content without a decorative border.
-
-    Telegram does not expose the recipient viewport width to bots. Natural line
-    width is therefore the default; callers may provide a maximum width when a
-    specific application context requires wrapping.
-    """
+def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH) -> str:
+    """Return terminal content only; the caller owns the Telegram <pre> tag."""
     return "\n".join(
         part
         for raw_line in content.split("\n")
@@ -87,13 +83,13 @@ def panel(rows: Iterable[str], escape: bool = False) -> str:
     return "\n".join(str(r) for r in rows)
 
 
-def prow(text: str, max_width: int | None = None) -> str:
+def prow(text: str, max_width: int = DEFAULT_MAX_WIDTH) -> str:
     return word_wrap(str(text), max_width)[0]
 
 
-def bar(ch: str = "─", max_width: int | None = None) -> str:
-    """Return an optional separator only when an explicit width is requested."""
-    return "" if max_width is None else ch * max_width
+def bar(ch: str = "─", max_width: int = DEFAULT_MAX_WIDTH) -> str:
+    """Return a separator using the configured content ceiling."""
+    return ch * max_width
 
 
 def boot(granted: bool) -> str:
