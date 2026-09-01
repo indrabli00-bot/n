@@ -1,4 +1,5 @@
 """Group 3.3 regression checks for canonical persistent navigation."""
+# Final verification trigger: validate the canonical main-branch source.
 import os
 import sys
 import unittest
