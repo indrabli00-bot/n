@@ -52,7 +52,10 @@ def render_header(user, lang: str) -> str:
     """Render the canonical plain-text operator header."""
     import auth
     active, _ = auth.verify_token(user.id)
-    status = f"{t(lang, 'active')} 🟢" if active else f"{t(lang, 'inactive')} 🔴"
+    status_key = "active" if active else "inactive"
+    status_word = t(lang, status_key)
+    status_word = status_word[:1].upper() + status_word[1:]
+    status = f"{status_word} {'🟢' if active else '🔴'}"
     operator = user.first_name or "OPERATOR"
     return f"{stamp()}\nOPERATOR : {operator}\nSTATUS   : {status}"
 
