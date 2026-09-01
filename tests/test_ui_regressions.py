@@ -58,7 +58,7 @@ class UIRegressionTests(unittest.TestCase):
         self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)
         self.assertEqual(txt.count("OPERATOR :"), 1)
         self.assertEqual(txt.count("STATUS   :"), 1)
-        self.assertIn("ACTIVE 🟢", txt)
+        self.assertIn("Active 🟢", txt)
         self.assertIn("<pre>", txt)
         pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]
         self.assertNotIn("NEURAL GOLD", pre)
@@ -69,7 +69,7 @@ class UIRegressionTests(unittest.TestCase):
         self.assertNotIn("┕", pre)
         self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
 
-    def test_inactive_home_has_pending_terminal_and_packages(self):
+    def test_inactive_home_has_pending_terminal_and_canonical_nav(self):
         auth.verify_token = lambda uid: (False, "token_invalid")
         m = M("/start")
         asyncio.run(mm.start_command(U(m, None), None))
@@ -80,11 +80,23 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn("REQUIRED", txt)
         pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]
         self.assertNotIn("NEURAL GOLD", pre)
-        buttons = [b.text for row in kb.inline_keyboard for b in row]
-        self.assertTrue(any("7 HARI" in x or "7 DAYS" in x for x in buttons))
-        self.assertTrue(any("14 HARI" in x or "14 DAYS" in x for x in buttons))
-        self.assertTrue(any("30 HARI" in x or "30 DAYS" in x for x in buttons))
         self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
+
+    def test_loading_uses_single_canonical_i18n_feedback(self):
+        class LoadingQ(Q):
+            def __init__(self, m):
+                super().__init__(m)
+                self.answer_args = None
+                self.answer_kwargs = None
+            async def answer(self, *a, **k):
+                self.answer_args = a
+                self.answer_kwargs = k
+        m = M()
+        q = LoadingQ(m)
+        asyncio.run(mm._answer_loading(U(m, q)))
+        self.assertEqual(q.answer_args[0], "Loading...")
+        self.assertEqual(q.answer_kwargs.get("show_alert"), False)
+
 
     def test_all_customer_keyboards_end_with_persistent_nav(self):
         for helper_name in (

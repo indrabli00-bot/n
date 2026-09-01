@@ -300,11 +300,12 @@ async def render_locked(update: Update, module: str) -> None:
     text = f'<b>[ LOCKED ]: {label}</b>\n{DIVIDER}\n\n[ FAULT ]: CLEARANCE_CHECK_FAILED\n\n{t(_lang(update), 'locked')}\n\n[ ERROR ]: {t(_lang(update), 'access_required')}\n>> {t(_lang(update), 'activate_required')}\n\n<i>{t(_lang(update), 'verified_auto')}</i>'
     await _present(update, text, access_keyboard(update))
 
-async def _answer_loading(update: Update, text: str) -> None:
+async def _answer_loading(update: Update, text: str | None = None) -> None:
+    """Deliver the single canonical loading label through callback feedback."""
     query = update.callback_query
     if query:
         try:
-            await query.answer(text, show_alert=False)
+            await query.answer(t(_lang(update), "loading"), show_alert=False)
         except Exception:
             pass
 
