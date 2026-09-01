@@ -1,4 +1,5 @@
 # Group 3.3 validation alignment helper.
+# Trigger canonical validation after workflow path update.
 from pathlib import Path
 
 p = Path('main.py')
