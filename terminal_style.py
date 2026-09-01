@@ -7,13 +7,9 @@ from typing import Iterable
 from config import NEURAL_VERSION
 from i18n import t
 
-# Telegram renders <pre> responsively; terminal content uses a generous
-# character ceiling rather than a decorative fixed-width border.
-MAX_CONTENT_W = 72
-
 
 def stamp() -> str:
-    """UTC timestamp for terminal aesthetics."""
+    """Return the canonical UTC timestamp."""
     return datetime.now(timezone.utc).strftime("[ %Y-%m-%d %H:%M:%S UTC ]")
 
 
@@ -21,8 +17,10 @@ def line(tag: str, msg: str) -> str:
     return f"[ {tag} ]: {msg}"
 
 
-def word_wrap(text: str, max_width: int = MAX_CONTENT_W) -> list[str]:
-    """Wrap text by character count and break overlong tokens."""
+def word_wrap(text: str, max_width: int | None = None) -> list[str]:
+    """Wrap text only when an explicit maximum width is supplied."""
+    if max_width is None:
+        return [text]
     if max_width <= 0:
         raise ValueError("max_width must be positive")
     if len(text) <= max_width:
@@ -52,30 +50,24 @@ def word_wrap(text: str, max_width: int = MAX_CONTENT_W) -> list[str]:
 def render_header(user, lang: str) -> str:
     """Render the canonical plain-text operator header."""
     import auth
-    import database
-
     active, _ = auth.verify_token(user.id)
-    if active:
-        db_user = database.get_user_by_telegram_id(user.id)
-        expiry = database.normalize_datetime_utc(db_user.subscription_expiry) if db_user else None
-        if expiry:
-            days_left = max(0, (expiry - datetime.now(timezone.utc)).days)
-            status = f"{t(lang, 'active')} 🟢 ({t(lang, 'days_remaining')}: {days_left} {t(lang, 'days')})"
-        else:
-            status = f"{t(lang, 'active')} 🟢"
-    else:
-        status = f"{t(lang, 'inactive')} 🔴"
+    status = f"{t(lang, 'active')} 🟢" if active else f"{t(lang, 'inactive')} 🔴"
     operator = user.first_name or "OPERATOR"
     return f"{stamp()}\nOPERATOR : {operator}\nSTATUS   : {status}"
 
 
-def render_terminal_box(content: str, max_width: int = MAX_CONTENT_W) -> str:
-    """Return responsive preformatted content without decorative border characters.
+def render_terminal_box(content: str, max_width: int | None = None) -> str:
+    """Return preformatted content without a decorative border.
 
-    The caller owns the Telegram <pre> tag. Width is a content ceiling rather
-    than a fixed box geometry, so the client can render it within its viewport.
+    Telegram does not expose the recipient viewport width to bots. Natural line
+    width is therefore the default; callers may provide a maximum width when a
+    specific application context requires wrapping.
     """
-    return "\n".join(line for raw in content.split("\n") for line in word_wrap(raw, max_width))
+    return "\n".join(
+        part
+        for raw_line in content.split("\n")
+        for part in word_wrap(raw_line, max_width)
+    )
 
 
 def render_persistent_nav(lang: str):
@@ -88,21 +80,20 @@ def render_persistent_nav(lang: str):
 
 
 def panel(rows: Iterable[str], escape: bool = False) -> str:
-    """Legacy monospace helper; callers should migrate to render_terminal_box."""
+    """Legacy content helper; presentation ownership remains with main.py."""
     if escape:
         import html as _html
         rows = [_html.escape(str(r)) for r in rows]
-    return "<pre>" + "\n".join(str(r) for r in rows) + "</pre>"
+    return "\n".join(str(r) for r in rows)
 
 
-def prow(text: str, inner: int = MAX_CONTENT_W) -> str:
-    """Legacy row helper without a fixed-width border contract."""
-    return str(text)[:inner]
+def prow(text: str, max_width: int | None = None) -> str:
+    return word_wrap(str(text), max_width)[0]
 
 
-def bar(ch: str = "─", inner: int = MAX_CONTENT_W) -> str:
-    """Legacy separator retained for existing screens."""
-    return ch * inner
+def bar(ch: str = "─", max_width: int | None = None) -> str:
+    """Return an optional separator only when an explicit width is requested."""
+    return "" if max_width is None else ch * max_width
 
 
 def boot(granted: bool) -> str:
