@@ -88,17 +88,7 @@ jobs:
       - name: Full regression
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Ownership guard
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          for path in ('main.py','premium_visuals.py','app.py'):
-              text = Path(path).read_text()
-              assert '_nav_keyboard' not in text, path
-              assert 'nav:back' not in text, path
-              assert 'main.render_' not in text, path
-          assert 'premium_visuals' not in Path('app.py').read_text()
-          print('GROUP 3.3 ownership guard: PASS')
-          PY
+        run: python scripts/guard_group33.py
       - name: Commit source changes
         run: |
           git config user.name 'github-actions[bot]'
@@ -111,7 +101,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f .github/workflows/finalize-group-33.yml scripts/finalize_group33.py scripts/align_group33_ui.py
-          git add .github/workflows/finalize-group-33.yml scripts/finalize_group33.py scripts/align_group33_ui.py
+          rm -f .github/workflows/finalize-group-33.yml scripts/finalize_group33.py scripts/align_group33_ui.py scripts/guard_group33.py
+          git add .github/workflows/finalize-group-33.yml scripts/finalize_group33.py scripts/align_group33_ui.py scripts/guard_group33.py
           git commit -m 'chore: remove temporary Group 3.3 tooling'
           git push origin main
