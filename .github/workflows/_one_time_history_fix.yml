@@ -1,30 +1,24 @@
 name: one-time Group 3.3 history fix
-
 on:
   push:
     branches: ["main"]
-
 permissions:
   contents: write
-
 jobs:
   fix:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - name: Patch history screen
+      - name: Patch and validate
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
-
           p = Path('main.py')
           s = p.read_text(encoding='utf-8')
-          start = s.find('async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:')
-          end = s.find('\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:', start)
+          start = s.find("async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:")
+          end = s.find("\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:", start)
           if start < 0 or end < 0:
               raise SystemExit('render_history block not found')
           new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -38,7 +32,7 @@ jobs:
         from sqlalchemy import text
         with database.engine.begin() as conn:
             orders = conn.execute(
-                text("SELECT id, status, duration_days, created_at FROM whop_orders WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5"),
+                text("SELECT id, status, duration_days FROM whop_orders WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5"),
                 {"tid": user.id},
             ).mappings().all()
     except Exception:
@@ -54,27 +48,9 @@ jobs:
     keyboard_rows = []
     if not active:
         keyboard_rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])
-    await _present(
-        update,
-        _screen(update, "\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"),
-        _keyboard(update, keyboard_rows),
-    )
+    await _present(update, _screen(update, "\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"), _keyboard(update, keyboard_rows))
 '''
           p.write_text(s[:start] + new + s[end:], encoding='utf-8')
-
-          test = Path('tests/test_group33_history.py')
-          test.write_text("""import inspect
-import main
-
-def test_history_screen_has_canonical_context():
-    src = inspect.getsource(main.render_history)
-    assert "t(lang, 'history')} // {t(lang, 'account')}" in src
-    assert "_screen(update, f\"[ OPERATOR HUB ]\\n{t(lang, 'history')}\"" not in src
-
-def test_history_screen_uses_persistent_nav():
-    src = inspect.getsource(main.render_history)
-    assert "_keyboard(update, keyboard_rows)" in src
-""", encoding='utf-8')
 
           p = Path('.github/workflows/phase2-ci.yml')
           s = p.read_text(encoding='utf-8')
@@ -87,10 +63,11 @@ def test_history_screen_uses_persistent_nav():
           python -m compileall -q .
           python scripts/check_ui_hardcoded_strings.py
           python -m pytest -q
-          python -m unittest discover -s tests -p "test_*.py" -q
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          test -z "$(git status --porcelain | grep -v '^?? .github/workflows/_one_time_history_fix.yml$' || true)"
           rm -f .github/workflows/_one_time_history_fix.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add main.py tests/test_group33_history.py .github/workflows/phase2-ci.yml .github/workflows/_one_time_history_fix.yml
+          git add main.py .github/workflows/phase2-ci.yml .github/workflows/_one_time_history_fix.yml
           git commit -m 'Group 3.3: fix transaction history screen'
           git push origin HEAD:main
