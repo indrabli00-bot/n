@@ -1,9 +1,8 @@
-"""Regression tests for Group 3.1 UI localization consistency."""
+"""Regression tests for Group 3.3 UI localization consistency."""
 from __future__ import annotations
 
 import os
 import sys
-import types
 import unittest
 from pathlib import Path
 
@@ -42,29 +41,24 @@ class UILanguageConsistencyTests(unittest.TestCase):
     def tearDown(self):
         self.main._lang = self.original_lang
 
-    def test_home_keyboard_uses_selected_language_for_core_labels(self):
+    def test_home_keyboard_uses_canonical_brand_labels_and_persistent_nav(self):
         self.main.auth.verify_token = lambda uid: (True, "ok")
-        keys = ["price", "signal", "analysis", "account", "settings", "language", "access", "menu", "account_persistent"]
         for lang in ("en", "id", "vi", "hi", "zh"):
             kb = self.main.home_keyboard(FakeUpdate(lang))
             actual = [button.text for row in kb.inline_keyboard for button in row]
             expected = [
-                f"📈 {i18n.t(lang, 'price')}",
-                f"🧠 {i18n.t(lang, 'signal')}",
-                f"📊 {i18n.t(lang, 'analysis')}",
-                f"👑 {i18n.t(lang, 'account')}",
-                f"⚙️ {i18n.t(lang, 'settings')}",
-                f"🌐 {i18n.t(lang, 'language')}",
-                f"💎 {i18n.t(lang, 'access')}",
+                "MARKET PULSE",
+                "NEURAL STRIKES",
+                "STRUCTURE MAP",
                 f"🏠 {i18n.t(lang, 'menu')}",
                 f"👨‍💼 {i18n.t(lang, 'account')}",
             ]
-            self.assertEqual(len(keys), len(expected))
             self.assertEqual(actual, expected)
+            self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
 
     def test_package_labels_are_resolved_from_translation_table(self):
         for lang in ("en", "id", "vi", "hi", "zh"):
-            for days, key in ((7, "days7"), (14, "days14"), (30, "days30")):
+            for key in ("days7", "days14", "days30"):
                 self.assertEqual(i18n.t(lang, key), i18n.t(lang, key))
 
     def test_premium_visuals_has_no_legacy_hardcoded_ui_labels(self):
