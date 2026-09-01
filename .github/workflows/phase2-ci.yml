@@ -28,11 +28,19 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Apply Group 3.3 canonical UI contract
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message != 'Group 3.3: finalize canonical UI'
         run: |
           python - <<'PY'
           from pathlib import Path
+          import os
           import re
+          import subprocess
+
+          if os.getenv('GITHUB_EVENT_NAME') != 'push' or os.getenv('GITHUB_REF') != 'refs/heads/main':
+              print('Group 3.3 migration is limited to pushes on main.')
+              raise SystemExit(0)
+          if subprocess.check_output(['git', 'log', '-1', '--pretty=%s'], text=True).strip() == 'Group 3.3: finalize canonical UI':
+              print('Group 3.3 source commit already finalized.')
+              raise SystemExit(0)
 
           root = Path('.')
           p = root / 'i18n.py'
@@ -44,18 +52,9 @@ jobs:
           if id_start < 0 or id_end < 0:
               raise SystemExit('i18n Indonesian block not found')
           block = s[id_start:id_end]
-          if '"active":' in block:
-              block = re.sub(r'"active":"[^"]*"', '"active":"aktif"', block, count=1)
-          else:
-              block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","active":"aktif",', 1)
-          if '"inactive":' in block:
-              block = re.sub(r'"inactive":"[^"]*"', '"inactive":"nonaktif"', block, count=1)
-          else:
-              block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","inactive":"nonaktif",', 1)
-          if '"loading":' in block:
-              block = re.sub(r'"loading":"[^"]*"', '"loading":"Memuat..."', block, count=1)
-          else:
-              block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","loading":"Memuat...",', 1)
+          block = re.sub(r'"active":"[^"]*"', '"active":"aktif"', block, count=1) if '"active":' in block else block
+          block = re.sub(r'"inactive":"[^"]*"', '"inactive":"nonaktif"', block, count=1) if '"inactive":' in block else block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","inactive":"nonaktif",', 1)
+          block = re.sub(r'"loading":"[^"]*"', '"loading":"Memuat..."', block, count=1) if '"loading":' in block else block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","loading":"Memuat...",', 1)
           s = s[:id_start] + block + s[id_end:]
           p.write_text(s, encoding='utf-8')
 
@@ -110,8 +109,9 @@ jobs:
           print('GROUP 3.3 FINAL CONTRACT AUDIT: PASS')
           PY
       - name: Commit Group 3.3 canonical UI
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message != 'Group 3.3: finalize canonical UI'
         run: |
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then exit 0; fi
+          if [ "$(git log -1 --pretty=%s)" = "Group 3.3: finalize canonical UI" ]; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add main.py i18n.py tests/test_ui_regressions.py
