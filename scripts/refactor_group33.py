@@ -28,7 +28,7 @@ async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, ed
     body = re.sub(r"<[^>]+>", "", text)
     body = html.unescape(body).strip()
     body = body.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━─'))
-    canonical = f"{render_header(user, lang)}\n<pre>{render_terminal_box(body)}</pre>" if user else f"<pre>{render_terminal_box(body)}</pre>"
+    canonical = f"{render_header(user, lang)}\\n<pre>{render_terminal_box(body)}</pre>" if user else f"<pre>{render_terminal_box(body)}</pre>"
     if query and edit:
         try:
             await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
