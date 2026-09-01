@@ -255,9 +255,35 @@ async def render_renew(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if user is None:
+        return
     lang = _lang(update)
-    await _present(update, _screen(update, f"[ OPERATOR HUB ]\n{t(lang, 'history')}", f">> {t(lang, 'history')}"), _keyboard(update))
-
+    active = _is_active(update)
+    rows = ["[ OPERATOR HUB ]"]
+    try:
+        orders = whop_storage.recent_orders_for(user.id, 5)
+    except Exception:
+        orders = []
+    if orders:
+        for order in orders:
+            order_id = _esc(str(order.get("id", "—"))[:20])
+            status = _esc(str(order.get("status", "—")).upper())
+            days = order.get("duration_days", "—")
+            rows.append(f"TRANSACTION : <code>{order_id}</code>")
+            rows.append(f"STATUS      : {status}")
+            rows.append(f"DURATION    : {days} days")
+            rows.append("")
+    else:
+        rows.append("—")
+    keyboard_rows = []
+    if not active:
+        keyboard_rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])
+    await _present(
+        update,
+        _screen(update, "\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"),
+        _keyboard(update, keyboard_rows),
+    )
 
 async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang = _lang(update)
