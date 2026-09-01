@@ -2,6 +2,11 @@
 # Keep this list minimal; internal identifiers and callback values belong in code.
 NEURAL GOLD
 NEURAL GOLD v3.2
+MARKET PULSE
+NEURAL STRIKES
+STRUCTURE MAP
+OPERATOR HUB
+SYSTEM SYNC
 XAU/USD
 XAUUSD
 BUY
