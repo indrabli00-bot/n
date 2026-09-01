@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
@@ -27,84 +27,6 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Apply Group 3.3 canonical render flow
-        if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, 'Group 3.3: finalize canonical UI implementation') }}
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('main.py')
-          s = p.read_text(encoding='utf-8')
-          if 'Canonical customer rendering: Header -> Terminal -> Context.' in s:
-              raise SystemExit(0)
-          if 'import asyncio\n' not in s:
-              s = s.replace('import html\n', 'import asyncio\nimport html\n', 1)
-          s = s.replace(
-              'await api_handler.get_cached_or_fresh_price(user.id)',
-              'await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)'
-          )
-          start = s.find('async def _present(')
-          end = s.find('async def start_command', start)
-          if start < 0 or end < 0:
-              raise SystemExit(f'_present boundaries missing: {start}, {end}')
-          present = '''async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
-              """Canonical customer rendering: Header -> Terminal -> Context."""
-              query = update.callback_query
-              user = update.effective_user
-              lang = _lang(update)
-              plain = html.unescape(re.sub(r"<[^>]+>", "", text))
-              is_home = "OPERATOR CONSOLE" in plain
-
-              def clean_terminal(value: str) -> str:
-                  value = re.sub(r"(?im)^\\s*NEURAL GOLD(?: v3\\.2)?[^\\n]*$", "", value)
-                  value = re.sub(r"(?im)^\\s*\\[ ?\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} UTC ?\\]\\s*$", "", value)
-                  value = re.sub(r"(?im)^\\s*OPERATOR\\s*:\\s*.*$", "", value)
-                  value = re.sub(r"(?im)^\\s*STATUS\\s*:\\s*.*$", "", value)
-                  value = value.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━'))
-                  return '\\n'.join(line.rstrip() for line in value.split('\\n')).strip()
-
-              if user and is_home:
-                  active, _ = auth.verify_token(user.id)
-                  access_line = "GRANTED. WELCOME, OPERATOR." if active else "PENDING // CLEARANCE REQUIRED"
-                  terminal_body = "\\n".join([
-                      "[ SYSTEM ]: INITIALIZING...",
-                      "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...",
-                      f"[ ACCESS ]: {access_line}",
-                  ])
-                  context_line = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
-              else:
-                  pre_match = re.search(r"<pre>(.*?)</pre>", text, flags=re.S | re.I)
-                  terminal_body = clean_terminal(pre_match.group(1) if pre_match else plain)
-                  context_matches = re.findall(r"(?m)^\\s*>>[^\\n]*", plain)
-                  context_line = context_matches[0].strip() if context_matches else ""
-                  context_line = re.sub(r"\\s*//\\s*\\[?\\s*\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} UTC\\s*\\]?", "", context_line).strip()
-
-              if not terminal_body:
-                  terminal_body = t(lang, 'ready')
-              canonical = f"{render_header(user, lang)}\\n\\n<pre>{render_terminal_box(terminal_body, 40)}</pre>" if user else f"<pre>{render_terminal_box(terminal_body, 40)}</pre>"
-              if context_line:
-                  canonical += f"\\n\\n{context_line}"
-
-              if query and edit:
-                  try:
-                      await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
-                      return
-                  except BadRequest as exc:
-                      if 'not modified' in str(exc).lower():
-                          return
-                  except Exception as exc:
-                      logger.debug('Could not edit callback message: %s', exc)
-              try:
-                  if query and query.message:
-                      await query.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
-                      return
-              except Exception as exc:
-                  logger.debug('Callback reply fallback failed: %s', exc)
-              if update.message:
-                  await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
-
-          s = s[:start] + present + s[end:]
-          p.write_text(s, encoding='utf-8')
-          PY
       - name: Compile Python sources
         run: python -m compileall -q .
       - name: Static UI hardcode guard
@@ -115,12 +37,3 @@ jobs:
           python -m pytest -q
       - name: Full unittest regression
         run: python -m unittest discover -s tests -p "test_*.py" -v
-      - name: Commit Group 3.3 canonical implementation
-        if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, 'Group 3.3: finalize canonical UI implementation') }}
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if git diff --quiet -- main.py; then exit 0; fi
-          git add main.py
-          git commit -m 'Group 3.3: finalize canonical UI implementation'
-          git push origin main
