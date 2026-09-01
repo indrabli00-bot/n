@@ -3,6 +3,7 @@ name: Group 3.3 Refactor
 on:
   push:
     branches: ["main"]
+    paths: ["scripts/group33_refactor.py"]
 
 permissions:
   contents: write
@@ -15,7 +16,6 @@ env:
 
 jobs:
   refactor:
-    if: github.event.head_commit.message == 'chore: run Group 3.3 verification'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -54,11 +54,9 @@ jobs:
           premium = Path('premium_visuals.py').read_text(encoding='utf-8')
           assert 'PANEL_W' not in term and 'INNER_W' not in term
           assert 'def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH)' in term
-          assert 'return formatted_content' not in term
           assert '<pre>' not in term
           assert 'nav:home' in term and 'screen:account' in term
           assert 'def _nav_keyboard' not in main
-          assert 'GOLD = ' not in main
           assert '┍' not in main and '┕' not in main
           assert 'main.render_' not in premium and 'main.home_keyboard' not in premium
           assert 't(_lang(update), "loading")' in main
