@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/finalize-group-33.yml'
       - 'scripts/align_group33_ui.py'
+      - 'scripts/guard_group33.py'
 permissions:
   contents: write
 jobs:
