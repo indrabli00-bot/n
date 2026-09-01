@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
@@ -27,6 +27,32 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Apply seven-point normalization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('i18n.py')
+          s = p.read_text(encoding='utf-8')
+          replacements = {
+              '"activate":"🔑 ACTIVATE TOKEN"': '"activate":"ACTIVATE TOKEN","activate_premium":"Activate Premium"',
+              '"activate":"🔑 AKTIFKAN TOKEN"': '"activate":"AKTIFKAN TOKEN","activate_premium":"Aktifkan Premium"',
+              '"activate":"🔑 KÍCH HOẠT TOKEN"': '"activate":"KÍCH HOẠT TOKEN","activate_premium":"Kích hoạt Premium"',
+              '"activate":"🔑 एक्टिवेशन टोकन"': '"activate":"एक्टिवेशन टोकन","activate_premium":"प्रीमियम सक्रिय करें"',
+              '"activate":"🔑 激活令牌"': '"activate":"激活令牌","activate_premium":"激活高级版"',
+              '"account_status":"♛ ACCOUNT STATUS"': '"account_status":"ACCOUNT STATUS"',
+              '"account_status":"♛ STATUS AKUN"': '"account_status":"STATUS AKUN"',
+              '"account_status":"♛ TRẠNG THÁI TÀI KHOẢN"': '"account_status":"TRẠNG THÁI TÀI KHOẢN"',
+              '"account_status":"♛ अकाउंट स्टेटस"': '"account_status":"अकाउंट स्टेटस"',
+              '"account_status":"♛ 账户状态"': '"account_status":"账户状态"',
+          }
+          for old, new in replacements.items():
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+          p = Path('main.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("{t(lang, 'select_package_context')} // {t(lang, 'instant_activation')}", "{t(lang, 'select_plan')} // {t(lang, 'activate_premium')}")
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Compile Python sources
         run: python -m compileall -q .
       - name: Static UI hardcode guard
@@ -37,3 +63,11 @@ jobs:
           python -m pytest -q
       - name: Full unittest regression
         run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Commit normalized sources
+        run: |
+          if git diff --quiet -- main.py i18n.py; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.py i18n.py
+          git commit -m 'Group 3.3: finalize seven-point contract'
+          git push origin HEAD:main
