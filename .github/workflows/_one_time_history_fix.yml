@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   fix:
-    if: github.event.head_commit.message == 'chore: run Group 3.3 history fix'
+    if: github.sha == '2e257b0033471323f862aae772f9453052ed4e82'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,8 +17,6 @@ jobs:
         with:
           fetch-depth: 2
       - name: Patch history screen and add regression coverage
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -42,22 +40,20 @@ jobs:
               'hi': 'अभी कोई लेन-देन नहीं है।',
               'zh': '暂无交易记录。',
           }
-          marker = '"history":"'
-          pos = 0
           for lang, value in values.items():
               if lang == 'en':
                   pattern = r'(\"history\":\"[^\"]*\")'
-                  replacement = lambda m: m.group(1) + f',\"history_empty\":\"{value}\"'
-                  s, n = re.subn(pattern, replacement, s, count=1)
+                  s = re.sub(pattern, lambda m: m.group(1) + f',\"history_empty\":\"{value}\"', s, count=1)
               else:
                   locale = re.search(rf'T\[\"{re.escape(lang)}\"\]\s*=\s*\{{', s)
                   if not locale:
-                      continue
+                      raise SystemExit(f'locale {lang} not found')
                   tail = s[locale.end():]
                   pattern = r'(\"history\":\"[^\"]*\")'
                   changed, n = re.subn(pattern, lambda m: m.group(1) + f',\"history_empty\":\"{value}\"', tail, count=1)
-                  if n:
-                      s = s[:locale.end()] + changed
+                  if n != 1:
+                      raise SystemExit(f'history key for {lang} not found')
+                  s = s[:locale.end()] + changed
           p.write_text(s, encoding='utf-8')
           PY
 
