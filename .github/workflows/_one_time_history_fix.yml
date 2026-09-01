@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   fix:
-    if: github.sha == '2e257b0033471323f862aae772f9453052ed4e82'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,24 +32,16 @@ jobs:
 
           p = Path('i18n.py')
           s = p.read_text(encoding='utf-8')
-          values = {
-              'en': 'No transactions yet.',
-              'id': 'Belum ada transaksi.',
-              'vi': 'Chưa có giao dịch.',
-              'hi': 'अभी कोई लेन-देन नहीं है।',
-              'zh': '暂无交易记录。',
-          }
+          values = {'en': 'No transactions yet.', 'id': 'Belum ada transaksi.', 'vi': 'Chưa có giao dịch.', 'hi': 'अभी कोई लेन-देन नहीं है।', 'zh': '暂无交易记录。'}
           for lang, value in values.items():
               if lang == 'en':
-                  pattern = r'(\"history\":\"[^\"]*\")'
-                  s = re.sub(pattern, lambda m: m.group(1) + f',\"history_empty\":\"{value}\"', s, count=1)
+                  s, n = re.subn(r'(\"history\":\"[^\"]*\")', lambda m: m.group(1) + f',\"history_empty\":\"{value}\"', s, count=1)
               else:
                   locale = re.search(rf'T\[\"{re.escape(lang)}\"\]\s*=\s*\{{', s)
                   if not locale:
                       raise SystemExit(f'locale {lang} not found')
                   tail = s[locale.end():]
-                  pattern = r'(\"history\":\"[^\"]*\")'
-                  changed, n = re.subn(pattern, lambda m: m.group(1) + f',\"history_empty\":\"{value}\"', tail, count=1)
+                  changed, n = re.subn(r'(\"history\":\"[^\"]*\")', lambda m: m.group(1) + f',\"history_empty\":\"{value}\"', tail, count=1)
                   if n != 1:
                       raise SystemExit(f'history key for {lang} not found')
                   s = s[:locale.end()] + changed
