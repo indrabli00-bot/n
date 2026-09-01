@@ -247,7 +247,7 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def render_activate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang = _lang(update)
     terminal = "\n".join(["[ ACCESS & PACKAGE ]", f"🟢 {t(lang, 'days7')}", f"🟡 {t(lang, 'days14')}", f"🔵 {t(lang, 'days30')}"])
-    await _present(update, _screen(update, terminal, f">> {t(lang, 'select_package_context')} // {t(lang, 'instant_activation')}"), access_keyboard(update))
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'select_plan')} // {t(lang, 'activate_premium')}"), access_keyboard(update))
 
 
 async def render_renew(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
