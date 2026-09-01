@@ -11,7 +11,6 @@ env:
   WHOP_WEBHOOK_SECRET: "whsec_cGhhc2UyLXRlc3Qtc2VjcmV0"
 jobs:
   migrate:
-    if: ${{ !contains(github.event.head_commit.message, 'Group 3.3: finalize canonical UI implementation') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,13 +26,12 @@ jobs:
           import re
           p = Path('main.py')
           s = p.read_text(encoding='utf-8')
-          if 'asyncio' not in s.split('\n', 30):
+          if 'import asyncio\n' not in s:
               s = s.replace('import html\n', 'import asyncio\nimport html\n', 1)
-
-          for old in (
+          s = s.replace(
               'await api_handler.get_cached_or_fresh_price(user.id)',
-          ):
-              s = s.replace(old, "await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)")
+              'await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)'
+          )
 
           present = '''async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
               """Canonical customer rendering: Header -> Terminal -> Context."""
@@ -70,7 +68,6 @@ jobs:
               if context_line:
                   canonical += f"\\n\\n{context_line}"
 
-              # Final keyboard row is enforced by _keyboard()/render_persistent_nav().
               if query and edit:
                   try:
                       await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
@@ -89,16 +86,23 @@ jobs:
               if update.message:
                   await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
 
-          s, n = re.subn(r'async def _present\\(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True\\) -> None:\\n.*?(?=async def start_command)', lambda m: present, s, count=1, flags=re.S)
+          '''
+          s, n = re.subn(
+              r'async def _present\\(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True\\) -> None:\\n.*?(?=async def start_command)',
+              lambda m: present,
+              s,
+              count=1,
+              flags=re.S,
+          )
           if n != 1:
               raise SystemExit('_present target not found')
           p.write_text(s, encoding='utf-8')
 
           t = Path('tests/test_ui_regressions.py')
           ts = t.read_text(encoding='utf-8')
-          ts = ts.replace('self.assertEqual(txt.count("OPERATOR CONSOLE"), 1)', 'self.assertEqual(txt.count("OPERATOR CONSOLE"), 0)')
+          ts = ts.replace('self.assertEqual(txt.count("OPERATOR CONSOLE"), 1)', 'self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)')
           ts = ts.replace('self.assertIn("OPERATOR CONSOLE", txt)', 'self.assertIn("NEURAL GOLD v3.2", txt)')
-          ts = ts.replace('self.assertIn("GRANTED. WELCOME, OPERATOR.", txt)', 'self.assertIn("GRANTED. WELCOME, OPERATOR.", txt)')
+          ts = ts.replace('self.assertIn("<pre>", txt)', 'self.assertIn("<pre>", txt)\n        self.assertNotIn("OPERATOR :", txt[txt.index("<pre>"):txt.index("</pre>")])\n        self.assertNotIn("STATUS   :", txt[txt.index("<pre>"):txt.index("</pre>")])')
           t.write_text(ts, encoding='utf-8')
           PY
       - name: Compile
