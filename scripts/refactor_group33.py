@@ -12,11 +12,31 @@ def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
 
 
 def _keyboard''').strip(), s, flags=re.S)
-s = s.replace("if not auth.verify_token(update.effective_user.id)[0]:", "if update.effective_user and not auth.verify_token(update.effective_user.id)[0]:")
+
+home = dedent('''
+def home_keyboard(update: Update) -> InlineKeyboardMarkup:
+    lang = _lang(update)
+    if update.effective_user and not auth.verify_token(update.effective_user.id)[0]:
+        import phase2_bot
+        telegram_id = update.effective_user.id
+        return _keyboard(update, [
+            [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
+            [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
+            [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
+        ])
+    return _keyboard(update, [
+        [InlineKeyboardButton(f"📈 {t(lang, 'price')}", callback_data='screen:price'), InlineKeyboardButton(f"🧠 {t(lang, 'signal')}", callback_data='screen:signal')],
+        [InlineKeyboardButton(f"📊 {t(lang, 'analysis')}", callback_data='screen:analysis'), InlineKeyboardButton(f"👑 {t(lang, 'account')}", callback_data='screen:account')],
+        [InlineKeyboardButton(f"⚙️ {t(lang, 'settings')}", callback_data='screen:settings'), InlineKeyboardButton(f"🌐 {t(lang, 'language')}", callback_data='settings:language')],
+        [InlineKeyboardButton(f"💎 {t(lang, 'access')}", callback_data='screen:access')],
+    ])
+''').strip()
+s = re.sub(r'def home_keyboard\(update: Update\) -> InlineKeyboardMarkup:.*?\n\ndef price_keyboard', home + '\n\ndef price_keyboard', s, flags=re.S)
 s = s.replace("InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home')", "")
 s = s.replace("await _present(update, text, InlineKeyboardMarkup(rows))", "await _present(update, text, _keyboard(update, rows))")
 s = s.replace("await _present(update, text, _nav_keyboard(update))", "await _present(update, text, _keyboard(update))")
 s = s.replace("from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp", "from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, render_header, render_terminal_box, stamp")
+
 marker = 'async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:'
 start = s.index(marker)
 end = s.index(chr(10) + 'async def start_command', start)
