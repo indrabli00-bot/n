@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt && python -m pip install pytest
       - name: Patch History render
         shell: bash
         run: |
@@ -30,7 +30,7 @@ jobs:
           end = s.find('\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:', start)
           if start < 0 or end < 0:
               raise SystemExit('render_history block not found')
-          new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:\n    user = update.effective_user\n    if user is None:\n        return\n    lang = _lang(update)\n    active = _is_active(update)\n    rows = ["[ OPERATOR HUB ]"]\n    try:\n        from sqlalchemy import text\n        with database.engine.begin() as conn:\n            orders = conn.execute(\n                text("SELECT id, status, duration_days FROM whop_orders WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5"),\n                {"tid": user.id},\n            ).mappings().all()\n    except Exception:\n        orders = []\n    if orders:\n        for order in orders:\n            rows.append(f"TRANSACTION : <code>{_esc(str(order.get('id', '—'))[:20])}</code>")\n            rows.append(f"STATUS      : {_esc(str(order.get('status', '—')).upper())}")\n            rows.append(f"DURATION    : {_esc(str(order.get('duration_days', '—')))} days")\n            rows.append("")\n    else:\n        rows.append("—")\n    keyboard_rows = []\n    if not active:\n        keyboard_rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])\n    await _present(update, _screen(update, "\\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"), _keyboard(update, keyboard_rows))\n'''
+          new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:\n    user = update.effective_user\n    if user is None:\n        return\n    lang = _lang(update)\n    active = _is_active(update)\n    rows = ["[ OPERATOR HUB ]"]\n    try:\n        from sqlalchemy import text\n        with database.engine.begin() as conn:\n            orders = conn.execute(\n                text("SELECT id, status, duration_days FROM whop_orders WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5"),\n                {"tid": user.id},\n            ).mappings().all()\n    except Exception:\n        orders = []\n    if orders:\n        for order in orders:\n            rows.append(f"TRANSACTION : <code>{_esc(str(order.get('id', '—'))[:20])}</code>")\n            rows.append(f"STATUS      : {_esc(str(order.get('status', '—')).upper())}")\n            rows.append(f"DURATION    : {_esc(str(order.get('duration_days', '—')))} days")\n            rows.append("")\n    else:\n        rows.append("—")\n    keyboard_rows = []\n    if not active:\n        keyboard_rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])\n    await _present(\n        update,\n        _screen(update, "\\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"),\n        _keyboard(update, keyboard_rows),\n    )\n'''
           p.write_text(s[:start] + new + s[end:], encoding='utf-8')
           PY
       - name: Validate
