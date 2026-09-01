@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -21,6 +22,16 @@ class Group33NavigationTests(unittest.TestCase):
         self.assertEqual([b.callback_data for b in row], ["nav:home", "screen:account"])
         self.assertFalse(any(b.callback_data == "nav:back" for r in keyboard.inline_keyboard for b in r))
 
+    def test_all_main_keyboard_helpers_append_persistent_nav(self):
+        source = Path("main.py").read_text()
+        names = ["home_keyboard", "price_keyboard", "signal_keyboard", "account_keyboard", "access_keyboard", "analysis_keyboard", "settings_keyboard", "language_keyboard", "support_keyboard"]
+        for name in names:
+            start = source.index(f"def {name}(")
+            end = source.find("\ndef ", start + 1)
+            if end == -1:
+                end = source.find("\nasync def ", start + 1)
+            segment = source[start:end]
+            self.assertIn("return _keyboard(", segment, name)
 
     def test_persistent_navigation_shape(self):
         keyboard = ts.render_persistent_nav("en")
