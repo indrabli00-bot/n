@@ -1,0 +1,27 @@
+name: Fix Group 3.3 runner
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix refactor script
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/group33-refactor.yml')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("end = s.index('\\\\nasync def start_command', start)", "end = s.index('\\nasync def start_command', start)")
+          p.write_text(s, encoding='utf-8')
+          PY
+          rm -f .github/workflows/fix33-runner.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/group33-refactor.yml .github/workflows/fix33-runner.yml
+          git commit -m 'fix: correct Group 3.3 workflow source matching'
+          git push origin main
