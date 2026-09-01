@@ -1,5 +1,5 @@
 # Group 3.3 validation alignment helper.
-# Trigger canonical validation after workflow path update.
+# Final trigger for canonical ownership validation.
 from pathlib import Path
 
 p = Path('main.py')
