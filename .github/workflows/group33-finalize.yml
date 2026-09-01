@@ -1,0 +1,56 @@
+name: Group 3.3 Finalize
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "i18n.py"
+      - "main.py"
+      - ".github/workflows/group33-finalize.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.head_commit.message != 'Group 3.3: finalize localization and activation UI'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Apply final Group 3.3 localization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('i18n.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('"activate":"🔑 ACTIVATE TOKEN"', '"activate":"ACTIVATE TOKEN","activate_premium":"Activate Premium"')
+          s = s.replace('"activate":"🔑 AKTIFKAN TOKEN"', '"activate":"AKTIFKAN TOKEN","activate_premium":"Aktifkan Premium"')
+          s = s.replace('"activate":"🔑 KÍCH HOẠT TOKEN"', '"activate":"KÍCH HOẠT TOKEN","activate_premium":"Kích hoạt Premium"')
+          s = s.replace('"activate":"🔑 एक्टिवेशन टोकन"', '"activate":"एक्टिवेशन टोकन","activate_premium":"प्रीमियम सक्रिय करें"')
+          s = s.replace('"activate":"🔑 激活令牌"', '"activate":"激活令牌","activate_premium":"激活高级版"')
+          for old, new in [
+              ('"account_status":"♛ ACCOUNT STATUS"', '"account_status":"ACCOUNT STATUS"'),
+              ('"account_status":"♛ STATUS AKUN"', '"account_status":"STATUS AKUN"'),
+              ('"account_status":"♛ TRẠNG THÁI TÀI KHOẢN"', '"account_status":"TRẠNG THÁI TÀI KHOẢN"'),
+              ('"account_status":"♛ अकाउंट स्टेटस"', '"account_status":"अकाउंट स्टेटस"'),
+              ('"account_status":"♛ 账户状态"', '"account_status":"账户状态"'),
+          ]:
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('main.py')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("{t(lang, 'select_package_context')} // {t(lang, 'instant_activation')}", "{t(lang, 'select_plan')} // {t(lang, 'activate_premium')}")
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Compile
+        run: python -m compileall -q .
+      - name: Commit finalized Group 3.3
+        run: |
+          rm -f .github/workflows/group33-finalize.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Group 3.3: finalize localization and activation UI'
+          git push origin main
