@@ -1,5 +1,5 @@
 # Group 3.3 validation alignment helper.
-# Final validation trigger after precise Back-button guard.
+# Trigger final run after precise ownership guard update.
 from pathlib import Path
 
 p = Path('main.py')
