@@ -1,3 +1,4 @@
+# Group 3.3 precise ownership guard.
 from pathlib import Path
 
 main = Path('main.py').read_text()
