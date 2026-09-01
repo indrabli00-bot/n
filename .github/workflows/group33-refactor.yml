@@ -18,13 +18,13 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
+          from textwrap import dedent
 
-          terminal = '''"""NEURAL GOLD v3.2 — terminal UI helpers."""
+          terminal = dedent('''
+          """NEURAL GOLD v3.2 — terminal UI helpers."""
           from __future__ import annotations
-
           from datetime import datetime, timezone
           from typing import Iterable
-
           from config import NEURAL_VERSION
           from i18n import t
 
@@ -63,7 +63,6 @@ jobs:
               return lines or [""]
 
           def render_header(user, lang: str) -> str:
-              """Render the canonical 3-line operator header."""
               import auth
               operator_name = user.first_name or "OPERATOR"
               active, _ = auth.verify_token(user.id)
@@ -71,18 +70,13 @@ jobs:
               return f"{stamp()}\\nOPERATOR : {operator_name}\\nSTATUS   : {status_text}\\n"
 
           def render_terminal_box(content: str, max_width: int | None = None) -> str:
-              """Return preformatted terminal content with no decorative border.
-
-              Telegram does not expose the recipient viewport width to bots, so the
-              default preserves natural line width. Callers may supply an explicit
-              maximum when an application-specific limit is required.
-              """
+              """Return preformatted terminal content with no decorative border."""
               if max_width is None:
                   return content.strip("\\n")
-              normalized: list[str] = []
-              for raw_line in content.split("\\n"):
-                  normalized.extend(word_wrap(raw_line, max_width))
-              return "\\n".join(normalized)
+              return "\\n".join(
+                  part for raw_line in content.split("\\n")
+                  for part in word_wrap(raw_line, max_width)
+              )
 
           def render_persistent_nav(lang: str):
               from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -105,7 +99,11 @@ jobs:
               return "" if max_width is None else ch * max_width
 
           def boot(granted: bool) -> str:
-              seq = [line("SYSTEM", f"INITIALIZING NEURAL GOLD {NEURAL_VERSION}..."), line("STATUS", "SYNCING GLOBAL BULLION RESERVES..."), line("ACCESS", "GRANTED. WELCOME, OPERATOR.") if granted else line("ACCESS", "PENDING // CLEARANCE REQUIRED")]
+              seq = [
+                  line("SYSTEM", f"INITIALIZING NEURAL GOLD {NEURAL_VERSION}..."),
+                  line("STATUS", "SYNCING GLOBAL BULLION RESERVES..."),
+                  line("ACCESS", "GRANTED. WELCOME, OPERATOR.") if granted else line("ACCESS", "PENDING // CLEARANCE REQUIRED"),
+              ]
               return "\\n".join(seq)
 
           def intel_header() -> str:
@@ -131,26 +129,34 @@ jobs:
 
           def pay_guide(lang: str, tag: str = "PAYMENT") -> str:
               return _guide(lang, ("select_plan", "use_package_buttons", "paid", "verified_auto", "activate"), tag)
-          '''
+          ''').lstrip()
           Path('terminal_style.py').write_text(terminal, encoding='utf-8')
 
           p = Path('main.py')
           s = p.read_text(encoding='utf-8')
           s = re.sub(r'\ndef _nav_keyboard\(.*?\n(?=def |async def )', '\n', s, flags=re.S)
-          s = re.sub(r'def _persistent_nav\(update: Update\) -> list\[InlineKeyboardButton\]:.*?\n\n\ndef _keyboard', '''def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
-              lang = _lang(update)
-              return list(ts.render_persistent_nav(lang).inline_keyboard[0])
+          s = re.sub(
+              r'def _persistent_nav\(update: Update\) -> list\[InlineKeyboardButton\]:.*?\n\n\ndef _keyboard',
+              dedent('''
+              def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
+                  lang = _lang(update)
+                  return list(ts.render_persistent_nav(lang).inline_keyboard[0])
 
 
-          def _keyboard''', s, flags=re.S)
+              def _keyboard''').rstrip(),
+              s,
+              flags=re.S,
+          )
           s = s.replace("InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home')", "")
           s = s.replace("await _present(update, text, InlineKeyboardMarkup(rows))", "await _present(update, text, _keyboard(update, rows))")
           s = s.replace("await _present(update, text, _nav_keyboard(update))", "await _present(update, text, _keyboard(update))")
           s = s.replace("from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp", "from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, render_header, render_terminal_box, stamp")
+
           marker = 'async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:'
           start = s.index(marker)
-          end = s.index('\nasync def start_command', start)
-          present = '''async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
+          end = s.index('\\nasync def start_command', start)
+          present = dedent('''
+          async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
               """Present every screen using Header -> Terminal -> optional Action -> Nav."""
               query = update.callback_query
               user = update.effective_user
@@ -176,20 +182,64 @@ jobs:
                   logger.debug('Callback reply fallback failed: %s', exc)
               if update.message:
                   await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
-          '''
+          ''').lstrip()
           s = s[:start] + present + s[end:]
           p.write_text(s, encoding='utf-8')
 
-          Path('tests/test_terminal_style.py').write_text('''import base64\nimport os\nimport sys\nimport unittest\nsys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\nos.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")\nos.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")\nos.environ.setdefault("GOLDAPI_API_KEY", "phase0-test-goldapi-key")\nos.environ.setdefault("WHOP_WEBHOOK_SECRET", "whsec_phase2-test-secret")\nimport i18n\nimport terminal_style as ts\n\nclass TerminalStyleTests(unittest.TestCase):\n    def test_boot_sequence_matches_spec_a(self):\n        self.assertIn("[ SYSTEM ]: INITIALIZING NEURAL GOLD", ts.boot(True))\n        self.assertIn("[ ACCESS ]: GRANTED. WELCOME, OPERATOR.", ts.boot(True))\n        self.assertIn("[ ACCESS ]: PENDING // CLEARANCE REQUIRED", ts.boot(False))\n    def test_intel_report_frame_matches_spec_c(self):\n        self.assertEqual(ts.intel_header(), "[ !!! INTELLIGENCE REPORT : XAUUSD !!! ]")\n        self.assertIn("Restricted Data. For Operator Eyes Only.", ts.intel_footer())\n    def test_error_codes_match_spec_d(self):\n        self.assertIn("[ ERROR ]: DATA_GAP_DETECTED", ts.data_gap())\n        self.assertIn("[ FAULT ]: LINK_TIMEOUT // RETRYING...", ts.link_timeout())\n    def test_terminal_has_no_decorative_border(self):\n        content = "[ SYSTEM ]: TEST"\n        self.assertEqual(ts.render_terminal_box(content), content)\n        self.assertNotIn("┍", ts.render_terminal_box(content))\n        self.assertNotIn("┙", ts.render_terminal_box(content))\n        self.assertNotIn("│", ts.render_terminal_box(content))\n    def test_word_wrap_explicit_max_width(self):\n        result = ts.word_wrap("A" * 40, 34)\n        self.assertEqual([len(x) for x in result], [34, 6])\n        self.assertEqual("".join(result), "A" * 40)\n    def test_terminal_wrap_respects_explicit_max_width(self):\n        rows = ts.render_terminal_box("A" * 40, max_width=34).splitlines()\n        self.assertEqual([len(x) for x in rows], [34, 6])\n    def test_unicode_character_count(self):\n        self.assertEqual(len("🟢"), 1)\n        self.assertEqual(len("中文"), 2)\n    def test_pay_guide_localized_for_all_languages(self):\n        for lang in ("en", "vi", "hi", "id", "zh"):\n            for key in ("select_plan", "use_package_buttons", "paid", "verified_auto", "activate"):\n                self.assertIn(i18n.t(lang, key), ts.pay_guide(lang))\n    def test_stamp_shape(self):\n        self.assertTrue(ts.stamp().startswith("[ ") and ts.stamp().endswith(" UTC ]"))\n\nif __name__ == "__main__": unittest.main()\n''', encoding='utf-8')
+          Path('tests/test_terminal_style.py').write_text(dedent('''
+          import os, sys, unittest
+          sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+          os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+          os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")
+          os.environ.setdefault("GOLDAPI_API_KEY", "phase0-test-goldapi-key")
+          os.environ.setdefault("WHOP_WEBHOOK_SECRET", "whsec_phase2-test-secret")
+          import i18n
+          import terminal_style as ts
+
+          class TerminalStyleTests(unittest.TestCase):
+              def test_boot_sequence_matches_spec_a(self):
+                  self.assertIn("[ SYSTEM ]: INITIALIZING NEURAL GOLD", ts.boot(True))
+                  self.assertIn("[ ACCESS ]: GRANTED. WELCOME, OPERATOR.", ts.boot(True))
+                  self.assertIn("[ ACCESS ]: PENDING // CLEARANCE REQUIRED", ts.boot(False))
+              def test_intel_report_frame_matches_spec_c(self):
+                  self.assertEqual(ts.intel_header(), "[ !!! INTELLIGENCE REPORT : XAUUSD !!! ]")
+                  self.assertIn("Restricted Data. For Operator Eyes Only.", ts.intel_footer())
+              def test_error_codes_match_spec_d(self):
+                  self.assertIn("[ ERROR ]: DATA_GAP_DETECTED", ts.data_gap())
+                  self.assertIn("[ FAULT ]: LINK_TIMEOUT // RETRYING...", ts.link_timeout())
+              def test_terminal_has_no_decorative_border(self):
+                  content = "[ SYSTEM ]: TEST"
+                  self.assertEqual(ts.render_terminal_box(content), content)
+                  self.assertNotIn("┍", content)
+                  self.assertNotIn("┙", content)
+                  self.assertNotIn("│", content)
+              def test_word_wrap_explicit_max_width(self):
+                  result = ts.word_wrap("A" * 40, 34)
+                  self.assertEqual([len(x) for x in result], [34, 6])
+                  self.assertEqual("".join(result), "A" * 40)
+              def test_terminal_wrap_respects_explicit_max_width(self):
+                  self.assertEqual([len(x) for x in ts.render_terminal_box("A" * 40, 34).splitlines()], [34, 6])
+              def test_unicode_character_count(self):
+                  self.assertEqual(len("🟢"), 1)
+                  self.assertEqual(len("中文"), 2)
+              def test_pay_guide_localized_for_all_languages(self):
+                  for lang in ("en", "vi", "hi", "id", "zh"):
+                      for key in ("select_plan", "use_package_buttons", "paid", "verified_auto", "activate"):
+                          self.assertIn(i18n.t(lang, key), ts.pay_guide(lang))
+              def test_stamp_shape(self):
+                  self.assertTrue(ts.stamp().startswith("[ ") and ts.stamp().endswith(" UTC ]"))
+          if __name__ == "__main__": unittest.main()
+          ''').lstrip(), encoding='utf-8')
 
           n = Path('tests/test_group33_navigation.py').read_text(encoding='utf-8')
-          n = re.sub(r'    def test_canonical_box_has_fixed_geometry\(self\):.*?\n    def test_long_token_is_fully_preserved', '''    def test_terminal_box_has_no_fixed_geometry(self):
-              box = ts.render_terminal_box("A" * 40)
-              self.assertEqual(box, "A" * 40)
-              self.assertNotIn("┍", box)
-              self.assertNotIn("│", box)
+          n = re.sub(r'    def test_canonical_box_has_fixed_geometry\(self\):.*?\n    def test_long_token_is_fully_preserved', dedent('''
+              def test_terminal_box_has_no_fixed_geometry(self):
+                  box = ts.render_terminal_box("A" * 40)
+                  self.assertEqual(box, "A" * 40)
+                  self.assertNotIn("┍", box)
+                  self.assertNotIn("│", box)
 
-          def test_long_token_is_fully_preserved''', n, flags=re.S)
+              def test_long_token_is_fully_preserved''').lstrip(), n, flags=re.S)
           Path('tests/test_group33_navigation.py').write_text(n, encoding='utf-8')
           PY
       - name: Compile
