@@ -1,4 +1,4 @@
-"""UI regression tests for the canonical Group 3.3 render contract."""
+"""Group 3.3 canonical Telegram UI regression tests."""
 import asyncio
 import base64
 import os
@@ -11,10 +11,10 @@ os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")
 os.environ.setdefault("GOLDAPI_API_KEY", "test-key")
 os.environ["WHOP_WEBHOOK_SECRET"] = "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("=")
 
-import database  # noqa: E402
+import database
 database.init_db()
-import auth  # noqa: E402
-import main as mm  # noqa: E402
+import auth
+import main as mm
 
 
 class M:
@@ -38,51 +38,73 @@ class Q:
 
 
 class U:
-    def __init__(self, m, q):
+    def __init__(self, m=None, q=None, language_code="en"):
         self.message = m
         self.callback_query = q
         u = type("EU", (), {})()
         u.id = 42
         u.first_name = "Tester"
         u.username = "tester"
-        u.language_code = "en"
+        u.language_code = language_code
         self.effective_user = u
 
 
 class UIRegressionTests(unittest.TestCase):
-    def test_home_header_rendered_once_and_no_fixed_divider(self):
+    def test_active_home_has_canonical_header_and_clean_terminal(self):
         auth.verify_token = lambda uid: (True, "ok")
         m = M()
         asyncio.run(mm.render_home(U(m, Q(m)), None))
-        txt = m.sent[0][0]
-        self.assertEqual(txt.count("OPERATOR CONSOLE"), 1)
+        txt, kb = m.sent[0]
+        self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)
+        self.assertEqual(txt.count("OPERATOR :"), 1)
+        self.assertEqual(txt.count("STATUS   :"), 1)
+        self.assertIn("ACTIVE 🟢", txt)
         self.assertIn("<pre>", txt)
-        dividers = [line for line in txt.split("\n") if set(line) == {"━"}]
-        self.assertFalse(dividers)
+        pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]
+        self.assertNotIn("NEURAL GOLD", pre)
+        self.assertNotIn("OPERATOR :", pre)
+        self.assertNotIn("STATUS   :", pre)
+        self.assertNotIn("[ 20", pre)
+        self.assertNotIn("┍", pre)
+        self.assertNotIn("┕", pre)
+        self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
 
-    def test_start_inactive_lands_on_console_with_pending_status(self):
+    def test_inactive_home_has_pending_terminal_and_packages(self):
         auth.verify_token = lambda uid: (False, "token_invalid")
         m = M("/start")
         asyncio.run(mm.start_command(U(m, None), None))
         txt, kb = m.sent[-1]
-        self.assertIn("OPERATOR CONSOLE", txt)
-        self.assertIn("PENDING // CLEARANCE", txt)
-        self.assertIn("REQUIRED", txt)
-        self.assertNotIn("GRANTED. WELCOME, OPERATOR.", txt)
-        self.assertIn("<pre>", txt)
-        button_texts = [b.text for row in kb.inline_keyboard for b in row]
-        self.assertTrue(any("7 HARI" in x or "7 DAYS" in x for x in button_texts))
-        self.assertTrue(any("14 HARI" in x or "14 DAYS" in x for x in button_texts))
-        self.assertTrue(any("30 HARI" in x or "30 DAYS" in x for x in button_texts))
+        self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)
+        self.assertIn("Inactive 🔴", txt)
+        self.assertIn("PENDING // CLEARANCE REQUIRED", txt)
+        pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]
+        self.assertNotIn("NEURAL GOLD", pre)
+        buttons = [b.text for row in kb.inline_keyboard for b in row]
+        self.assertTrue(any("7 HARI" in x or "7 DAYS" in x for x in buttons))
+        self.assertTrue(any("14 HARI" in x or "14 DAYS" in x for x in buttons))
+        self.assertTrue(any("30 HARI" in x or "30 DAYS" in x for x in buttons))
         self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
 
-    def test_start_active_lands_on_console(self):
-        auth.verify_token = lambda uid: (True, "ok")
-        m = M("/start")
-        asyncio.run(mm.start_command(U(m, None), None))
-        txt = m.sent[-1][0]
-        self.assertIn("OPERATOR CONSOLE", txt)
-        self.assertIn("GRANTED. WELCOME, OPERATOR.", txt)
+    def test_all_customer_keyboards_end_with_persistent_nav(self):
+        for helper_name in (
+            "home_keyboard", "price_keyboard", "signal_keyboard",
+            "account_keyboard", "access_keyboard", "analysis_keyboard",
+            "settings_keyboard", "language_keyboard", "support_keyboard",
+        ):
+            helper = getattr(mm, helper_name)
+            kb = helper(U(M()))
+            self.assertEqual(
+                [b.callback_data for b in kb.inline_keyboard[-1]],
+                ["nav:home", "screen:account"],
+                helper_name,
+            )
+
+    def test_terminal_box_uses_explicit_max_width_without_fixed_geometry(self):
+        from terminal_style import render_terminal_box
+        out = render_terminal_box("A" * 55, 40)
+        self.assertEqual([len(x) for x in out.split("\n")], [40, 15])
+        self.assertNotIn("┍", out)
+        self.assertNotIn("┕", out)
 
 
 if __name__ == "__main__":
