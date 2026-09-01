@@ -14,4 +14,9 @@ if '"renew":"Renew"' not in s:
 if '"renew":"Perpanjang"' not in s:
     s = s.replace('"history":"Riwayat Transaksi",', '"history":"Riwayat Transaksi","renew":"Perpanjang",', 1)
 i18n.write_text(s, encoding='utf-8')
-print('GROUP 3.3 GUARD FIX APPLIED')
+
+term = root / 'terminal_style.py'
+s = term.read_text(encoding='utf-8')
+s = s.replace('line("SYSTEM", "INITIALIZING...")', 'line("SYSTEM", f"INITIALIZING NEURAL GOLD {NEURAL_VERSION}...")')
+term.write_text(s, encoding='utf-8')
+print('GROUP 3.3 COMPATIBILITY FIX APPLIED')
