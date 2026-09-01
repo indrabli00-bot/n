@@ -1,47 +1,60 @@
 # NEURAL GOLD — Premium Telegram UI
 
-## UX changes
+## Group 3.3 canonical render contract
 
-The bot is now designed as a product dashboard instead of a command list.
+The customer-facing UI follows a single rendering order:
 
-### Home
-- Premium dark / gold visual language.
-- Product positioning appears immediately after `/start`.
-- Access state is visible at a glance.
-- Primary modules are available as inline buttons.
+1. Header — UTC timestamp, operator, and status.
+2. Terminal — responsive preformatted content with a configured maximum width.
+3. Action text — optional plain-text guidance.
+4. Inline keyboard — contextual actions followed by persistent `[ 🏠 Menu ] [ 👨‍💼 Akun ]` navigation.
 
-### Navigation
-Every secondary screen ends with:
-- `← BACK` on the left.
-- `⌂ MENU` on the right.
+The `main.py` caller owns the Telegram `<pre>` tag. `terminal_style.render_terminal_box()` returns terminal content only and uses the canonical `max_width=40` default.
 
-Users no longer need to remember `/price`, `/signal`, or `/status`.
+## Home
 
-### Price
-Tap **PRICE** → live XAU/USD data is fetched and displayed.
-The screen includes mid price, bid/ask, high/low, movement, source, and update timestamp.
+- `NEURAL GOLD v3.2 // OPERATOR CONSOLE` appears in the terminal content.
+- Operator and status appear once in the header.
+- Active users receive the canonical module buttons: `MARKET PULSE`, `NEURAL STRIKES`, and `STRUCTURE MAP`.
+- Inactive users receive the package checkout buttons and activation/payment actions.
+- Persistent navigation remains the final keyboard row.
 
-### Signal
-Tap **SIGNAL** → the existing neural signal engine is presented as a compact premium execution card.
+## Navigation
 
-### Analysis
-Tap **ANALYSIS** → the existing technical/market engine is presented as a structured market-intelligence card.
+Every customer screen ends with the persistent navigation row:
+- `[ 🏠 Menu ]`
+- `[ 👨‍💼 Akun ]`
 
-### Account
-Tap **ACCOUNT** → real-time subscription status, expiry, Telegram ID and username.
+Contextual screens use their own action buttons above this row. The legacy Back navigation is no longer part of the customer keyboard contract.
 
-### Access
-Tap **ACCESS / PLANS** → membership overview and secure token activation.
-The activation flow is click-first: tap **ACTIVATE TOKEN**, then enter the single-use token in the Telegram reply field. The `/token` command remains as a fallback.
+## Price
 
-### Bot profile
-At startup, `post_init()` updates Telegram's bot profile metadata:
-- Short description: AI market intelligence for XAU/USD.
-- Full description: premium product positioning.
-- Minimal command menu: `/start`, `/token`, `/status`, `/help`.
+Tap `MARKET PULSE` → live XAU/USD data is fetched and presented inside the canonical terminal area.
 
-This removes the feeling that the bot is a raw developer utility.
+## Signal
 
-## Important Telegram limitation
+Tap `NEURAL STRIKES` → the existing neural signal engine is presented inside the canonical terminal area.
 
-The Telegram client can display `No messages here yet...` before the user presses **START**. That placeholder is controlled by Telegram and cannot be replaced by bot code. After START, the bot immediately sends the new premium dashboard.
+## Analysis
+
+Tap `STRUCTURE MAP` → the existing technical/market engine is presented inside the canonical terminal area.
+
+## Account
+
+Tap `Akun` → real-time subscription status and account information are presented using the canonical header and terminal structure.
+
+## Access
+
+Access and checkout flows remain intact. Existing package checkout and token activation/payment handlers remain unchanged by the Group 3.3 visual refactor.
+
+## Render ownership
+
+`premium_visuals.py` remains a compatibility module and does not override `main.py` render functions. `terminal_style.py` owns reusable terminal/header/navigation helpers; `main.py` owns message composition and `<pre>` placement.
+
+## Verification
+
+Group 3.3 finalization was validated in GitHub Actions before commit with:
+- Python compile: PASS
+- Pytest: 54 PASS
+- Full unittest regression: 48 PASS
+- Static UI hardcode guard: PASS — 0 violations
