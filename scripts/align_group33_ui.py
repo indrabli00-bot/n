@@ -1,3 +1,4 @@
+# Group 3.3 validation alignment helper.
 from pathlib import Path
 
 p = Path('main.py')
