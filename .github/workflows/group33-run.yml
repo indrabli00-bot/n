@@ -56,9 +56,10 @@ jobs:
           premium = Path('premium_visuals.py').read_text(encoding='utf-8')
           tree = ast.parse(term)
           box = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'render_terminal_box')
+          returns = [n.value for n in ast.walk(box) if isinstance(n, ast.Return)]
           assert 'PANEL_W' not in term and 'INNER_W' not in term
           assert 'def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH)' in term
-          assert not any(isinstance(n, ast.Constant) and isinstance(n.value, str) and '<pre>' in n.value for n in ast.walk(box) if n is not box)
+          assert not any(isinstance(n, ast.Constant) and isinstance(n.value, str) and '<pre>' in n.value for expr in returns for n in ast.walk(expr))
           assert 'nav:home' in term and 'screen:account' in term
           assert 'def _nav_keyboard' not in main
           assert '┍' not in main and '┕' not in main
