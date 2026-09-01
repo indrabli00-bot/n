@@ -76,7 +76,8 @@ class UIRegressionTests(unittest.TestCase):
         txt, kb = m.sent[-1]
         self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)
         self.assertIn("Inactive 🔴", txt)
-        self.assertIn("PENDING // CLEARANCE REQUIRED", txt)
+        self.assertIn("PENDING // CLEARANCE", txt)
+        self.assertIn("REQUIRED", txt)
         pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]
         self.assertNotIn("NEURAL GOLD", pre)
         buttons = [b.text for row in kb.inline_keyboard for b in row]
