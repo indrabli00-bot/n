@@ -1,0 +1,85 @@
+name: finalize-group-33
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/finalize-group-33.yml']
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply canonical refactor
+        run: python scripts/finalize_group33.py
+      - name: Remove runtime override hook
+        run: |
+          sed -i '/^import premium_visuals$/d' app.py
+          sed -i '/premium_visuals\.install()/d' app.py
+      - name: Align regression tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_ui_regressions.py')
+          lines = p.read_text().splitlines()
+          lines = [x for x in lines if 'import premium_visuals as pv' not in x and x.strip() != 'pv.install()']
+          lines = [x.replace('pv.render_home', 'mm.render_home') for x in lines]
+          lines = [x.replace('test_home_header_rendered_once_and_divider_28', 'test_home_header_rendered_once_and_divider_36') for x in lines]
+          lines = [x.replace('divider 28 char', 'divider 36 char').replace('len(dividers[0]) == 28', 'len(dividers[0]) == 36').replace('divider bukan 28', 'divider bukan 36') for x in lines]
+          if not any('import main as mm' in x for x in lines):
+              lines.insert(14, 'import main as mm  # noqa: E402')
+          p.write_text('\n'.join(lines) + '\n')
+          PY
+      - name: Add ownership regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tests/test_group33_navigation.py')
+          s = p.read_text()
+          if 'def test_main_keyboard_has_persistent_nav' not in s:
+              marker = 'class Group33NavigationTests(unittest.TestCase):'
+              addition = '''class Group33NavigationTests(unittest.TestCase):
+              def test_main_keyboard_has_persistent_nav(self):
+                  import main
+                  fake = type("U", (), {"effective_user": None})()
+                  keyboard = main.home_keyboard(fake)
+                  row = keyboard.inline_keyboard[-1]
+                  self.assertEqual([b.callback_data for b in row], ["nav:home", "screen:account"])
+                  self.assertFalse(any(b.callback_data == "nav:back" for r in keyboard.inline_keyboard for b in r))
+
+              '''
+              s = s.replace(marker, addition)
+              p.write_text(s)
+          PY
+      - name: Compile
+        run: python -m compileall -q .
+      - name: Full regression
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Ownership guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for path in ('main.py','premium_visuals.py','app.py'):
+              text = Path(path).read_text()
+              assert '_nav_keyboard' not in text, path
+              assert 'nav:back' not in text, path
+              assert 'main.render_' not in text, path
+          assert 'premium_visuals' not in Path('app.py').read_text()
+          print('GROUP 3.3 ownership guard: PASS')
+          PY
+      - name: Commit source changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.py app.py premium_visuals.py tests/test_ui_regressions.py tests/test_group33_navigation.py
+          git commit -m 'Group 3.3: finalize render ownership, persistent nav, and regression tests'
+          git push origin main
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/finalize-group-33.yml
+          git add .github/workflows/finalize-group-33.yml
+          git commit -m 'chore: remove temporary Group 3.3 fixer'
+          git push origin main
