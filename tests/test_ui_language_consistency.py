@@ -43,6 +43,7 @@ class UILanguageConsistencyTests(unittest.TestCase):
         self.main._lang = self.original_lang
 
     def test_home_keyboard_uses_selected_language_for_core_labels(self):
+        self.main.auth.verify_token = lambda uid: (True, "ok")
         keys = ["price", "signal", "analysis", "account", "settings", "language", "access", "menu", "account_persistent"]
         for lang in ("en", "id", "vi", "hi", "zh"):
             kb = self.main.home_keyboard(FakeUpdate(lang))

@@ -43,15 +43,11 @@ class Group33NavigationTests(unittest.TestCase):
         self.assertIn("🏠", row[0].text)
         self.assertIn("👨‍💼", row[1].text)
 
-    def test_canonical_box_has_fixed_geometry(self):
+    def test_terminal_box_has_no_fixed_geometry(self):
         box = ts.render_terminal_box("A" * 40)
-        rows = box.splitlines()
-        self.assertTrue(rows)
-        self.assertTrue(all(len(row) == ts.PANEL_W for row in rows))
-        self.assertEqual(rows[0], "┍" + "━" * 34 + "┑")
-        self.assertEqual(rows[-1], "┕" + "━" * 34 + "┙")
-        self.assertEqual(len(rows[1]), 36)
-        self.assertEqual(len(rows[2]), 36)
+        self.assertEqual(box, "A" * 40)
+        self.assertNotIn("┍", box)
+        self.assertNotIn("│", box)
 
     def test_long_token_is_fully_preserved(self):
         token = "A" * 40

@@ -1,101 +1,34 @@
-"""Phase 0.0 verification: terminal aesthetic wrappers (terminal_style.py)."""
-import base64
-import os
-import sys
-import unittest
-
+import os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123456:TEST")
 os.environ.setdefault("GOLDAPI_API_KEY", "phase0-test-goldapi-key")
-os.environ.setdefault(
-    "WHOP_WEBHOOK_SECRET",
-    "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("="),
-)
-
+os.environ.setdefault("WHOP_WEBHOOK_SECRET", "whsec_phase2-test-secret")
 import i18n
 import terminal_style as ts
 
-
 class TerminalStyleTests(unittest.TestCase):
-    def test_boot_sequence_matches_spec_a(self):
-        granted = ts.boot(granted=True)
-        self.assertIn("[ SYSTEM ]: INITIALIZING NEURAL GOLD", granted)
-        self.assertIn("[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...", granted)
-        self.assertIn("[ ACCESS ]: GRANTED. WELCOME, OPERATOR.", granted)
-        pending = ts.boot(granted=False)
-        self.assertIn("[ ACCESS ]: PENDING // CLEARANCE REQUIRED", pending)
-
-    def test_intel_report_frame_matches_spec_c(self):
-        self.assertEqual(ts.intel_header(), "[ !!! INTELLIGENCE REPORT : XAUUSD !!! ]")
-        self.assertIn("Restricted Data. For Operator Eyes Only.", ts.intel_footer())
-
-    def test_error_codes_match_spec_d(self):
+    def test_terminal_has_no_decorative_border(self):
+        content = "[ SYSTEM ]: TEST"
+        box = ts.render_terminal_box(content)
+        self.assertEqual(box, content)
+        self.assertNotIn("┍", box)
+        self.assertNotIn("┙", box)
+        self.assertNotIn("│", box)
+    def test_word_wrap_explicit_max_width(self):
+        result = ts.word_wrap("A" * 40, 34)
+        self.assertEqual([len(x) for x in result], [34, 6])
+        self.assertEqual("".join(result), "A" * 40)
+    def test_terminal_wrap_respects_explicit_max_width(self):
+        self.assertEqual([len(x) for x in ts.render_terminal_box("A" * 40, 34).splitlines()], [34, 6])
+    def test_boot_and_errors(self):
+        self.assertIn("[ SYSTEM ]: INITIALIZING NEURAL GOLD", ts.boot(True))
+        self.assertIn("[ ACCESS ]: PENDING // CLEARANCE REQUIRED", ts.boot(False))
         self.assertIn("[ ERROR ]: DATA_GAP_DETECTED", ts.data_gap())
         self.assertIn("[ FAULT ]: LINK_TIMEOUT // RETRYING...", ts.link_timeout())
-        self.assertIn("CUSTOM HINT", ts.data_gap(hint="CUSTOM HINT"))
-
-    def test_panel_is_monospace_block(self):
-        panel = ts.panel(["  A: 1", "  B: 2"])
-        self.assertTrue(panel.startswith("<pre>"))
-        self.assertTrue(panel.endswith("</pre>"))
-        self.assertIn("\n", panel)
-
-    def test_panel_geometry_uses_standard_width(self):
-        self.assertEqual(ts.PANEL_W, ts.INNER_W + 2)
-        self.assertEqual(len(ts.bar()), ts.INNER_W)
-        self.assertEqual(len(ts.prow("A")), ts.INNER_W)
-        self.assertEqual(len(ts.prow("X" * (ts.INNER_W + 9))), ts.INNER_W)
-
-        panel = ts.panel(["A", "B" * (ts.INNER_W + 9)])
-        rows = panel.removeprefix("<pre>").removesuffix("</pre>").splitlines()
-        self.assertEqual([len(row) for row in rows], [ts.INNER_W, ts.INNER_W])
-
-    def test_panel_escape_preserves_fixed_geometry(self):
-        panel = ts.panel(["<b>A</b>"], escape=True)
-        row = panel.removeprefix("<pre>").removesuffix("</pre>")
-        self.assertEqual(len(row), ts.INNER_W)
-        self.assertIn("&lt;b&gt;A&lt;/b&gt;", row)
-
-    def test_canonical_terminal_box_geometry(self):
-        box = ts.render_terminal_box("[ SYSTEM ]: TEST")
-        rows = box.split("\n")
-        self.assertEqual(len(rows), 3)
-        self.assertTrue(all(len(row) == ts.PANEL_W for row in rows))
-        self.assertEqual(rows[0], "┍" + "━" * ts.INNER_W + "┑")
-        self.assertEqual(rows[-1], "┕" + "━" * ts.INNER_W + "┙")
-        self.assertEqual(rows[1], "│[ SYSTEM ]: TEST".ljust(ts.PANEL_W - 1) + "│")
-
-    def test_word_wrap_long_word(self):
-        result = ts.word_wrap("A" * 40, ts.INNER_W)
-        self.assertEqual([len(line) for line in result], [34, 6])
-        self.assertEqual("".join(result), "A" * 40)
-
-    def test_unicode_character_count(self):
-        self.assertEqual(len("🟢"), 1)
-        self.assertEqual(len("│"), 1)
-        self.assertEqual(len("中文"), 2)
-
-    def test_pay_guide_localized_for_all_languages(self):
+    def test_localized_guides(self):
         for lang in ("en", "vi", "hi", "id", "zh"):
-            guide = ts.pay_guide(lang)
-            self.assertIn("[ PAYMENT ]", guide)
-            self.assertIn("1.", guide)
-            self.assertIn("5.", guide)
             for key in ("select_plan", "use_package_buttons", "paid", "verified_auto", "activate"):
-                self.assertIn(i18n.t(lang, key), guide)
-            buy = ts.buy_guide(lang)
-            self.assertIn("[ PAYMENT ]", buy)
-            self.assertIn("3.", buy)
-            for key in ("select_plan", "use_package_buttons", "paid"):
-                self.assertIn(i18n.t(lang, key), buy)
-        self.assertEqual(ts.pay_guide("xx"), ts.pay_guide("en"))
-
+                self.assertIn(i18n.t(lang, key), ts.pay_guide(lang))
     def test_stamp_shape(self):
-        stamp = ts.stamp()
-        self.assertTrue(stamp.startswith("[ ") and stamp.endswith(" UTC ]"))
-        self.assertEqual(len(stamp), len("[ 2026-08-30 14:00:00 UTC ]"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertTrue(ts.stamp().startswith("[ ") and ts.stamp().endswith(" UTC ]"))

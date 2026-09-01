@@ -51,15 +51,16 @@ class U:
 
 
 class UIRegressionTests(unittest.TestCase):
-    def test_home_header_rendered_once_and_divider_36(self):
+    def test_home_header_rendered_once_and_no_fixed_divider(self):
         """Konsol aktif: header OPERATOR CONSOLE tepat 1x + divider 36 char."""
         auth.verify_token = lambda uid: (True, "ok")
         m = M()
         asyncio.run(mm.render_home(U(m, Q(m)), None))
         txt = m.sent[0][0]
         self.assertEqual(txt.count("OPERATOR CONSOLE"), 1, "header terduplikasi (implicit-concat bug)")
+        self.assertIn("<pre>", txt)
         dividers = [line for line in txt.split("\n") if set(line) == {"━"}]
-        self.assertTrue(dividers and len(dividers[0]) == 36, f"divider bukan 36: {dividers}")
+        self.assertFalse(dividers)
 
     def test_start_inactive_lands_on_console_with_pending_status(self):
         """/start user nonaktif -> konsol 8 tombol dengan status PENDING yang jujur (bukan GRANTED palsu)."""
@@ -70,8 +71,12 @@ class UIRegressionTests(unittest.TestCase):
         self.assertIn("OPERATOR CONSOLE", txt)
         self.assertIn("PENDING // CLEARANCE REQUIRED", txt)
         self.assertNotIn("GRANTED. WELCOME, OPERATOR.", txt)
-        self.assertNotIn("SELECT PACKAGE", txt)
-        self.assertEqual(len(kb.inline_keyboard), 5)  # menu 8 tombol
+        self.assertIn("<pre>", txt)
+        button_texts = [b.text for row in kb.inline_keyboard for b in row]
+        self.assertTrue(any("7 HARI" in x or "7 DAYS" in x for x in button_texts))
+        self.assertTrue(any("14 HARI" in x or "14 DAYS" in x for x in button_texts))
+        self.assertTrue(any("30 HARI" in x or "30 DAYS" in x for x in button_texts))
+        self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
 
     def test_start_active_lands_on_console(self):
         """/start user aktif -> konsol operator."""

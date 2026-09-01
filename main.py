@@ -21,7 +21,7 @@ import database
 import terminal_style as ts
 import whop_storage
 from i18n import LANGUAGES, detect_language, language_buttons, t
-from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp
+from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, render_header, render_terminal_box, stamp
 from config import ADMIN_TELEGRAM_ID, LOG_FILE, LOG_FORMAT, LOG_LEVEL, NEURAL_VERSION, SIGNAL_VALIDITY_MINUTES, TELEGRAM_BOT_TOKEN
 logger = logging.getLogger(__name__)
 GOLD = '◆'
@@ -58,10 +58,7 @@ def _safe_user_name(user) -> str:
 
 def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
     lang = _lang(update)
-    return [
-        InlineKeyboardButton(f"🏠 {t(lang, 'menu')}", callback_data='nav:home'),
-        InlineKeyboardButton(f"👨‍💼 {t(lang, 'account')}", callback_data='screen:account'),
-    ]
+    return list(ts.render_persistent_nav(lang).inline_keyboard[0])
 
 
 def _keyboard(update: Update, rows=None) -> InlineKeyboardMarkup:
@@ -72,13 +69,20 @@ def _keyboard(update: Update, rows=None) -> InlineKeyboardMarkup:
 
 def home_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
+    if update.effective_user and not auth.verify_token(update.effective_user.id)[0]:
+        import phase2_bot
+        telegram_id = update.effective_user.id
+        return _keyboard(update, [
+            [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
+            [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
+            [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
+        ])
     return _keyboard(update, [
         [InlineKeyboardButton(f"📈 {t(lang, 'price')}", callback_data='screen:price'), InlineKeyboardButton(f"🧠 {t(lang, 'signal')}", callback_data='screen:signal')],
         [InlineKeyboardButton(f"📊 {t(lang, 'analysis')}", callback_data='screen:analysis'), InlineKeyboardButton(f"👑 {t(lang, 'account')}", callback_data='screen:account')],
         [InlineKeyboardButton(f"⚙️ {t(lang, 'settings')}", callback_data='screen:settings'), InlineKeyboardButton(f"🌐 {t(lang, 'language')}", callback_data='settings:language')],
         [InlineKeyboardButton(f"💎 {t(lang, 'access')}", callback_data='screen:access')],
     ])
-
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
@@ -274,14 +278,14 @@ async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """Console submenu (operator fix): Language / Help / Uplink / System Sync live here."""
     lang = _lang(update)
     text = f'<b>[ CONSOLE ]: MENU // NEURAL GOLD {NEURAL_VERSION}</b>\n{DIVIDER}\n\n<pre>{_esc(t(lang, 'menu_body'))}</pre>'
-    rows = [[InlineKeyboardButton(f'❓ {t(lang, 'help')}', callback_data='screen:help')], [InlineKeyboardButton(f'🌐 {t(lang, 'support')}', callback_data='screen:support')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home')]]
-    await _present(update, text, InlineKeyboardMarkup(rows))
+    rows = [[InlineKeyboardButton(f'❓ {t(lang, 'help')}', callback_data='screen:help')], [InlineKeyboardButton(f'🌐 {t(lang, 'support')}', callback_data='screen:support')], []]
+    await _present(update, text, _keyboard(update, rows))
 
 async def render_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Operator manual: how to use the bot (audit fix: menu-requested help)."""
     lang = _lang(update)
     text = f'<b>[ MANUAL ]: HOW TO USE // NEURAL GOLD {NEURAL_VERSION}</b>\n{DIVIDER}\n\n<pre>{_esc(t(lang, 'help_body'))}</pre>'
-    await _present(update, text, _nav_keyboard(update))
+    await _present(update, text, _keyboard(update))
 
 async def render_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = f'<b>[ SYSTEM ]: {t(_lang(update), 'settings_title')}</b>\n<i>{t(_lang(update), 'interface_control')} // {stamp()}</i>\n{DIVIDER}\n\n<b>{t(_lang(update), 'display_profile')}</b>\n◈ {t(_lang(update), 'premium_dark')}\n◆ {t(_lang(update), 'gold_nav')}\n⌁ {t(_lang(update), 'compact_cards')}\n\n<b>{t(_lang(update), 'region')}</b>\nTimezone  <code>Asia/Jakarta</code>\n{t(_lang(update), 'language_value')}  <code>{_lang(update).upper()}</code>\n\n>> [ CORE ]: {t(_lang(update), 'core_settings')}'
@@ -306,14 +310,17 @@ async def _answer_loading(update: Update, text: str) -> None:
             pass
 
 async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
-    """Operator rule: clicking a button changes ONLY that screen.
-    Edit in place; if the edit fails, deliver the new screen as a fresh
-    message so a click never silently does nothing."""
+    """Enforce Header -> Terminal -> optional Action, with persistent navigation."""
     query = update.callback_query
-    localized = text
+    user = update.effective_user
+    lang = _lang(update)
+    body = re.sub(r"<[^>]+>", "", text)
+    body = html.unescape(body).strip()
+    body = body.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━─'))
+    canonical = f"{render_header(user, lang)}\n<pre>{render_terminal_box(body)}</pre>" if user else f"<pre>{render_terminal_box(body)}</pre>"
     if query and edit:
         try:
-            await query.edit_message_text(text=localized, parse_mode='HTML', reply_markup=keyboard)
+            await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
             return
         except BadRequest as exc:
             if 'not modified' in str(exc).lower():
@@ -323,12 +330,12 @@ async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, ed
             logger.debug('Could not edit callback message: %s', exc)
     try:
         if query and query.message:
-            await query.message.reply_text(localized, parse_mode='HTML', reply_markup=keyboard)
+            await query.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
             return
     except Exception as exc:
         logger.debug('Callback reply fallback failed: %s', exc)
     if update.message:
-        await update.message.reply_text(localized, parse_mode='HTML', reply_markup=keyboard)
+        await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
