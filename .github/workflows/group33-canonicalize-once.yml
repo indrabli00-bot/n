@@ -33,14 +33,17 @@ jobs:
               'await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)'
           )
 
+          start = s.find('async def _present(')
+          end = s.find('async def start_command', start)
+          if start < 0 or end < 0:
+              raise SystemExit(f'_present boundaries missing: start={start} end={end}')
           present = '''async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
               """Canonical customer rendering: Header -> Terminal -> Context."""
               query = update.callback_query
               user = update.effective_user
               lang = _lang(update)
-
               plain = html.unescape(re.sub(r"<[^>]+>", "", text))
-              is_home = "OPERATOR CONSOLE" in plain or "NEURAL GOLD v3.2 // OPERATOR CONSOLE" in plain
+              is_home = "OPERATOR CONSOLE" in plain
 
               def clean_terminal(value: str) -> str:
                   value = re.sub(r"(?im)^\\s*NEURAL GOLD(?: v3\\.2)?[^\\n]*$", "", value)
@@ -57,13 +60,12 @@ jobs:
               else:
                   pre_match = re.search(r"<pre>(.*?)</pre>", text, flags=re.S | re.I)
                   terminal_body = clean_terminal(pre_match.group(1) if pre_match else plain)
-                  context_match = re.findall(r"(?m)^\\s*>>[^\\n]*", plain)
-                  context_line = context_match[0].strip() if context_match else ""
+                  context_matches = re.findall(r"(?m)^\\s*>>[^\\n]*", plain)
+                  context_line = context_matches[0].strip() if context_matches else ""
                   context_line = re.sub(r"\\s*//\\s*\\[?\\s*\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} UTC\\s*\\]?", "", context_line).strip()
 
               if not terminal_body:
                   terminal_body = t(lang, 'ready')
-
               canonical = f"{render_header(user, lang)}\\n\\n<pre>{render_terminal_box(terminal_body, 40)}</pre>" if user else f"<pre>{render_terminal_box(terminal_body, 40)}</pre>"
               if context_line:
                   canonical += f"\\n\\n{context_line}"
@@ -87,23 +89,8 @@ jobs:
                   await update.message.reply_text(canonical, parse_mode='HTML', reply_markup=keyboard)
 
           '''
-          s, n = re.subn(
-              r'async def _present\\(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True\\) -> None:\\n.*?(?=async def start_command)',
-              lambda m: present,
-              s,
-              count=1,
-              flags=re.S,
-          )
-          if n != 1:
-              raise SystemExit('_present target not found')
+          s = s[:start] + present + s[end:]
           p.write_text(s, encoding='utf-8')
-
-          t = Path('tests/test_ui_regressions.py')
-          ts = t.read_text(encoding='utf-8')
-          ts = ts.replace('self.assertEqual(txt.count("OPERATOR CONSOLE"), 1)', 'self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)')
-          ts = ts.replace('self.assertIn("OPERATOR CONSOLE", txt)', 'self.assertIn("NEURAL GOLD v3.2", txt)')
-          ts = ts.replace('self.assertIn("<pre>", txt)', 'self.assertIn("<pre>", txt)\n        self.assertNotIn("OPERATOR :", txt[txt.index("<pre>"):txt.index("</pre>")])\n        self.assertNotIn("STATUS   :", txt[txt.index("<pre>"):txt.index("</pre>")])')
-          t.write_text(ts, encoding='utf-8')
           PY
       - name: Compile
         run: python -m compileall -q .
@@ -113,6 +100,22 @@ jobs:
         run: python -m pytest -q
       - name: Full unittest
         run: python -m unittest discover -s tests -p 'test_*.py' -q
+      - name: Canonical runtime contract checks
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          s = Path('main.py').read_text(encoding='utf-8')
+          assert '_nav_keyboard' not in s
+          assert 'nav:back' not in s
+          assert 'render_terminal_box' in s
+          assert '<pre>' in s
+          assert 'timeout=10.0' in s
+          tree = ast.parse(s)
+          for name in ('render_home','render_price','render_signal','render_analysis','render_account','render_access','render_menu','render_help','render_settings','render_support'):
+              assert any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name for n in ast.walk(tree)), name
+          print('CANONICAL RUNTIME CONTRACT: PASS')
+          PY
       - name: Commit canonical implementation
         run: |
           git config user.name 'github-actions[bot]'
