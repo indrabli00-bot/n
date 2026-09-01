@@ -22,11 +22,10 @@ import database
 import terminal_style as ts
 import whop_storage
 from i18n import LANGUAGES, detect_language, language_buttons, t
-from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, render_header, render_terminal_box, stamp
+from terminal_style import render_header, render_terminal_box
 from config import ADMIN_TELEGRAM_ID, LOG_FILE, LOG_FORMAT, LOG_LEVEL, NEURAL_VERSION, SIGNAL_VALIDITY_MINUTES, TELEGRAM_BOT_TOKEN
 logger = logging.getLogger(__name__)
-GOLD = '◆'
-DIVIDER = '━' * 36
+DIVIDER = '─' * 40
 ALPHA_TERMS = {'rsi': 'TEMPORAL MOMENTUM RESONANCE', 'macd': 'DUAL-PHASE CONVERGENCE MANIFOLD', 'ema': 'SYNAPTIC TREND ALIGNMENT', 'stoch': 'PROBABILISTIC FLUX', 'atr': 'VOLATILITY VARIANCE', 'bollinger': 'QUANTUM ENVELOPE POSITION'}
 SHORT_DESCRIPTION = 'NEURAL GOLD v3.2 — PREMIUM XAU/USD TERMINAL INTELLIGENCE.'
 BOT_DESCRIPTION = 'NEURAL GOLD v3.2 — PREMIUM XAU/USD MARKET INTELLIGENCE\n\n━━━━━━━━━━━━━━━━━━━━\n\n[ SYSTEM ]: XAU/USD INTELLIGENCE TERMINAL ONLINE.\n\nLive pricing · Neural signal reads · Market structure · Private operator access.\n\n>> PRESS /start TO INITIALIZE.'
@@ -57,9 +56,13 @@ def _format_timestamp(value: str) -> str:
 def _safe_user_name(user) -> str:
     return _esc(user.first_name or 'OPERATOR')
 
+def _is_active(update: Update) -> bool:
+    user = update.effective_user
+    return bool(user and auth.verify_token(user.id)[0])
+
+
 def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
-    lang = _lang(update)
-    return list(ts.render_persistent_nav(lang).inline_keyboard[0])
+    return list(ts.render_persistent_nav(_lang(update)).inline_keyboard[0])
 
 
 def _keyboard(update: Update, rows=None) -> InlineKeyboardMarkup:
@@ -68,72 +71,67 @@ def _keyboard(update: Update, rows=None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+def _module_button(label: str, callback: str, locked: bool = False) -> InlineKeyboardButton:
+    return InlineKeyboardButton(f"🔒 {label}" if locked else label, callback_data=callback)
+
+
 def home_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    if update.effective_user and not auth.verify_token(update.effective_user.id)[0]:
-        import phase2_bot
-        telegram_id = update.effective_user.id
-        return _keyboard(update, [
-            [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
-            [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
-            [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
-        ])
-    return _keyboard(update, [
-        [InlineKeyboardButton("MARKET PULSE", callback_data='screen:price'), InlineKeyboardButton("NEURAL STRIKES", callback_data='screen:signal')],
-        [InlineKeyboardButton("STRUCTURE MAP", callback_data='screen:analysis')],
-    ])
+    if _is_active(update):
+        rows = [[InlineKeyboardButton("MARKET PULSE", callback_data="screen:price"), InlineKeyboardButton("NEURAL STRIKES", callback_data="screen:signal")], [InlineKeyboardButton("STRUCTURE MAP", callback_data="screen:analysis")]]
+    else:
+        rows = [[_module_button("MARKET PULSE", "screen:price", True), _module_button("NEURAL STRIKES", "screen:signal", True)], [_module_button("STRUCTURE MAP", "screen:analysis", True)], [InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")]]
+    return _keyboard(update, rows)
+
+
+def _module_nav(update: Update, screen: str) -> list[list[InlineKeyboardButton]]:
+    return [[InlineKeyboardButton(t(_lang(update), "refresh"), callback_data=f"refresh:{screen}")], [InlineKeyboardButton("MARKET PULSE", callback_data="screen:price"), InlineKeyboardButton("NEURAL STRIKES", callback_data="screen:signal")], [InlineKeyboardButton("STRUCTURE MAP", callback_data="screen:analysis")]]
+
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
-    lang = _lang(update)
-    if auth.verify_token(update.effective_user.id)[0]:
-        return _keyboard(update, [[InlineKeyboardButton(t(lang, 'refresh'), callback_data='screen:price')]])
-    import phase2_bot
-    telegram_id = update.effective_user.id
-    return _keyboard(update, [
-        [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
-        [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
-        [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
-    ])
+    rows = _module_nav(update, "price") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")]]
+    return _keyboard(update, rows)
 
 
 def signal_keyboard(update: Update) -> InlineKeyboardMarkup:
-    lang = _lang(update)
-    return _keyboard(update, [[InlineKeyboardButton(t(lang, 'new_signal'), callback_data='screen:signal')]])
+    rows = _module_nav(update, "signal") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")]]
+    return _keyboard(update, rows)
+
+
+def analysis_keyboard(update: Update) -> InlineKeyboardMarkup:
+    rows = _module_nav(update, "analysis") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")]]
+    return _keyboard(update, rows)
 
 
 def account_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return _keyboard(update, [[InlineKeyboardButton(t(lang, 'refresh_status'), callback_data='screen:account')]])
+    if _is_active(update):
+        rows = [[InlineKeyboardButton(f"🔄 {t(lang, 'renew')}", callback_data="screen:renew")], [InlineKeyboardButton(f"📊 {t(lang, 'history')}", callback_data="screen:history")]]
+    else:
+        rows = [[InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")]]
+    return _keyboard(update, rows)
 
 
 def access_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
     import phase2_bot
-    telegram_id = update.effective_user.id
-    return _keyboard(update, [
-        [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
-        [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
-        [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
-        [InlineKeyboardButton(t(lang, 'activate'), callback_data='action:token'), InlineKeyboardButton(t(lang, 'paid'), callback_data='paid:menu')],
-    ])
-
-
-def analysis_keyboard(update: Update) -> InlineKeyboardMarkup:
-    lang = _lang(update)
-    return _keyboard(update, [[InlineKeyboardButton(t(lang, 'refresh_analysis'), callback_data='screen:analysis')]])
+    tid = update.effective_user.id
+    rows = [[InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(tid, 7)), InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(tid, 14))], [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(tid, 30))]]
+    return _keyboard(update, rows)
 
 
 def settings_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return _keyboard(update, [
-        [InlineKeyboardButton(t(lang, 'interface'), callback_data='noop')],
-        [InlineKeyboardButton(t(lang, 'timezone'), callback_data='noop')],
-        [InlineKeyboardButton(t(lang, 'data_mode'), callback_data='noop')],
-    ])
+    rows = [[InlineKeyboardButton(t(lang, "interface"), callback_data="noop")], [InlineKeyboardButton(t(lang, "timezone"), callback_data="noop")], [InlineKeyboardButton(t(lang, "data_mode"), callback_data="noop")]]
+    if not _is_active(update):
+        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")])
+    return _keyboard(update, rows)
 
 
 def language_keyboard(update: Update) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(label, callback_data=data)] for label, data in language_buttons()]
+    if not _is_active(update):
+        rows.append([InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")])
     return _keyboard(update, rows)
 
 
@@ -141,167 +139,161 @@ def support_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
     rows = []
     if ADMIN_TELEGRAM_ID:
-        rows.append([InlineKeyboardButton(t(lang, 'contact'), url=f'tg://user?id={ADMIN_TELEGRAM_ID}')])
+        rows.append([InlineKeyboardButton(t(lang, "contact"), url=f"tg://user?id={ADMIN_TELEGRAM_ID}")])
+    if not _is_active(update):
+        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")])
     return _keyboard(update, rows)
 
-async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: bool=True) -> None:
-    user = update.effective_user
-    if user is None:
-        return
-    db_user = database.get_user_by_telegram_id(user.id)
-    active = False
-    if db_user:
-        active, _ = auth.verify_token(user.id)
+
+def _screen(update: Update, terminal: str, context_text: str | None = None) -> str:
     lang = _lang(update)
-    clearance = t(lang, 'premium_active') if active else '[ ACCESS ]: PENDING // CLEARANCE REQUIRED'
-    text = f'NEURAL GOLD v3.2 // OPERATOR CONSOLE\n{boot(granted=active)}\n<i>{stamp()}</i>\n{DIVIDER}\n\nOPERATOR: <b>{_safe_user_name(user)}</b>\nTELEGRAM_ID: <code>{user.id}</code>\nCLEARANCE: <b>{GOLD} ● {clearance}</b>\n\n<b>>> {t(lang, 'select_module')}</b>\n' + panel(['  01  PRICE     — MARKET PULSE', '  02  SIGNAL    — NEURAL STRIKES', '  03  ANALYSIS  — STRUCTURE MAP', '  04  ACCOUNT   — OPERATOR HUB', '  05  SETTINGS  — SYSTEM SYNC', '  06  SUPPORT   — UPLINK']) + '\n>> [ CORE ]: ALL MODULES UNLOCKED. AWAITING SELECTION.'
-    await _present(update, text, home_keyboard(update), edit=edit)
+    body = render_terminal_box(terminal, max_width=40)
+    text = f"{render_header(update.effective_user, lang)}\n\n<pre>{body}</pre>"
+    if context_text:
+        text += f"\n\n{context_text}"
+    return text
+
+
+def _error_screen(update: Update) -> str:
+    lang = _lang(update)
+    return _screen(update, "[ ERROR ]\nPermintaan timeout.\nServer tidak merespons.", f">> {t(lang, 'try_again')}")
+
+
+async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: bool = True) -> None:
+    if update.effective_user is None:
+        return
+    active = _is_active(update)
+    terminal = "\n".join(["[ SYSTEM ]: INITIALIZING...", "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...", "[ ACCESS ]: GRANTED // WELCOME OPERATOR" if active else "[ ACCESS ]: PENDING // CLEARANCE REQUIRED"])
+    await _present(update, _screen(update, terminal, f">> {t(_lang(update), 'select_module')}"), home_keyboard(update), edit=edit)
+
 
 async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if user is None:
         return
-    valid, _ = auth.verify_token(user.id)
-    if not valid:
-        await render_locked(update, 'price')
+    if not _is_active(update):
+        await render_locked(update, "price")
         return
-    await _answer_loading(update, '[ CORE ]: SYNCING XAU/USD FEED...')
     try:
+        await _answer_loading(update)
         data = await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)
-        bid = float(data['bid'])
-        ask = float(data['ask'])
-        mid = (bid + ask) / 2
-        change = float(data.get('change', 0))
-        pct = float(data.get('change_percent', 0))
-        change_mark = '+' if change >= 0 else ''
-        source = _esc(data.get('source', 'Live feed'))
-        raw_ts = str(data.get('timestamp', '—'))
-        timestamp = _format_timestamp(raw_ts)
-        move_icon = '📈' if change > 0 else '📉' if change < 0 else '⚡️'
-        status_label = '[STALE]' if data.get('stale') else '[LIVE]'
-        rows = ['  SYSTEM: MARKET_DATA_SATELLITE', f'  STATUS: {status_label}  FEED_TIME: {timestamp}', ts.bar(), '  SYMBOL      XAU/USD · GOLD SPOT', f'  PRICE       {_money(mid)} [STABLE]', f'  BID/ASK     {_money(bid)} / {_money(ask)}', ts.bar(), f'  HIGH  {_money(float(data['high']))}', f'  LOW   {_money(float(data['low']))}', f'  NET   {change_mark}{change:.2f} ({change_mark}{pct:.2f}%)', ts.bar(), f'  UPLINK: {source} // MODE: LIVE']
-        text = f'<b>[ ANALYSIS ]: {t(_lang(update), 'live_feed')} // XAU/USD {move_icon}</b>\n<pre>┍' + ts.bar('━') + '┑\n' + '\n'.join((ts.prow(r) for r in rows)) + '\n┕' + ts.bar('━') + f'┙</pre>\n>> [ CORE ]: FEED VERIFIED // {stamp()}\n<i>Market feed may vary slightly by venue.</i>'
-        await _present(update, text, price_keyboard(update))
-    except Exception as exc:
-        logger.exception('Premium price screen failed: %s', exc)
-        await _present(update, f'<b>[ FAULT ]: LINK_TIMEOUT // RETRYING...</b>\n\n<pre>┍━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑\n  STATUS: [OFFLINE]\n  [ ERROR ]: DATA_GAP_DETECTED\n  MARKET DATA UPLINK TEMPORARILY UNAVAILABLE\n┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙</pre>\n{t(_lang(update), 'please_refresh')}', price_keyboard(update))
+        bid = float(data["bid"]); ask = float(data["ask"]); mid = (bid + ask) / 2
+        terminal = "\n".join(["[ MARKET PULSE ]", f"PRICE  : {_money(mid)}", f"BID    : {_money(bid)}", f"ASK    : {_money(ask)}", f"HIGH   : {_money(float(data['high']))}", f"LOW    : {_money(float(data['low']))}", f"SOURCE : {_esc(data.get('source', '—'))}"])
+        await _present(update, _screen(update, terminal, f">> {t(_lang(update), 'live_feed')} // XAU/USD"), price_keyboard(update))
+    except Exception:
+        logger.exception("Premium price screen failed")
+        await _present(update, _error_screen(update), price_keyboard(update))
+
 
 async def render_signal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if user is None:
         return
-    valid, _ = auth.verify_token(user.id)
-    if not valid:
-        await render_locked(update, 'signal')
+    if not _is_active(update):
+        await render_locked(update, "signal")
         return
-    await _answer_loading(update, '[ NEURAL-MAP ]: COMPUTING SIGNAL VECTOR...')
     try:
+        await _answer_loading(update)
         data = await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)
-        indicators = api_handler._simulate_technical_indicators(float(data['bid']), float(data.get('change_percent', 0)))
-        signal = api_handler._determine_signal(float(data['bid']), indicators)
-        direction = signal['direction']
-        icon = {'BUY': '🟢', 'SELL': '🔴', 'HOLD': '🟡'}[direction]
-        confidence = float(signal['confidence'])
-        confidence_tag = 'HIGH' if confidence >= 70 else 'MODERATE' if confidence >= 55 else 'MARGINAL'
-        setup = 'AWAITING CONFIRMATION' if direction == 'HOLD' else f'{_money(signal['entry_low'])} — {_money(signal['entry_high'])}'
-        align = 'POSITIVE' if 'BULLISH' in str(indicators.get('ema_trend', '')) else 'NEGATIVE' if 'BEARISH' in str(indicators.get('ema_trend', '')) else 'NEUTRAL'
-        rows = ['  NEURAL SIGNAL // ALGO-READ', '  OPERATIONAL STATUS: SCANNING...', ts.bar(), f'  VECTOR:      {direction}', '  COORDINATE:', f'   ↳ [{_esc(setup)}]', f'  CONF_LEVEL:  {confidence:.1f}% [{confidence_tag}]', f'  TIMEFRAME:   INTRADAY // {SIGNAL_VALIDITY_MINUTES} MIN', ts.bar(), f'  MOMENTUM:    {_esc(signal['momentum'])}', f'  LIQUIDITY:   {_esc(signal['liquidity'])}', f'  VOLATILITY:  {_esc(signal['volatility'])}', ts.bar(), '  EXECUTION MAP:', f'  TP_1 {(_money(signal['tp1']) if signal['tp1'] else '—')}', f'  TP_2 {(_money(signal['tp2']) if signal['tp2'] else '—')} | TP_3 {(_money(signal['tp3']) if signal['tp3'] else '—')}', f'  STOP_LOSS {(_money(signal['sl']) if signal['sl'] else '—')} | R:R 1:{signal['risk_reward']}', ts.bar(), '  ALPHA-SENTI MATRIX:', ' [TEMPORAL MOMENTUM RESONANCE]', f'   ↳ {indicators['rsi']}', ' [DUAL-PHASE CONVERGENCE MANIFOLD]', f'   ↳ {indicators['macd_hist']:+.2f}', ' [SYNAPTIC TREND ALIGNMENT]', f'   ↳ {_esc(indicators['ema_trend']).upper()}', ' [PROBABILISTIC FLUX]', f'   ↳ {indicators['stoch_k']}', ts.bar(), '  LOG: PROJECTION LAYER ACTIVE']
-        text = f'<b>{intel_header()}</b>\n<i>{icon} {stamp()} // {t(_lang(update), 'neural_signal')} ENGINE</i>\n<pre>◤' + ts.bar('━') + '◥\n' + '\n'.join((ts.prow(r) for r in rows)) + '\n◣' + ts.bar('━') + f'◢</pre>\n{intel_footer()}\n<i>{t(_lang(update), 'signal_disclaimer')}</i>'
-        await _present(update, text, signal_keyboard(update))
-    except Exception as exc:
-        logger.exception('Signal screen failed: %s', exc)
-        await _present(update, '<b>[ FAULT ]: NEURAL-MAP OFFLINE // RETRYING...</b>\n\n<pre>◤━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◥\n  STATUS: SIGNAL ENGINE UNAVAILABLE\n  [ ERROR ]: DATA_GAP_DETECTED\n◣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━◢</pre>\nPlease refresh in a moment.', signal_keyboard(update))
+        indicators = api_handler._simulate_technical_indicators(float(data["bid"]), float(data.get("change_percent", 0)))
+        signal = api_handler._determine_signal(float(data["bid"]), indicators)
+        terminal = "\n".join(["[ NEURAL STRIKES ]", f"SIGNAL : {signal['direction']}", f"ENTRY  : {_money(signal['entry_low'])} - {_money(signal['entry_high'])}", f"TP1    : {_money(signal['tp1']) if signal['tp1'] else '—'}", f"TP2    : {_money(signal['tp2']) if signal['tp2'] else '—'}", f"TP3    : {_money(signal['tp3']) if signal['tp3'] else '—'}", f"STOP   : {_money(signal['sl']) if signal['sl'] else '—'}"])
+        await _present(update, _screen(update, terminal, f">> {t(_lang(update), 'neural_signal')} // XAU/USD"), signal_keyboard(update))
+    except Exception:
+        logger.exception("Signal screen failed")
+        await _present(update, _error_screen(update), signal_keyboard(update))
+
 
 async def render_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if user is None:
         return
-    valid, _ = auth.verify_token(user.id)
-    if not valid:
-        await render_locked(update, 'analysis')
+    if not _is_active(update):
+        await render_locked(update, "analysis")
         return
-    await _answer_loading(update, '[ EXTRACTING ]: MARKET STRUCTURE...')
     try:
+        await _answer_loading(update)
         data = await asyncio.wait_for(api_handler.get_cached_or_fresh_price(user.id), timeout=10.0)
-        bid = float(data['bid'])
-        pct = float(data.get('change_percent', 0))
-        indicators = api_handler._simulate_technical_indicators(bid, pct)
-        signal = api_handler._determine_signal(bid, indicators)
-        bias = _esc(signal['momentum'])
-        bias_icon = _bias_icon(signal['momentum'])
-        rsi = float(indicators['rsi'])
-        stoch = float(indicators['stoch_k'])
-        rsi_state = 'OVERSOLD' if rsi < 30 else 'OVERBOUGHT' if rsi > 70 else 'NEUTRAL'
-        stoch_state = 'OVERSOLD' if stoch < 20 else 'OVERBOUGHT' if stoch > 80 else 'NEUTRAL'
-        rows = ['  ANALYSIS :: MOMENTUM/VOLATILITY', ts.bar(), f'  MARKET BIAS: {bias.upper()}', ts.bar(), '  ALPHA-SENTI MATRIX:', ' [TEMPORAL MOMENTUM RESONANCE]', f'   ↳ {indicators['rsi']} [{rsi_state}]', ' [DUAL-PHASE CONVERGENCE MANIFOLD]', f'   ↳ {indicators['macd_hist']:+.2f}', ' [SYNAPTIC TREND ALIGNMENT]', f'   ↳ {_esc(indicators['ema_trend']).upper()}', ' [PROBABILISTIC FLUX]', f'   ↳ {indicators['stoch_k']} [{stoch_state}]', ' [VOLATILITY VARIANCE]', f'   ↳ {indicators['atr']}', ' [QUANTUM ENVELOPE POSITION]', f'   ↳ {_esc(indicators['bb_position']).upper()}', ts.bar(), '  LIQUIDITY MODEL:', f'  LEVEL {_esc(signal['liquidity']).upper()} | CONF {signal['confidence']}%', ts.bar(), '  SOURCE: SIGNAL_ENGINE // LIVE']
-        text = f'<b>[ NEURAL-MAP ]: {t(_lang(update), 'analysis_title')} {bias_icon}</b>\n<i>{stamp()} // QUANTITATIVE DEEP-DIVE</i>\n<pre>⌁' + ts.bar('━') + '⌁\n' + '\n'.join((ts.prow(r) for r in rows)) + '\n⌁' + ts.bar('━') + f'⌁</pre>\n>> [ CORE ]: STRUCTURE SCAN COMPLETE // {stamp()}\n<i>{t(_lang(update), 'analysis_note')}</i>'
-        await _present(update, text, analysis_keyboard(update))
-    except Exception as exc:
-        logger.exception('Analysis screen failed: %s', exc)
-        await _present(update, '<b>[ FAULT ]: ANALYSIS ENGINE OFFLINE // RETRYING...</b>\n\n<pre>⌁─────────────────────────────────────────────⌁\n  STATUS: ANALYSIS ENGINE UNAVAILABLE\n  [ ERROR ]: DATA_GAP_DETECTED\n⌁─────────────────────────────────────────────⌁</pre>\nPlease refresh in a moment.', analysis_keyboard(update))
+        indicators = api_handler._simulate_technical_indicators(float(data["bid"]), float(data.get("change_percent", 0)))
+        terminal = "\n".join(["[ STRUCTURE MAP ]", f"TREND  : {_esc(str(indicators.get('ema_trend', 'NEUTRAL')).upper())}", f"RSI    : {indicators.get('rsi', '—')}", f"MACD   : {indicators.get('macd_hist', '—')}", f"EMA    : {indicators.get('ema', '—')}", f"ATR    : {indicators.get('atr', '—')}"])
+        await _present(update, _screen(update, terminal, f">> {t(_lang(update), 'analysis_title')} // XAU/USD"), analysis_keyboard(update))
+    except Exception:
+        logger.exception("Analysis screen failed")
+        await _present(update, _error_screen(update), analysis_keyboard(update))
 
-def _bias_icon(momentum: str) -> str:
-    if 'BULLISH' in momentum:
-        return '🟢'
-    if 'BEARISH' in momentum:
-        return '🔴'
-    return '🟡'
 
 async def render_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if user is None:
         return
     db_user = database.get_user_by_telegram_id(user.id)
-    if db_user is None:
-        text = f'<b>[ FILE ]: {t(_lang(update), 'account_intel')}</b>\n{DIVIDER}\n\n[ ERROR ]: OPERATOR_PROFILE_NOT_FOUND\n\n>> Profile not registered yet.\n>> Tap <b>ACCESS &amp; PLANS</b> to activate your account.'
-    else:
-        valid, reason = auth.verify_token(user.id)
+    active = _is_active(update)
+    if active and db_user:
         expiry = database.normalize_datetime_utc(db_user.subscription_expiry)
-        expiry_text = expiry.strftime('%d %b %Y • %H:%M UTC') if expiry else t(_lang(update), 'not_activated')
-        status = t(_lang(update), 'active') if valid else reason.replace('_', ' ').upper()
-        status_icon = '🟢' if valid else '○'
-        text = f'<b>[ FILE ]: {t(_lang(update), 'account_intel')}</b>\n<i>{t(_lang(update), 'your_access')} // {stamp()}</i>\n{DIVIDER}\n\nSTATUS: <b>{status_icon} {status}</b>\n\n' + panel([f'  TELEGRAM_ID:  {user.id}', f'  USERNAME:     @{_esc(user.username or 'N/A')}', f'  ACCESS_UNTIL: {expiry_text}']) + '\n>> [ CORE ]: Your private access status is checked in real time.'
-    await _present(update, text, account_keyboard(update))
+        expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
+        days_left = max(0, (expiry - datetime.now(timezone.utc)).days) if expiry else 0
+        terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : PREMIUM AKTIF", f"KEDALUWARSA : {expiry_text}", f"SISA HARI   : {days_left} hari tersisa"])
+        context_text = f">> {t(_lang(update), 'account_status')} // {t(_lang(update), 'active')}"
+    else:
+        terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : NONAKTIF", "STATUS      : Belum ada langganan aktif"])
+        context_text = f">> {t(_lang(update), 'account_status')} // {t(_lang(update), 'inactive')}"
+    await _present(update, _screen(update, terminal, context_text), account_keyboard(update))
+
 
 async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    active = False
-    if user:
-        active, _ = auth.verify_token(user.id)
-    state = t(_lang(update), 'active') if active else t(_lang(update), 'ready')
-    icon = '🟢' if active else '◆'
-    text = f'<b>[ CLEARANCE ]: {t(_lang(update), 'premium_access')}</b>\n<i>{t(_lang(update), 'membership')} // {stamp()}</i>\n{DIVIDER}\n\n{icon} {state}\n\n{t(_lang(update), 'unlocks')}\n◈ Live XAU/USD pricing\n◎ Neural trade signals\n⌁ Market structure analysis\n♛ Private account dashboard\n\n<b>ACCESS &amp; PLANS</b>\n7 DAYS   •   SHORT TERM\n14 DAYS  •   STANDARD\n30 DAYS  •   PREMIUM\n\n{t(_lang(update), 'activation_route')}\n\n<i>Enter your single-use activation token after purchase.</i>'
-    await _present(update, text, access_keyboard(update))
+    await render_activate(update, context)
+
+
+async def render_activate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    lang = _lang(update)
+    terminal = "\n".join(["[ ACCESS & PACKAGE ]", t(lang, "select_plan"), f"🟢 {t(lang, 'days7')}", f"🟡 {t(lang, 'days14')}", f"🔵 {t(lang, 'days30')}"])
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'select_plan')}"), access_keyboard(update))
+
+
+async def render_renew(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await render_activate(update, context)
+
+
+async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    lang = _lang(update)
+    await _present(update, _screen(update, f"[ OPERATOR HUB ]\n{t(lang, 'history')}", f">> {t(lang, 'history')}"), _keyboard(update))
+
 
 async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Console submenu (operator fix): Language / Help / Uplink / System Sync live here."""
     lang = _lang(update)
-    text = f'<b>[ CONSOLE ]: MENU // NEURAL GOLD {NEURAL_VERSION}</b>\n{DIVIDER}\n\n<pre>{_esc(t(lang, 'menu_body'))}</pre>'
-    rows = [[InlineKeyboardButton(f'❓ {t(lang, 'help')}', callback_data='screen:help')], [InlineKeyboardButton(f'🌐 {t(lang, 'support')}', callback_data='screen:support')]]
-    await _present(update, text, _keyboard(update, rows))
+    terminal = "\n".join(["[ SYSTEM SYNC ]", t(lang, "settings_title"), f"• {t(lang, 'access')}", f"• {t(lang, 'settings')}", f"• {t(lang, 'language')}", f"• {t(lang, 'history')}", f"• {t(lang, 'support')}"])
+    rows = [[InlineKeyboardButton(t(lang, "access"), callback_data="screen:activate"), InlineKeyboardButton(t(lang, "settings"), callback_data="screen:settings")], [InlineKeyboardButton(t(lang, "language"), callback_data="settings:language"), InlineKeyboardButton(t(lang, "support"), callback_data="screen:help")], [InlineKeyboardButton(t(lang, "history"), callback_data="screen:history")]]
+    if not _is_active(update):
+        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")])
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'menu')} // {t(lang, 'settings')}"), _keyboard(update, rows))
+
 
 async def render_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Operator manual: how to use the bot (audit fix: menu-requested help)."""
     lang = _lang(update)
-    text = f'<b>[ MANUAL ]: HOW TO USE // NEURAL GOLD {NEURAL_VERSION}</b>\n{DIVIDER}\n\n<pre>{_esc(t(lang, 'help_body'))}</pre>'
-    await _present(update, text, _keyboard(update))
+    await _present(update, _screen(update, t(lang, "help_body"), f">> {t(lang, 'support')} // FAQ"), support_keyboard(update))
+
 
 async def render_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = f'<b>[ SYSTEM ]: {t(_lang(update), 'settings_title')}</b>\n<i>{t(_lang(update), 'interface_control')} // {stamp()}</i>\n{DIVIDER}\n\n<b>{t(_lang(update), 'display_profile')}</b>\n◈ {t(_lang(update), 'premium_dark')}\n◆ {t(_lang(update), 'gold_nav')}\n⌁ {t(_lang(update), 'compact_cards')}\n\n<b>{t(_lang(update), 'region')}</b>\nTimezone  <code>Asia/Jakarta</code>\n{t(_lang(update), 'language_value')}  <code>{_lang(update).upper()}</code>\n\n>> [ CORE ]: {t(_lang(update), 'core_settings')}'
-    await _present(update, text, settings_keyboard(update))
+    lang = _lang(update)
+    terminal = "\n".join(["[ SYSTEM SYNC ]", t(lang, "settings_title"), f"{t(lang, 'interface')} : ON", f"{t(lang, 'timezone')} : UTC+7", f"{t(lang, 'language_value')} : {lang.upper()}"])
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'settings')} // {t(lang, 'language')}"), settings_keyboard(update))
+
 
 async def render_support(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = f'<b>[ UPLINK ]: {t(_lang(update), 'support_title')}</b>\n<i>{t(_lang(update), 'direct_help')} // {stamp()}</i>\n{DIVIDER}\n\n{t(_lang(update), 'support_need')}\n\n<b>{t(_lang(update), 'support_channel')}</b>\n{t(_lang(update), 'support_tap')}\n\n[ SECURITY ]: {t(_lang(update), 'security')}'
-    await _present(update, text, support_keyboard(update))
+    lang = _lang(update)
+    terminal = "\n".join(["[ SUPPORT & HELP ]", t(lang, "support_title"), t(lang, "support_need")])
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'support')}"), support_keyboard(update))
+
 
 async def render_locked(update: Update, module: str) -> None:
-    labels = {'price': 'MARKET PULSE', 'signal': 'NEURAL STRIKES', 'analysis': 'STRUCTURE MAP'}
+    lang = _lang(update)
+    labels = {"price": "MARKET PULSE", "signal": "NEURAL STRIKES", "analysis": "STRUCTURE MAP"}
     label = labels.get(module, module.upper())
-    text = f'<b>[ LOCKED ]: {label}</b>\n{DIVIDER}\n\n[ FAULT ]: CLEARANCE_CHECK_FAILED\n\n{t(_lang(update), 'locked')}\n\n[ ERROR ]: {t(_lang(update), 'access_required')}\n>> {t(_lang(update), 'activate_required')}\n\n<i>{t(_lang(update), 'verified_auto')}</i>'
-    await _present(update, text, access_keyboard(update))
+    terminal = "\n".join(["[ ACCESS DENIED ]", "MODUL TERKUNCI", f"{t(lang, 'activate_required')}", f"{label}."])
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'access_required')}"), _keyboard(update, [[InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")]]))
+
 
 async def _answer_loading(update: Update, text: str | None = None) -> None:
-    """Deliver the single canonical loading label through callback feedback."""
     query = update.callback_query
     if query:
         try:
@@ -309,68 +301,28 @@ async def _answer_loading(update: Update, text: str | None = None) -> None:
         except Exception:
             pass
 
-async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
-    """Canonical customer rendering: Header -> Terminal -> Context."""
+
+async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool = True) -> None:
     query = update.callback_query
-    user = update.effective_user
-    lang = _lang(update)
-    plain = html.unescape(re.sub(r"<[^>]+>", "", text))
-    is_home = "OPERATOR CONSOLE" in plain
-
-    def clean_terminal(value: str) -> str:
-        value = re.sub(r"(?im)^\s*NEURAL GOLD(?: v3\.2)?[^\n]*$", "", value)
-        value = re.sub(r"(?im)^\s*\[ ?\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC ?\]\s*$", "", value)
-        value = re.sub(r"(?im)^\s*OPERATOR\s*:\s*.*$", "", value)
-        value = re.sub(r"(?im)^\s*STATUS\s*:\s*.*$", "", value)
-        value = value.translate(str.maketrans("", "", "┍┑┕┙│◤◥◣◢━"))
-        return "\n".join(line.rstrip() for line in value.split("\n")).strip()
-
-    if user and is_home:
-        active, _ = auth.verify_token(user.id)
-        access_line = "GRANTED. WELCOME, OPERATOR." if active else "PENDING // CLEARANCE REQUIRED"
-        terminal_body = "\n".join([
-            "[ SYSTEM ]: INITIALIZING...",
-            "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...",
-            f"[ ACCESS ]: {access_line}",
-        ])
-        context_line = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
-    else:
-        pre_match = re.search(r"<pre>(.*?)</pre>", text, flags=re.S | re.I)
-        terminal_body = clean_terminal(pre_match.group(1) if pre_match else plain)
-        context_matches = re.findall(r"(?m)^\s*>>[^\n]*", plain)
-        context_line = context_matches[0].strip() if context_matches else ""
-        context_line = re.sub(r"\s*//\s*\[?\s*\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\s*\]?", "", context_line).strip()
-
-    if not terminal_body:
-        terminal_body = t(lang, "ready")
-
-    canonical = (
-        f"{render_header(user, lang)}\n\n<pre>{render_terminal_box(terminal_body, 40)}</pre>"
-        if user
-        else f"<pre>{render_terminal_box(terminal_body, 40)}</pre>"
-    )
-    if context_line:
-        canonical += f"\n\n{context_line}"
-    
     if query and edit:
         try:
-            await query.edit_message_text(text=canonical, parse_mode="HTML", reply_markup=keyboard)
+            await query.edit_message_text(text=text, parse_mode="HTML", reply_markup=keyboard)
             return
         except BadRequest as exc:
             if "not modified" in str(exc).lower():
                 return
         except Exception as exc:
             logger.debug("Could not edit callback message: %s", exc)
-
     try:
         if query and query.message:
-            await query.message.reply_text(canonical, parse_mode="HTML", reply_markup=keyboard)
+            await query.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
             return
     except Exception as exc:
         logger.debug("Callback reply fallback failed: %s", exc)
-
     if update.message:
-        await update.message.reply_text(canonical, parse_mode="HTML", reply_markup=keyboard)
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if user is None:
@@ -578,78 +530,68 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     if query is None:
         return
-    data = query.data or ''
-    if data == 'noop':
-        await query.answer('This setting is controlled by the bot configuration.', show_alert=True)
+    data = query.data or ""
+    if data == "noop":
+        await query.answer(show_alert=True)
         return
-    if data == 'paid:menu':
+    if data == "paid:menu":
         await paid_confirmation(update, context)
         return
-    if data.startswith('nav:'):
-        try:
-            await query.answer()
-        except Exception:
-            pass
-        target = data.split(':', 1)[1]
-        if target == 'menu':
-            await render_menu(update, context)
-        else:
-            await render_home(update, context)
-        return
-    if data.startswith('screen:'):
-        target = data.split(':', 1)[1]
-        if target in {'home', 'account', 'access', 'settings', 'support', 'help'}:
-            try:
-                await query.answer()
-            except Exception:
-                pass
-        if target == 'home':
-            await render_home(update, context)
-        elif target == 'price':
-            await render_price(update, context)
-        elif target == 'signal':
-            await render_signal(update, context)
-        elif target == 'analysis':
-            await render_analysis(update, context)
-        elif target == 'account':
-            await render_account(update, context)
-        elif target == 'access':
-            await render_access(update, context)
-        elif target == 'settings':
-            await render_settings(update, context)
-        elif target == 'support':
-            await render_support(update, context)
-        elif target == 'help':
-            await render_help(update, context)
-        return
-    if data.startswith('lang:'):
-        lang = data.split(':', 1)[1]
-        if lang not in LANGUAGES:
-            lang = 'en'
-        database.set_user_language(query.from_user.id, lang)
-        try:
-            await query.answer(t(lang, 'saved'))
-        except Exception:
-            pass
+    if data == "nav:home":
         await render_home(update, context)
         return
-    if data == 'settings:language':
-        try:
-            await query.answer()
-        except Exception:
-            pass
-        lang = _lang(update)
-        await _present(update, f'<b>🌐 {t(lang, 'choose_language')}</b>\n{DIVIDER}\n\n{t(lang, 'language_names')}', language_keyboard(update))
+    if data == "screen:account":
+        await render_account(update, context)
         return
-    if data == 'action:token':
-        try:
-            await query.answer()
-        except Exception:
-            pass
-        context.user_data['awaiting_token'] = True
-        lang = _lang(update)
-        await query.message.reply_text(f'<b>[ KEYGEN ]: ACTIVATE TOKEN</b>\n\n>> {t(lang, 'enter_activation')}\n<i>{t(lang, 'token_note')}</i>', parse_mode='HTML', reply_markup=access_keyboard(update))
+    if data in {"screen:home", "screen:menu"}:
+        await render_menu(update, context)
         return
+    if data.startswith("screen:"):
+        target = data.split(":", 1)[1]
+        routes = {"price": render_price, "signal": render_signal, "analysis": render_analysis, "activate": render_activate, "access": render_activate, "renew": render_renew, "history": render_history, "settings": render_settings, "support": render_support, "help": render_help}
+        handler = routes.get(target)
+        if handler:
+            if target in {"price", "signal", "analysis"}:
+                await _answer_loading(update)
+            await handler(update, context)
+        return
+    if data.startswith("refresh:"):
+        target = data.split(":", 1)[1]
+        routes = {"price": render_price, "signal": render_signal, "analysis": render_analysis}
+        handler = routes.get(target)
+        if handler:
+            await _answer_loading(update)
+            await handler(update, context)
+        return
+    if data.startswith("retry:"):
+        target = data.split(":", 1)[1]
+        routes = {"price": render_price, "signal": render_signal, "analysis": render_analysis}
+        handler = routes.get(target)
+        if handler:
+            await _answer_loading(update)
+            await handler(update, context)
+        return
+    if data.startswith("lang:"):
+        lang = data.split(":", 1)[1]
+        if lang not in LANGUAGES:
+            lang = "en"
+        database.set_user_language(query.from_user.id, lang)
+        await query.answer(t(lang, "saved"), show_alert=False)
+        await render_menu(update, context)
+        return
+    if data == "settings:language":
+        await query.answer()
+        lang = _lang(update)
+        terminal = "\n".join(["[ LANGUAGE SELECTOR ]", t(lang, "choose_language"), t(lang, "language_names")])
+        await _present(update, _screen(update, terminal, f">> {t(lang, 'language')} // {t(lang, 'language_value')}"), language_keyboard(update))
+        return
+    if data == "action:token":
+        await query.answer()
+        context.user_data["awaiting_token"] = True
+        lang = _lang(update)
+        await query.message.reply_text(f"{t(lang, 'enter_activation')}\n{t(lang, 'token_note')}", parse_mode="HTML", reply_markup=access_keyboard(update))
+        return
+
 
 async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Never leave an unknown command unanswered."""
