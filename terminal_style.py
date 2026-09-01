@@ -8,6 +8,7 @@ from config import NEURAL_VERSION
 from i18n import t
 
 
+# Group 3.3 canonical contract: responsive terminal content ceiling.
 DEFAULT_MAX_WIDTH = 40
 
 
