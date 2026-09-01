@@ -2,7 +2,9 @@ name: finalize-group-33
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/finalize-group-33.yml']
+    paths:
+      - '.github/workflows/finalize-group-33.yml'
+      - 'scripts/align_group33_ui.py'
 permissions:
   contents: write
 jobs:
@@ -70,7 +72,6 @@ jobs:
                   continue
               out.append(x)
           p.write_text('\n'.join(out) + '\n')
-          PY
       - name: Align persistent-nav test count
         run: |
           python - <<'PY'
@@ -82,7 +83,6 @@ jobs:
                   lines[i] = line.rstrip().replace('"menu"]', '"menu", "account_persistent"]')
                   break
           p.write_text('\n'.join(lines) + '\n')
-          PY
       - name: Compile
         run: python -m compileall -q .
       - name: Full regression
