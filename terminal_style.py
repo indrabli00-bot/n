@@ -50,7 +50,7 @@ def word_wrap(text: str, max_width: int = DEFAULT_MAX_WIDTH) -> list[str]:
 
 
 def render_header(user, lang: str) -> str:
-    """Render the canonical plain-text operator header."""
+    """Render the canonical plain-text five-line header."""
     import auth
     active, _ = auth.verify_token(user.id)
     status_key = "active" if active else "inactive"
@@ -58,7 +58,7 @@ def render_header(user, lang: str) -> str:
     status_word = status_word[:1].upper() + status_word[1:]
     status = f"{status_word} {'🟢' if active else '🔴'}"
     operator = user.first_name or "OPERATOR"
-    return f"{stamp()}\nOPERATOR : {operator}\nSTATUS   : {status}"
+    return f"NEURAL GOLD {NEURAL_VERSION}\n{stamp()}\nOPERATOR : {operator}\nSTATUS   : {status}"
 
 
 def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH) -> str:
@@ -92,7 +92,7 @@ def prow(text: str, max_width: int = DEFAULT_MAX_WIDTH) -> str:
 
 
 def bar(ch: str = "─", max_width: int = DEFAULT_MAX_WIDTH) -> str:
-    """Return a separator using the configured content ceiling."""
+    """Return a legacy separator using the configured content ceiling."""
     return ch * max_width
 
 
