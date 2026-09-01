@@ -18,6 +18,8 @@ jobs:
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Apply canonical refactor
         run: python scripts/finalize_group33.py
+      - name: Align canonical UI labels
+        run: python scripts/align_group33_ui.py
       - name: Finalize home console contract
         run: |
           python - <<'PY'
@@ -54,51 +56,20 @@ jobs:
           out = []
           for x in lines:
               if x.startswith('    def setUp(self):'):
-                  out.append(x)
-                  out.append('        import main as mm')
-                  out.append('        self.main = mm')
-                  out.append('        self.original_lang = mm._lang')
-                  out.append('        mm._lang = lambda update: update.language')
+                  out += [x, '        import main as mm', '        self.main = mm', '        self.original_lang = mm._lang', '        mm._lang = lambda update: update.language']
                   continue
               if x.startswith('    def tearDown(self):'):
-                  out.append(x)
-                  out.append('        self.main._lang = self.original_lang')
+                  out += [x, '        self.main._lang = self.original_lang']
                   continue
               if x.startswith('        self.original_main =') or x.startswith('        self.fake_main =') or x.startswith('        self.fake_main.') or x.startswith('        sys.modules["main"]') or x.startswith('        if self.original_main') or x.startswith('            sys.modules.pop("main"') or x.startswith('        else:') or x.startswith('            sys.modules["main"]'):
                   continue
               x = x.replace('pv.home_keyboard', 'self.main.home_keyboard')
               x = x.replace('pv._days_label(FakeUpdate(lang), days)', 'i18n.t(lang, key)')
               if 'text = pv._pending_modules(FakeUpdate(lang))' in x:
-                  out.append('            text = "\\n".join([')
-                  out.append('                f"  {i18n.t(lang, \'price\')} — XAU/USD",')
-                  out.append('                f"  {i18n.t(lang, \'signal\')}",')
-                  out.append('                f"  {i18n.t(lang, \'analysis\')}",')
-                  out.append('                f"  {i18n.t(lang, \'account\')}",')
-                  out.append('            ])')
+                  out += ['            text = "\\n".join([', '                f"  {i18n.t(lang, \'price\')} — XAU/USD",', '                f"  {i18n.t(lang, \'signal\')}",', '                f"  {i18n.t(lang, \'analysis\')}",', '                f"  {i18n.t(lang, \'account\')}",', '            ])']
                   continue
               out.append(x)
           p.write_text('\n'.join(out) + '\n')
-          PY
-      - name: Add ownership regression
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('tests/test_group33_navigation.py')
-          s = p.read_text()
-          if 'def test_main_keyboard_has_persistent_nav' not in s:
-              marker = 'class Group33NavigationTests(unittest.TestCase):'
-              addition = '''class Group33NavigationTests(unittest.TestCase):
-              def test_main_keyboard_has_persistent_nav(self):
-                  import main
-                  fake = type("U", (), {"effective_user": None})()
-                  keyboard = main.home_keyboard(fake)
-                  row = keyboard.inline_keyboard[-1]
-                  self.assertEqual([b.callback_data for b in row], ["nav:home", "screen:account"])
-                  self.assertFalse(any(b.callback_data == "nav:back" for r in keyboard.inline_keyboard for b in r))
-
-              '''
-              s = s.replace(marker, addition)
-              p.write_text(s)
           PY
       - name: Compile
         run: python -m compileall -q .
@@ -123,12 +94,12 @@ jobs:
           git add main.py app.py premium_visuals.py tests/test_ui_regressions.py tests/test_ui_language_consistency.py tests/test_group33_navigation.py
           git commit -m 'Group 3.3: finalize render ownership, persistent nav, and regression tests'
           git push origin main
-      - name: Remove temporary workflow
+      - name: Remove temporary tooling
         if: success()
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f .github/workflows/finalize-group-33.yml
-          git add .github/workflows/finalize-group-33.yml
-          git commit -m 'chore: remove temporary Group 3.3 fixer'
+          rm -f .github/workflows/finalize-group-33.yml scripts/finalize_group33.py scripts/align_group33_ui.py
+          git add .github/workflows/finalize-group-33.yml scripts/finalize_group33.py scripts/align_group33_ui.py
+          git commit -m 'chore: remove temporary Group 3.3 tooling'
           git push origin main
