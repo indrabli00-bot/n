@@ -80,7 +80,7 @@ def home_keyboard(update: Update) -> InlineKeyboardMarkup:
     if _is_active(update):
         rows = [[InlineKeyboardButton("MARKET PULSE", callback_data="screen:price"), InlineKeyboardButton("NEURAL STRIKES", callback_data="screen:signal")], [InlineKeyboardButton("STRUCTURE MAP", callback_data="screen:analysis")]]
     else:
-        rows = [[_module_button("MARKET PULSE", "screen:price", True), _module_button("NEURAL STRIKES", "screen:signal", True)], [_module_button("STRUCTURE MAP", "screen:analysis", True)], [InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")]]
+        rows = [[_module_button("MARKET PULSE", "screen:price", True), _module_button("NEURAL STRIKES", "screen:signal", True)], [_module_button("STRUCTURE MAP", "screen:analysis", True)], [InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")]]
     return _keyboard(update, rows)
 
 
@@ -89,17 +89,17 @@ def _module_nav(update: Update, screen: str) -> list[list[InlineKeyboardButton]]
 
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
-    rows = _module_nav(update, "price") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")]]
+    rows = _module_nav(update, "price") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate_premium')}", callback_data="screen:activate")]]
     return _keyboard(update, rows)
 
 
 def signal_keyboard(update: Update) -> InlineKeyboardMarkup:
-    rows = _module_nav(update, "signal") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")]]
+    rows = _module_nav(update, "signal") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate_premium')}", callback_data="screen:activate")]]
     return _keyboard(update, rows)
 
 
 def analysis_keyboard(update: Update) -> InlineKeyboardMarkup:
-    rows = _module_nav(update, "analysis") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")]]
+    rows = _module_nav(update, "analysis") if _is_active(update) else [[InlineKeyboardButton(f"💎 {t(_lang(update), 'activate_premium')}", callback_data="screen:activate")]]
     return _keyboard(update, rows)
 
 
@@ -108,7 +108,7 @@ def account_keyboard(update: Update) -> InlineKeyboardMarkup:
     if _is_active(update):
         rows = [[InlineKeyboardButton(f"🔄 {t(lang, 'renew')}", callback_data="screen:renew")], [InlineKeyboardButton(f"📊 {t(lang, 'history')}", callback_data="screen:history")]]
     else:
-        rows = [[InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")]]
+        rows = [[InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")]]
     return _keyboard(update, rows)
 
 
@@ -124,14 +124,14 @@ def settings_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
     rows = [[InlineKeyboardButton(t(lang, "interface"), callback_data="noop")], [InlineKeyboardButton(t(lang, "timezone"), callback_data="noop")], [InlineKeyboardButton(t(lang, "data_mode"), callback_data="noop")]]
     if not _is_active(update):
-        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")])
+        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])
     return _keyboard(update, rows)
 
 
 def language_keyboard(update: Update) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(label, callback_data=data)] for label, data in language_buttons()]
     if not _is_active(update):
-        rows.append([InlineKeyboardButton(f"💎 {t(_lang(update), 'activate')}", callback_data="screen:activate")])
+        rows.append([InlineKeyboardButton(f"💎 {t(_lang(update), 'activate_premium')}", callback_data="screen:activate")])
     return _keyboard(update, rows)
 
 
@@ -141,13 +141,13 @@ def support_keyboard(update: Update) -> InlineKeyboardMarkup:
     if ADMIN_TELEGRAM_ID:
         rows.append([InlineKeyboardButton(t(lang, "contact"), url=f"tg://user?id={ADMIN_TELEGRAM_ID}")])
     if not _is_active(update):
-        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")])
+        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])
     return _keyboard(update, rows)
 
 
 def _screen(update: Update, terminal: str, context_text: str | None = None) -> str:
     lang = _lang(update)
-    body = render_terminal_box(terminal, max_width=40)
+    body = render_terminal_box(terminal, max_width=70)
     text = f"{render_header(update.effective_user, lang)}\n\n<pre>{body}</pre>"
     if context_text:
         text += f"\n\n{context_text}"
@@ -246,8 +246,8 @@ async def render_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def render_activate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang = _lang(update)
-    terminal = "\n".join(["[ ACCESS & PACKAGE ]", t(lang, "select_plan"), f"🟢 {t(lang, 'days7')}", f"🟡 {t(lang, 'days14')}", f"🔵 {t(lang, 'days30')}"])
-    await _present(update, _screen(update, terminal, f">> {t(lang, 'select_plan')}"), access_keyboard(update))
+    terminal = "\n".join(["[ ACCESS & PACKAGE ]", f"🟢 {t(lang, 'days7')}", f"🟡 {t(lang, 'days14')}", f"🔵 {t(lang, 'days30')}"])
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'select_package_context')} // {t(lang, 'instant_activation')}"), access_keyboard(update))
 
 
 async def render_renew(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -264,7 +264,7 @@ async def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     terminal = "\n".join(["[ SYSTEM SYNC ]", t(lang, "settings_title"), f"• {t(lang, 'access')}", f"• {t(lang, 'settings')}", f"• {t(lang, 'language')}", f"• {t(lang, 'history')}", f"• {t(lang, 'support')}"])
     rows = [[InlineKeyboardButton(t(lang, "access"), callback_data="screen:activate"), InlineKeyboardButton(t(lang, "settings"), callback_data="screen:settings")], [InlineKeyboardButton(t(lang, "language"), callback_data="settings:language"), InlineKeyboardButton(t(lang, "support"), callback_data="screen:help")], [InlineKeyboardButton(t(lang, "history"), callback_data="screen:history")]]
     if not _is_active(update):
-        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")])
+        rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])
     await _present(update, _screen(update, terminal, f">> {t(lang, 'menu')} // {t(lang, 'settings')}"), _keyboard(update, rows))
 
 
@@ -290,7 +290,7 @@ async def render_locked(update: Update, module: str) -> None:
     labels = {"price": "MARKET PULSE", "signal": "NEURAL STRIKES", "analysis": "STRUCTURE MAP"}
     label = labels.get(module, module.upper())
     terminal = "\n".join(["[ ACCESS DENIED ]", "MODUL TERKUNCI", f"{t(lang, 'activate_required')}", f"{label}."])
-    await _present(update, _screen(update, terminal, f">> {t(lang, 'access_required')}"), _keyboard(update, [[InlineKeyboardButton(f"💎 {t(lang, 'activate')}", callback_data="screen:activate")]]))
+    await _present(update, _screen(update, terminal, f">> {t(lang, 'access_required')} // {t(lang, 'activate_premium')}"), _keyboard(update, [[InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")]]))
 
 
 async def _answer_loading(update: Update, text: str | None = None) -> None:
