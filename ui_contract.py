@@ -27,6 +27,11 @@ MODULES = {
     "analysis": "STRUCTURE MAP",
 }
 
+# Canonical customer geometry: terminal width and two-column module rows share
+# the same 40-character visual contract.
+PANEL_WIDTH = 40
+MODULE_BUTTON_WIDTH = 20
+
 
 def _lang(update: Update) -> str:
     user = update.effective_user
@@ -46,11 +51,15 @@ def _money(value: float) -> str:
     return f"{value:,.2f}"
 
 
+def _button_text(label: str) -> str:
+    return str(label).ljust(MODULE_BUTTON_WIDTH)
+
+
 def _nav(update: Update) -> list[list[InlineKeyboardButton]]:
     lang = _lang(update)
     return [[
-        InlineKeyboardButton(f"🏠 {t(lang, 'menu')}", callback_data="nav:home"),
-        InlineKeyboardButton(f"👨‍💼 {t(lang, 'account')}", callback_data="screen:account"),
+        InlineKeyboardButton(_button_text(f"🏠 {t(lang, 'menu')}"), callback_data="nav:home"),
+        InlineKeyboardButton(_button_text(f"👨‍💼 {t(lang, 'account')}"), callback_data="screen:account"),
     ]]
 
 
@@ -67,7 +76,7 @@ def _header(update: Update, screen: str) -> str:
 
 
 def _screen(update: Update, screen: str, terminal: str, subtitle: str, keyboard: InlineKeyboardMarkup) -> tuple[str, InlineKeyboardMarkup]:
-    body = ts.render_terminal_box(terminal, max_width=70)
+    body = ts.render_terminal_box(terminal, max_width=PANEL_WIDTH)
     return f"{_header(update, screen)}\n\n<pre>{body}</pre>\n\n&gt;&gt; {subtitle}", keyboard
 
 
@@ -95,16 +104,16 @@ def _module_rows(update: Update, refresh: str | None = None) -> list[list[Inline
     if refresh:
         rows.append([InlineKeyboardButton(t(_lang(update), "refresh"), callback_data=f"refresh:{refresh}")])
     rows.extend([
-        [InlineKeyboardButton("MARKET PULSE", callback_data="screen:price"), InlineKeyboardButton("NEURAL STRIKES", callback_data="screen:signal")],
-        [InlineKeyboardButton("STRUCTURE MAP", callback_data="screen:analysis")],
+        [InlineKeyboardButton(_button_text("MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("NEURAL STRIKES"), callback_data="screen:signal")],
+        [InlineKeyboardButton(_button_text("STRUCTURE MAP"), callback_data="screen:analysis")],
     ])
     return rows
 
 
 def _locked_module_rows(update: Update) -> list[list[InlineKeyboardButton]]:
     return [
-        [InlineKeyboardButton("🔒 MARKET PULSE", callback_data="screen:price"), InlineKeyboardButton("🔒 NEURAL STRIKES", callback_data="screen:signal")],
-        [InlineKeyboardButton("🔒 STRUCTURE MAP", callback_data="screen:analysis")],
+        [InlineKeyboardButton(_button_text("🔒 MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("🔒 NEURAL STRIKES"), callback_data="screen:signal")],
+        [InlineKeyboardButton(_button_text("🔒 STRUCTURE MAP"), callback_data="screen:analysis")],
         [InlineKeyboardButton(f"💎 {t(_lang(update), 'activate_premium')}", callback_data="screen:activate")],
     ]
 
@@ -133,8 +142,11 @@ async def render_home(update: Update, context, edit: bool = True) -> None:
 
 async def render_menu(update: Update, context) -> None:
     rows = [
-        [InlineKeyboardButton("MARKET PULSE", callback_data="screen:price"), InlineKeyboardButton("NEURAL STRIKES", callback_data="screen:signal")],
-        [InlineKeyboardButton("STRUCTURE MAP", callback_data="screen:analysis")],
+        [_button_text("MARKET PULSE"), _button_text("NEURAL STRIKES")],
+    ]
+    rows = [
+        [InlineKeyboardButton(_button_text("MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("NEURAL STRIKES"), callback_data="screen:signal")],
+        [InlineKeyboardButton(_button_text("STRUCTURE MAP"), callback_data="screen:analysis")],
         [InlineKeyboardButton(f"🌐 {t(_lang(update), 'language')}", callback_data="settings:language")],
         [InlineKeyboardButton(f"❓ {t(_lang(update), 'support')}", callback_data="screen:help")],
     ]
