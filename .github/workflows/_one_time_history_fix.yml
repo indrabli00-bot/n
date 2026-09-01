@@ -27,11 +27,54 @@ jobs:
           end = s.find('\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:', start)
           if start < 0 or end < 0:
               raise SystemExit('render_history block not found')
-          new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:\n    user = update.effective_user\n    if user is None:\n        return\n    lang = _lang(update)\n    active = _is_active(update)\n    rows = [\"[ OPERATOR HUB ]\"]\n    try:\n        from sqlalchemy import text\n        with database.engine.begin() as conn:\n            orders = conn.execute(\n                text(\"SELECT id, status, duration_days, created_at FROM whop_orders WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5\"),\n                {\"tid\": user.id},\n            ).mappings().all()\n    except Exception:\n        orders = []\n    if orders:\n        for order in orders:\n            rows.append(f\"TRANSACTION : <code>{_esc(str(order.get('id', '—'))[:20])}</code>\")\n            rows.append(f\"STATUS      : {_esc(str(order.get('status', '—')).upper())}\")\n            rows.append(f\"DURATION    : {_esc(str(order.get('duration_days', '—')))} days\")\n            rows.append(\"\")\n    else:\n        rows.append(\"—\")\n    keyboard_rows = []\n    if not active:\n        keyboard_rows.append([InlineKeyboardButton(f\"💎 {t(lang, 'activate_premium')}\", callback_data=\"screen:activate\")])\n    await _present(\n        update,\n        _screen(update, \"\\n\".join(rows).rstrip(), f\">> {t(lang, 'history')} // {t(lang, 'account')}\"),\n        _keyboard(update, keyboard_rows),\n    )\n'''
+          new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if user is None:
+        return
+    lang = _lang(update)
+    active = _is_active(update)
+    rows = ["[ OPERATOR HUB ]"]
+    try:
+        from sqlalchemy import text
+        with database.engine.begin() as conn:
+            orders = conn.execute(
+                text("SELECT id, status, duration_days, created_at FROM whop_orders WHERE telegram_id = :tid ORDER BY created_at DESC LIMIT 5"),
+                {"tid": user.id},
+            ).mappings().all()
+    except Exception:
+        orders = []
+    if orders:
+        for order in orders:
+            rows.append(f"TRANSACTION : <code>{_esc(str(order.get('id', '—'))[:20])}</code>")
+            rows.append(f"STATUS      : {_esc(str(order.get('status', '—')).upper())}")
+            rows.append(f"DURATION    : {_esc(str(order.get('duration_days', '—')))} days")
+            rows.append("")
+    else:
+        rows.append("—")
+    keyboard_rows = []
+    if not active:
+        keyboard_rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])
+    await _present(
+        update,
+        _screen(update, "\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"),
+        _keyboard(update, keyboard_rows),
+    )
+'''
           p.write_text(s[:start] + new + s[end:], encoding='utf-8')
 
           test = Path('tests/test_group33_history.py')
-          test.write_text('''import inspect\\nimport main\\n\\ndef test_history_screen_has_canonical_context():\\n    src = inspect.getsource(main.render_history)\\n    assert \'>> {t(lang, \\\"history\\\")} // {t(lang, \\\"account\\\")}\' in src\\n    assert \'_screen(update, f\\\"[ OPERATOR HUB ]\\\\n{t(lang, \\\"history\\\")}\\\"\' not in src\\n\\ndef test_history_screen_uses_persistent_nav():\\n    src = inspect.getsource(main.render_history)\\n    assert \'_keyboard(update, keyboard_rows)\' in src\\n''', encoding='utf-8')
+          test.write_text("""import inspect
+import main
+
+def test_history_screen_has_canonical_context():
+    src = inspect.getsource(main.render_history)
+    assert "t(lang, 'history')} // {t(lang, 'account')}" in src
+    assert "_screen(update, f\"[ OPERATOR HUB ]\\n{t(lang, 'history')}\"" not in src
+
+def test_history_screen_uses_persistent_nav():
+    src = inspect.getsource(main.render_history)
+    assert "_keyboard(update, keyboard_rows)" in src
+""", encoding='utf-8')
 
           p = Path('.github/workflows/phase2-ci.yml')
           s = p.read_text(encoding='utf-8')
