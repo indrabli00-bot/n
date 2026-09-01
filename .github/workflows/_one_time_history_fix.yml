@@ -21,27 +21,22 @@ jobs:
           from pathlib import Path
           import re
 
-          def patch_main():
-              p = Path('main.py')
-              s = p.read_text(encoding='utf-8')
-              start = s.find('async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:')
-              end = s.find('\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:', start)
-              if start < 0 or end < 0:
-                  raise SystemExit('render_history block not found')
-              new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:\n    user = update.effective_user\n    if user is None:\n        return\n    lang = _lang(update)\n    orders = whop_storage.recent_orders_for(user.id, 5)\n    active = _is_active(update)\n    rows = [\"[ OPERATOR HUB ]\"]\n    if orders:\n        for order in orders:\n            order_id = _esc(str(order.get(\"id\", \"—\"))[:20])\n            status = _esc(str(order.get(\"status\", \"—\")).upper())\n            days = order.get(\"duration_days\", \"—\")\n            rows.append(f\"TRANSACTION : <code>{order_id}</code>\")\n            rows.append(f\"STATUS      : {status}\")\n            rows.append(f\"DURATION    : {days} days\")\n            rows.append(\"\")\n    else:\n        rows.append(\"—\")\n    keyboard_rows = []\n    if not active:\n        keyboard_rows.append([InlineKeyboardButton(f\"💎 {t(lang, 'activate_premium')}\", callback_data=\"screen:activate\")])\n    await _present(\n        update,\n        _screen(update, \"\\n\".join(rows).rstrip(), f\">> {t(lang, 'history')} // {t(lang, 'account')}\"),\n        _keyboard(update, keyboard_rows),\n    )\n'''
-              s = s[:start] + new + s[end:]
-              p.write_text(s, encoding='utf-8')
+          p = Path('main.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.find('async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:')
+          end = s.find('\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:', start)
+          if start < 0 or end < 0:
+              raise SystemExit('render_history block not found')
+          new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:\n    user = update.effective_user\n    if user is None:\n        return\n    lang = _lang(update)\n    orders = whop_storage.recent_orders_for(user.id, 5)\n    active = _is_active(update)\n    rows = [\"[ OPERATOR HUB ]\"]\n    if orders:\n        for order in orders:\n            order_id = _esc(str(order.get(\"id\", \"—\"))[:20])\n            status = _esc(str(order.get(\"status\", \"—\")).upper())\n            days = order.get(\"duration_days\", \"—\")\n            rows.append(f\"TRANSACTION : <code>{order_id}</code>\")\n            rows.append(f\"STATUS      : {status}\")\n            rows.append(f\"DURATION    : {days} days\")\n            rows.append(\"\")\n    else:\n        rows.append(\"—\")\n    keyboard_rows = []\n    if not active:\n        keyboard_rows.append([InlineKeyboardButton(f\"💎 {t(lang, 'activate_premium')}\", callback_data=\"screen:activate\")])\n    await _present(\n        update,\n        _screen(update, \"\\n\".join(rows).rstrip(), f\">> {t(lang, 'history')} // {t(lang, 'account')}\"),\n        _keyboard(update, keyboard_rows),\n    )\n'''
+          s = s[:start] + new + s[end:]
+          p.write_text(s, encoding='utf-8')
 
-          def patch_ci():
-              p = Path('.github/workflows/phase2-ci.yml')
-              s = p.read_text(encoding='utf-8')
-              s = s.replace('permissions:\n  contents: write', 'permissions:\n  contents: read', 1)
-              s = re.sub(r'      - name: Apply seven-point normalization\n.*?(?=      - name: Compile Python sources)', '', s, flags=re.S)
-              s = re.sub(r'      - name: Commit normalized sources\n.*?\Z', '', s, flags=re.S)
-              p.write_text(s, encoding='utf-8')
-
-          patch_main()
-          patch_ci()
+          p = Path('.github/workflows/phase2-ci.yml')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('permissions:\n  contents: write', 'permissions:\n  contents: read', 1)
+          s = re.sub(r'      - name: Apply seven-point normalization\n.*?(?=      - name: Compile Python sources)', '', s, flags=re.S)
+          s = re.sub(r'      - name: Commit normalized sources\n.*?\Z', '', s, flags=re.S)
+          p.write_text(s, encoding='utf-8')
           PY
 
           python -m compileall -q .
