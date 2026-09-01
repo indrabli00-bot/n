@@ -1,0 +1,45 @@
+name: verify-group33-final
+on:
+  push:
+    branches: [main]
+    paths: ['tests/test_group33_navigation.py']
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Compile
+        run: python -m compileall -q .
+      - name: Full regression
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Group 3.3 source guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          main = Path('main.py').read_text()
+          premium = Path('premium_visuals.py').read_text()
+          app = Path('app.py').read_text()
+          assert 'def _nav_keyboard' not in main
+          assert 'nav:back' not in main
+          assert 'main.render_' not in premium
+          assert 'premium_visuals' not in app
+          assert 'def _persistent_nav' in main
+          assert "callback_data='nav:home'" in main
+          assert "callback_data='screen:account'" in main
+          print('GROUP 3.3 source guard: PASS')
+          PY
+      - name: Remove verification workflow
+        if: success()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/verify-group33-final.yml
+          git add .github/workflows/verify-group33-final.yml
+          git commit -m 'chore: remove temporary Group 3.3 verification workflow'
+          git push origin main
