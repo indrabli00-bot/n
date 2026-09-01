@@ -56,55 +56,90 @@ def _format_timestamp(value: str) -> str:
 def _safe_user_name(user) -> str:
     return _esc(user.first_name or 'OPERATOR')
 
-def _nav_keyboard(update: Update, *rows: tuple[str, str], back: str='home') -> InlineKeyboardMarkup:
+def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
     lang = _lang(update)
-    keyboard = [[InlineKeyboardButton(label, callback_data=data)] for label, data in rows]
-    keyboard.append([InlineKeyboardButton(t(lang, 'back'), callback_data=f'nav:{back}'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')])
+    return [
+        InlineKeyboardButton(f"🏠 {t(lang, 'menu')}", callback_data='nav:home'),
+        InlineKeyboardButton(f"👨‍💼 {t(lang, 'account')}", callback_data='screen:account'),
+    ]
+
+
+def _keyboard(update: Update, rows=None) -> InlineKeyboardMarkup:
+    keyboard = list(rows or [])
+    keyboard.append(_persistent_nav(update))
     return InlineKeyboardMarkup(keyboard)
+
 
 def home_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang, 'price'), callback_data='screen:price'), InlineKeyboardButton(t(lang, 'signal'), callback_data='screen:signal')], [InlineKeyboardButton(t(lang, 'analysis'), callback_data='screen:analysis'), InlineKeyboardButton(t(lang, 'account'), callback_data='screen:account')], [InlineKeyboardButton(t(lang, 'settings'), callback_data='screen:settings'), InlineKeyboardButton(f'🌐 {t(lang, 'language')}', callback_data='settings:language')], [InlineKeyboardButton(t(lang, 'access'), callback_data='screen:access')], [InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:menu')]])
+    return _keyboard(update, [
+        [InlineKeyboardButton(f"📈 {t(lang, 'price')}", callback_data='screen:price'), InlineKeyboardButton(f"🧠 {t(lang, 'signal')}", callback_data='screen:signal')],
+        [InlineKeyboardButton(f"📊 {t(lang, 'analysis')}", callback_data='screen:analysis'), InlineKeyboardButton(f"👑 {t(lang, 'account')}", callback_data='screen:account')],
+        [InlineKeyboardButton(f"⚙️ {t(lang, 'settings')}", callback_data='screen:settings'), InlineKeyboardButton(f"🌐 {t(lang, 'language')}", callback_data='settings:language')],
+        [InlineKeyboardButton(f"💎 {t(lang, 'access')}", callback_data='screen:access')],
+    ])
+
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang, 'refresh'), callback_data='screen:price')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')]])
+    if auth.verify_token(update.effective_user.id)[0]:
+        return _keyboard(update, [[InlineKeyboardButton(t(lang, 'refresh'), callback_data='screen:price')]])
+    import phase2_bot
+    telegram_id = update.effective_user.id
+    return _keyboard(update, [
+        [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
+        [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
+        [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
+    ])
+
 
 def signal_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang, 'new_signal'), callback_data='screen:signal')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')]])
+    return _keyboard(update, [[InlineKeyboardButton(t(lang, 'new_signal'), callback_data='screen:signal')]])
+
 
 def account_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang, 'refresh_status'), callback_data='screen:account')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')]])
+    return _keyboard(update, [[InlineKeyboardButton(t(lang, 'refresh_status'), callback_data='screen:account')]])
+
 
 def access_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    rows = [[InlineKeyboardButton(t(lang, 'select_package'), callback_data='screen:price')], [InlineKeyboardButton(t(lang, 'paid'), callback_data='paid:menu')], [InlineKeyboardButton(t(lang, 'activate'), callback_data='action:token')], [InlineKeyboardButton(t(lang, 'account_status'), callback_data='screen:account')], [InlineKeyboardButton(t(lang, 'support'), callback_data='screen:support')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')]]
-    return InlineKeyboardMarkup(rows)
+    import phase2_bot
+    telegram_id = update.effective_user.id
+    return _keyboard(update, [
+        [InlineKeyboardButton(f"🟢 {t(lang, 'days7')}", url=phase2_bot.checkout_link(telegram_id, 7))],
+        [InlineKeyboardButton(f"🟡 {t(lang, 'days14')}", url=phase2_bot.checkout_link(telegram_id, 14))],
+        [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
+        [InlineKeyboardButton(t(lang, 'activate'), callback_data='action:token'), InlineKeyboardButton(t(lang, 'paid'), callback_data='paid:menu')],
+    ])
+
 
 def analysis_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    return InlineKeyboardMarkup([[InlineKeyboardButton(t(lang, 'refresh_analysis'), callback_data='screen:analysis')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')]])
+    return _keyboard(update, [[InlineKeyboardButton(t(lang, 'refresh_analysis'), callback_data='screen:analysis')]])
+
 
 def settings_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
-    rows = [[InlineKeyboardButton(t(lang, 'interface'), callback_data='noop')], [InlineKeyboardButton(t(lang, 'timezone'), callback_data='noop')], [InlineKeyboardButton(t(lang, 'data_mode'), callback_data='noop')], [InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')]]
-    return InlineKeyboardMarkup(rows)
+    return _keyboard(update, [
+        [InlineKeyboardButton(t(lang, 'interface'), callback_data='noop')],
+        [InlineKeyboardButton(t(lang, 'timezone'), callback_data='noop')],
+        [InlineKeyboardButton(t(lang, 'data_mode'), callback_data='noop')],
+    ])
+
 
 def language_keyboard(update: Update) -> InlineKeyboardMarkup:
-    lang = _lang(update)
     rows = [[InlineKeyboardButton(label, callback_data=data)] for label, data in language_buttons()]
-    rows.append([InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')])
-    return InlineKeyboardMarkup(rows)
+    return _keyboard(update, rows)
+
 
 def support_keyboard(update: Update) -> InlineKeyboardMarkup:
     lang = _lang(update)
     rows = []
     if ADMIN_TELEGRAM_ID:
         rows.append([InlineKeyboardButton(t(lang, 'contact'), url=f'tg://user?id={ADMIN_TELEGRAM_ID}')])
-    rows.append([InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home'), InlineKeyboardButton(t(lang, 'menu'), callback_data='nav:home')])
-    return InlineKeyboardMarkup(rows)
+    return _keyboard(update, rows)
 
 async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: bool=True) -> None:
     user = update.effective_user
@@ -114,7 +149,9 @@ async def render_home(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: 
     active = False
     if db_user:
         active, _ = auth.verify_token(user.id)
-    text = f'{boot(granted=True)}\n<i>{stamp()}</i>\n{DIVIDER}\n\nOPERATOR: <b>{_safe_user_name(user)}</b>\nTELEGRAM_ID: <code>{user.id}</code>\nCLEARANCE: <b>{GOLD} ● {t(_lang(update), 'premium_active')}</b>\n\n<b>>> {t(_lang(update), 'select_module')}</b>\n' + panel(['  01  PRICE     — MARKET PULSE', '  02  SIGNAL    — NEURAL STRIKES', '  03  ANALYSIS  — STRUCTURE MAP', '  04  ACCOUNT   — OPERATOR HUB', '  05  SETTINGS  — SYSTEM SYNC', '  06  SUPPORT   — UPLINK']) + '\n>> [ CORE ]: ALL MODULES UNLOCKED. AWAITING SELECTION.'
+    lang = _lang(update)
+    clearance = t(lang, 'premium_active') if active else '[ ACCESS ]: PENDING // CLEARANCE REQUIRED'
+    text = f'NEURAL GOLD v3.2 // OPERATOR CONSOLE\n{boot(granted=active)}\n<i>{stamp()}</i>\n{DIVIDER}\n\nOPERATOR: <b>{_safe_user_name(user)}</b>\nTELEGRAM_ID: <code>{user.id}</code>\nCLEARANCE: <b>{GOLD} ● {clearance}</b>\n\n<b>>> {t(lang, 'select_module')}</b>\n' + panel(['  01  PRICE     — MARKET PULSE', '  02  SIGNAL    — NEURAL STRIKES', '  03  ANALYSIS  — STRUCTURE MAP', '  04  ACCOUNT   — OPERATOR HUB', '  05  SETTINGS  — SYSTEM SYNC', '  06  SUPPORT   — UPLINK']) + '\n>> [ CORE ]: ALL MODULES UNLOCKED. AWAITING SELECTION.'
     await _present(update, text, home_keyboard(update), edit=edit)
 
 async def render_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

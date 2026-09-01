@@ -16,7 +16,6 @@ import command_localization
 import database
 import expiry_notifier
 import fulfillment_recovery
-import premium_visuals
 import whop_api_phase2
 import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
@@ -33,7 +32,6 @@ async def lifespan(app: FastAPI):
     setup_logging()
     database.init_db()
     whop_storage.init_phase2_db()
-    premium_visuals.install()
     telegram_app = build_application()
     await telegram_app.initialize()
     await post_init(telegram_app)

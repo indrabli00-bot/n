@@ -13,6 +13,15 @@ import terminal_style as ts
 
 
 class Group33NavigationTests(unittest.TestCase):
+    def test_main_keyboard_has_persistent_nav(self):
+        import main
+        fake = type("U", (), {"effective_user": None})()
+        keyboard = main.home_keyboard(fake)
+        row = keyboard.inline_keyboard[-1]
+        self.assertEqual([b.callback_data for b in row], ["nav:home", "screen:account"])
+        self.assertFalse(any(b.callback_data == "nav:back" for r in keyboard.inline_keyboard for b in r))
+
+
     def test_persistent_navigation_shape(self):
         keyboard = ts.render_persistent_nav("en")
         row = keyboard.inline_keyboard[-1]

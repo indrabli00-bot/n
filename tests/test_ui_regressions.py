@@ -13,10 +13,8 @@ os.environ["WHOP_WEBHOOK_SECRET"] = "whsec_" + base64.b64encode(b"phase2-test-se
 
 import database  # noqa: E402
 import auth  # noqa: E402
-import premium_visuals as pv  # noqa: E402
 
 database.init_db()
-pv.install()
 import main as mm  # noqa: E402  (setelah install() agar render_* = versi premium)
 
 
@@ -53,15 +51,15 @@ class U:
 
 
 class UIRegressionTests(unittest.TestCase):
-    def test_home_header_rendered_once_and_divider_28(self):
-        """Konsol aktif: header OPERATOR CONSOLE tepat 1x + divider 28 char."""
+    def test_home_header_rendered_once_and_divider_36(self):
+        """Konsol aktif: header OPERATOR CONSOLE tepat 1x + divider 36 char."""
         auth.verify_token = lambda uid: (True, "ok")
         m = M()
-        asyncio.run(pv.render_home(U(m, Q(m)), None))
+        asyncio.run(mm.render_home(U(m, Q(m)), None))
         txt = m.sent[0][0]
         self.assertEqual(txt.count("OPERATOR CONSOLE"), 1, "header terduplikasi (implicit-concat bug)")
         dividers = [line for line in txt.split("\n") if set(line) == {"━"}]
-        self.assertTrue(dividers and len(dividers[0]) == 28, f"divider bukan 28: {dividers}")
+        self.assertTrue(dividers and len(dividers[0]) == 36, f"divider bukan 36: {dividers}")
 
     def test_start_inactive_lands_on_console_with_pending_status(self):
         """/start user nonaktif -> konsol 8 tombol dengan status PENDING yang jujur (bukan GRANTED palsu)."""
