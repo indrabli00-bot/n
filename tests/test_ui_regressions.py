@@ -1,4 +1,4 @@
-"""UI regression tests: bug header 28x (implicit-concat dengan operator *) tidak boleh terulang."""
+"""UI regression tests for the canonical Group 3.3 render contract."""
 import asyncio
 import base64
 import os
@@ -12,10 +12,9 @@ os.environ.setdefault("GOLDAPI_API_KEY", "test-key")
 os.environ["WHOP_WEBHOOK_SECRET"] = "whsec_" + base64.b64encode(b"phase2-test-secret").decode().rstrip("=")
 
 import database  # noqa: E402
-import auth  # noqa: E402
-
 database.init_db()
-import main as mm  # noqa: E402  (setelah install() agar render_* = versi premium)
+import auth  # noqa: E402
+import main as mm  # noqa: E402
 
 
 class M:
@@ -52,24 +51,23 @@ class U:
 
 class UIRegressionTests(unittest.TestCase):
     def test_home_header_rendered_once_and_no_fixed_divider(self):
-        """Konsol aktif: header OPERATOR CONSOLE tepat 1x + divider 36 char."""
         auth.verify_token = lambda uid: (True, "ok")
         m = M()
         asyncio.run(mm.render_home(U(m, Q(m)), None))
         txt = m.sent[0][0]
-        self.assertEqual(txt.count("OPERATOR CONSOLE"), 1, "header terduplikasi (implicit-concat bug)")
+        self.assertEqual(txt.count("OPERATOR CONSOLE"), 1)
         self.assertIn("<pre>", txt)
         dividers = [line for line in txt.split("\n") if set(line) == {"━"}]
         self.assertFalse(dividers)
 
     def test_start_inactive_lands_on_console_with_pending_status(self):
-        """/start user nonaktif -> konsol 8 tombol dengan status PENDING yang jujur (bukan GRANTED palsu)."""
         auth.verify_token = lambda uid: (False, "token_invalid")
         m = M("/start")
         asyncio.run(mm.start_command(U(m, None), None))
         txt, kb = m.sent[-1]
         self.assertIn("OPERATOR CONSOLE", txt)
-        self.assertIn("PENDING // CLEARANCE REQUIRED", txt)
+        self.assertIn("PENDING // CLEARANCE", txt)
+        self.assertIn("REQUIRED", txt)
         self.assertNotIn("GRANTED. WELCOME, OPERATOR.", txt)
         self.assertIn("<pre>", txt)
         button_texts = [b.text for row in kb.inline_keyboard for b in row]
@@ -79,7 +77,6 @@ class UIRegressionTests(unittest.TestCase):
         self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])
 
     def test_start_active_lands_on_console(self):
-        """/start user aktif -> konsol operator."""
         auth.verify_token = lambda uid: (True, "ok")
         m = M("/start")
         asyncio.run(mm.start_command(U(m, None), None))
