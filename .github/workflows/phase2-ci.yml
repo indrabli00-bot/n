@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+env:
+  TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
+  GOLDAPI_API_KEY: "test-goldapi-key"
+  DATABASE_URL: "sqlite:///xauusd_bot_ci.db"
+  WHOP_WEBHOOK_SECRET: "test-whop-secret"
+
 jobs:
   validate:
     runs-on: ubuntu-latest
