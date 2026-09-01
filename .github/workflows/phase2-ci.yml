@@ -13,7 +13,7 @@ env:
   TELEGRAM_BOT_TOKEN: "123456:TEST_TOKEN"
   GOLDAPI_API_KEY: "test-goldapi-key"
   DATABASE_URL: "sqlite:///xauusd_bot_ci.db"
-  WHOP_WEBHOOK_SECRET: "test-whop-secret"
+  WHOP_WEBHOOK_SECRET: "whsec_cGhhc2UyLXRlc3Qtc2VjcmV0"
 
 jobs:
   validate:
@@ -46,12 +46,12 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Commit Group 3.3 code changes
         run: |
-          if git diff --quiet -- main.py terminal_style.py tests/test_terminal_style.py tests/test_group33_navigation.py; then
+          if git diff --quiet -- main.py terminal_style.py tests/test_terminal_style.py tests/test_group33_navigation.py tests/test_ui_regressions.py tests/test_ui_language_consistency.py; then
             echo 'No code changes to commit.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add main.py terminal_style.py tests/test_terminal_style.py tests/test_group33_navigation.py
+          git add main.py terminal_style.py tests/test_terminal_style.py tests/test_group33_navigation.py tests/test_ui_regressions.py tests/test_ui_language_consistency.py
           git commit -m 'Group 3.3: canonical terminal rendering and navigation'
           git push origin main
