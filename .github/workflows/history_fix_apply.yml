@@ -1,0 +1,58 @@
+name: Group 3.3 history fix apply
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt && python -m pip install pytest
+      - name: Patch History render
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('main.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.find('async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:')
+          end = s.find('\nasync def render_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:', start)
+          if start < 0 or end < 0:
+              raise SystemExit('render_history block not found')
+          new = '''async def render_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:\n    user = update.effective_user\n    if user is None:\n        return\n    lang = _lang(update)\n    active = _is_active(update)\n    rows = ["[ OPERATOR HUB ]"]\n    try:\n        orders = whop_storage.recent_orders_for(user.id, 5)\n    except Exception:\n        orders = []\n    if orders:\n        for order in orders:\n            order_id = _esc(str(order.get("id", "—"))[:20])\n            status = _esc(str(order.get("status", "—")).upper())\n            days = order.get("duration_days", "—")\n            rows.append(f"TRANSACTION : <code>{order_id}</code>")\n            rows.append(f"STATUS      : {status}")\n            rows.append(f"DURATION    : {days} days")\n            rows.append("")\n    else:\n        rows.append("—")\n    keyboard_rows = []\n    if not active:\n        keyboard_rows.append([InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")])\n    await _present(\n        update,\n        _screen(update, "\\n".join(rows).rstrip(), f">> {t(lang, 'history')} // {t(lang, 'account')}"),\n        _keyboard(update, keyboard_rows),\n    )\n'''
+          p.write_text(s[:start] + new + s[end:], encoding='utf-8')
+          PY
+      - name: Verify History source
+        shell: bash
+        run: |
+          grep -Fq '[ OPERATOR HUB ]' main.py
+          grep -Fq "t(lang, 'history')} // {t(lang, 'account')}" main.py
+          if grep -Fq 'f">> {t(lang, '\''history'\'')}"' main.py; then exit 1; fi
+      - name: Validate
+        run: |
+          python -m compileall -q .
+          python scripts/check_ui_hardcoded_strings.py
+          python -m pytest -q
+          python -m unittest discover -s tests -p 'test_*.py' -q
+      - name: Clean temporary workflows and commit
+        shell: bash
+        run: |
+          rm -f .github/workflows/history_fix_apply.yml .github/workflows/history_fix_final.yml .github/workflows/history_fix.yml .github/workflows/_one_time_history_fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.py .github/workflows/phase2-ci.yml .github/workflows/history_fix_apply.yml .github/workflows/history_fix_final.yml .github/workflows/history_fix.yml .github/workflows/_one_time_history_fix.yml
+          git commit -m 'Group 3.3: fix transaction history screen'
+          git push origin HEAD:main
