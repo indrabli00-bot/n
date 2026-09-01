@@ -142,9 +142,6 @@ async def render_home(update: Update, context, edit: bool = True) -> None:
 
 async def render_menu(update: Update, context) -> None:
     rows = [
-        [_button_text("MARKET PULSE"), _button_text("NEURAL STRIKES")],
-    ]
-    rows = [
         [InlineKeyboardButton(_button_text("MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("NEURAL STRIKES"), callback_data="screen:signal")],
         [InlineKeyboardButton(_button_text("STRUCTURE MAP"), callback_data="screen:analysis")],
         [InlineKeyboardButton(f"🌐 {t(_lang(update), 'language')}", callback_data="settings:language")],
@@ -289,7 +286,10 @@ async def callback_router(update: Update, context) -> None:
         await query.answer()
     except Exception:
         pass
-    if data in {"nav:home", "screen:home", "screen:menu"}:
+    if data == "nav:home":
+        await render_home(update, context)
+        return
+    if data in {"screen:home", "screen:menu"}:
         await render_menu(update, context)
         return
     if data == "screen:account":
