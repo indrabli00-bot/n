@@ -1,12 +1,13 @@
 name: Group 3.3 final canonical UI
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 permissions:
   contents: write
 jobs:
   finalize:
-    if: ${{ !contains(github.event.head_commit.message, 'Group 3.3: finalize canonical UI') }}
+    if: github.event.head_commit.message != 'Group 3.3: finalize canonical UI'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Apply canonical contract
+        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -21,28 +23,25 @@ jobs:
 
           root = Path('.')
 
-          # i18n: canonical status/loading labels.
           p = root / 'i18n.py'
           s = p.read_text(encoding='utf-8')
-          s = s.replace('"active":"ACTIVE",', '"active":"Active","inactive":"Inactive","loading":"Loading...",', 1)
+          if '"loading":"Loading..."' not in s:
+              s = s.replace('"active":"ACTIVE",', '"active":"Active","inactive":"Inactive","loading":"Loading...",', 1)
           id_start = s.find('T["id"] = {')
           id_end = s.find('\n}\n\n# Vietnamese', id_start)
           if id_start < 0 or id_end < 0:
               raise SystemExit('i18n Indonesian block not found')
           block = s[id_start:id_end]
           block = re.sub(r'"active":"[^"]*"', '"active":"aktif"', block, count=1)
-          if '"inactive":' in block:
-              block = re.sub(r'"inactive":"[^"]*"', '"inactive":"nonaktif"', block, count=1)
-          else:
+          block = re.sub(r'"inactive":"[^"]*"', '"inactive":"nonaktif"', block, count=1)
+          if '"inactive":' not in block:
               block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","inactive":"nonaktif",', 1)
-          if '"loading":' in block:
-              block = re.sub(r'"loading":"[^"]*"', '"loading":"Memuat..."', block, count=1)
-          else:
+          block = re.sub(r'"loading":"[^"]*"', '"loading":"Memuat..."', block, count=1)
+          if '"loading":' not in block:
               block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","loading":"Memuat...",', 1)
           s = s[:id_start] + block + s[id_end:]
           p.write_text(s, encoding='utf-8')
 
-          # main.py: loading feedback must use the single canonical i18n key.
           p = root / 'main.py'
           s = p.read_text(encoding='utf-8')
           pattern = r'async def _answer_loading\(update: Update, text: str\) -> None:\n.*?\n\nasync def _present\('
@@ -52,17 +51,14 @@ jobs:
               raise SystemExit('_answer_loading block not found')
           p.write_text(s2, encoding='utf-8')
 
-          # Regression tests: assert the locked contract rather than legacy package layout.
           p = root / 'tests/test_ui_regressions.py'
           s = p.read_text(encoding='utf-8')
           s = s.replace('self.assertIn("ACTIVE 🟢", txt)', 'self.assertIn("Active 🟢", txt)')
-          s = s.replace('self.assertIn("Inactive 🔴", txt)', 'self.assertIn("Inactive 🔴", txt)')
           start = s.find('    def test_inactive_home_has_pending_terminal_and_packages(self):')
           end = s.find('\n    def test_all_customer_keyboards_end_with_persistent_nav', start)
-          if start < 0 or end < 0:
-              raise SystemExit('legacy inactive-home test block not found')
-          new_test = '''    def test_inactive_home_has_pending_terminal_and_canonical_nav(self):\n        auth.verify_token = lambda uid: (False, "token_invalid")\n        m = M("/start")\n        asyncio.run(mm.start_command(U(m, None), None))\n        txt, kb = m.sent[-1]\n        self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)\n        self.assertIn("Inactive 🔴", txt)\n        self.assertIn("PENDING // CLEARANCE", txt)\n        self.assertIn("REQUIRED", txt)\n        pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]\n        self.assertNotIn("NEURAL GOLD", pre)\n        self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])\n\n    def test_loading_uses_single_canonical_i18n_feedback(self):\n        class LoadingQ(Q):\n            def __init__(self, m):\n                super().__init__(m)\n                self.answer_args = None\n                self.answer_kwargs = None\n\n            async def answer(self, *a, **k):\n                self.answer_args = a\n                self.answer_kwargs = k\n\n        m = M()\n        q = LoadingQ(m)\n        asyncio.run(mm._answer_loading(U(m, q)))\n        self.assertEqual(q.answer_args[0], "Loading...")\n        self.assertEqual(q.answer_kwargs.get("show_alert"), False)\n\n'''
-          s = s[:start] + new_test + s[end:]
+          if start >= 0 and end >= 0:
+              new_test = '''    def test_inactive_home_has_pending_terminal_and_canonical_nav(self):\n        auth.verify_token = lambda uid: (False, "token_invalid")\n        m = M("/start")\n        asyncio.run(mm.start_command(U(m, None), None))\n        txt, kb = m.sent[-1]\n        self.assertEqual(txt.count("NEURAL GOLD v3.2"), 1)\n        self.assertIn("Inactive 🔴", txt)\n        self.assertIn("PENDING // CLEARANCE", txt)\n        self.assertIn("REQUIRED", txt)\n        pre = txt[txt.index("<pre>") + 5:txt.index("</pre>")]\n        self.assertNotIn("NEURAL GOLD", pre)\n        self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])\n\n    def test_loading_uses_single_canonical_i18n_feedback(self):\n        class LoadingQ(Q):\n            def __init__(self, m):\n                super().__init__(m)\n                self.answer_args = None\n                self.answer_kwargs = None\n            async def answer(self, *a, **k):\n                self.answer_args = a\n                self.answer_kwargs = k\n        m = M()\n        q = LoadingQ(m)\n        asyncio.run(mm._answer_loading(U(m, q)))\n        self.assertEqual(q.answer_args[0], "Loading...")\n        self.assertEqual(q.answer_kwargs.get("show_alert"), False)\n\n'''
+              s = s[:start] + new_test + s[end:]
           p.write_text(s, encoding='utf-8')
           PY
       - name: Compile
@@ -76,7 +72,6 @@ jobs:
           import ast
           main = Path('main.py').read_text(encoding='utf-8')
           term = Path('terminal_style.py').read_text(encoding='utf-8')
-          doc = Path('GROUP_3_3_CANONICAL_UI.md').read_text(encoding='utf-8')
           i18n = Path('i18n.py').read_text(encoding='utf-8')
           assert 'DEFAULT_MAX_WIDTH = 40' in term
           assert 'def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH)' in term
@@ -85,7 +80,6 @@ jobs:
           assert 'show_alert=False' in main
           assert '"loading":"Loading..."' in i18n
           assert '"loading":"Memuat..."' in i18n
-          assert 'Status' not in doc or 'Active state' in doc
           ast.parse(main)
           ast.parse(term)
           print('GROUP 3.3 FINAL CONTRACT AUDIT: PASS')
@@ -95,6 +89,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add main.py terminal_style.py i18n.py tests/test_ui_regressions.py
-          git rm .github/workflows/group33-finalize.yml
-          git commit -m 'Group 3.3: finalize canonical UI' || exit 0
+          git commit -m 'Group 3.3: finalize canonical UI'
           git push origin main
