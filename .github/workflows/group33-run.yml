@@ -3,7 +3,7 @@ name: Group 3.3 Refactor
 on:
   push:
     branches: ["main"]
-    paths: ["scripts/group33_refactor.py"]
+    paths: ["scripts/group33_refactor.py", ".github/workflows/group33-run.yml"]
 
 permissions:
   contents: write
