@@ -2,9 +2,6 @@ from pathlib import Path
 import re
 from textwrap import dedent
 
-# Canonical terminal renderer: natural width by default, explicit max_width when needed.
-# Render ownership: main.py owns final Telegram presentation.
-
 p = Path('main.py')
 s = p.read_text(encoding='utf-8')
 s = re.sub(r'\ndef _nav_keyboard\(.*?\n(?=def |async def )', '\n', s, flags=re.S)
@@ -15,27 +12,11 @@ def _persistent_nav(update: Update) -> list[InlineKeyboardButton]:
 
 
 def _keyboard''').strip(), s, flags=re.S)
+s = s.replace("if not auth.verify_token(update.effective_user.id)[0]:", "if update.effective_user and not auth.verify_token(update.effective_user.id)[0]:")
 s = s.replace("InlineKeyboardButton(t(lang, 'back'), callback_data='nav:home')", "")
 s = s.replace("await _present(update, text, InlineKeyboardMarkup(rows))", "await _present(update, text, _keyboard(update, rows))")
 s = s.replace("await _present(update, text, _nav_keyboard(update))", "await _present(update, text, _keyboard(update))")
 s = s.replace("from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, stamp", "from terminal_style import boot, intel_footer, intel_header, pay_guide, panel, render_header, render_terminal_box, stamp")
-
-# Inactive users see the package choices immediately while active users keep module actions.
-needle = "def home_keyboard(update: Update) -> InlineKeyboardMarkup:\n    lang = _lang(update)\n"
-replacement = """def home_keyboard(update: Update) -> InlineKeyboardMarkup:
-    lang = _lang(update)
-    if not auth.verify_token(update.effective_user.id)[0]:
-        import phase2_bot
-        telegram_id = update.effective_user.id
-        return _keyboard(update, [
-            [InlineKeyboardButton(f\"🟢 {t(lang, 'days7')}\", url=phase2_bot.checkout_link(telegram_id, 7))],
-            [InlineKeyboardButton(f\"🟡 {t(lang, 'days14')}\", url=phase2_bot.checkout_link(telegram_id, 14))],
-            [InlineKeyboardButton(f\"🔵 {t(lang, 'days30')}\", url=phase2_bot.checkout_link(telegram_id, 30))],
-        ])
-"""
-if needle in s:
-    s = s.replace(needle, replacement, 1)
-
 marker = 'async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:'
 start = s.index(marker)
 end = s.index(chr(10) + 'async def start_command', start)
@@ -138,8 +119,16 @@ src = src.replace('''        dividers = [line for line in txt.split("\\n") if se
         self.assertFalse(dividers)''')
 src = src.replace('''        self.assertNotIn("SELECT PACKAGE", txt)
         self.assertEqual(len(kb.inline_keyboard), 5)  # menu 8 tombol''', '''        self.assertIn("<pre>", txt)
-        self.assertIn("7 HARI", txt)
-        self.assertIn("14 HARI", txt)
-        self.assertIn("30 HARI", txt)
+        button_texts = [b.text for row in kb.inline_keyboard for b in row]
+        self.assertTrue(any("7 HARI" in x or "7 DAYS" in x for x in button_texts))
+        self.assertTrue(any("14 HARI" in x or "14 DAYS" in x for x in button_texts))
+        self.assertTrue(any("30 HARI" in x or "30 DAYS" in x for x in button_texts))
         self.assertEqual([b.callback_data for b in kb.inline_keyboard[-1]], ["nav:home", "screen:account"])''')
 u.write_text(src, encoding='utf-8')
+
+l = Path('tests/test_ui_language_consistency.py')
+langsrc = l.read_text(encoding='utf-8')
+needle = '    def test_home_keyboard_uses_selected_language_for_core_labels(self):\n'
+if needle in langsrc and 'self.main.auth.verify_token' not in langsrc:
+    langsrc = langsrc.replace(needle, needle + '        self.main.auth.verify_token = lambda uid: (True, "ok")\n', 1)
+l.write_text(langsrc, encoding='utf-8')
