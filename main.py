@@ -78,10 +78,8 @@ def home_keyboard(update: Update) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(f"🔵 {t(lang, 'days30')}", url=phase2_bot.checkout_link(telegram_id, 30))],
         ])
     return _keyboard(update, [
-        [InlineKeyboardButton(f"📈 {t(lang, 'price')}", callback_data='screen:price'), InlineKeyboardButton(f"🧠 {t(lang, 'signal')}", callback_data='screen:signal')],
-        [InlineKeyboardButton(f"📊 {t(lang, 'analysis')}", callback_data='screen:analysis'), InlineKeyboardButton(f"👑 {t(lang, 'account')}", callback_data='screen:account')],
-        [InlineKeyboardButton(f"⚙️ {t(lang, 'settings')}", callback_data='screen:settings'), InlineKeyboardButton(f"🌐 {t(lang, 'language')}", callback_data='settings:language')],
-        [InlineKeyboardButton(f"💎 {t(lang, 'access')}", callback_data='screen:access')],
+        [InlineKeyboardButton("MARKET PULSE", callback_data='screen:price'), InlineKeyboardButton("NEURAL STRIKES", callback_data='screen:signal')],
+        [InlineKeyboardButton("STRUCTURE MAP", callback_data='screen:analysis')],
     ])
 
 def price_keyboard(update: Update) -> InlineKeyboardMarkup:
@@ -310,14 +308,26 @@ async def _answer_loading(update: Update, text: str) -> None:
             pass
 
 async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, edit: bool=True) -> None:
-    """Enforce Header -> Terminal -> optional Action, with persistent navigation."""
+    """Canonical customer rendering: Header -> Terminal -> optional Action -> Nav."""
     query = update.callback_query
     user = update.effective_user
     lang = _lang(update)
-    body = re.sub(r"<[^>]+>", "", text)
-    body = html.unescape(body).strip()
-    body = body.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━─'))
-    canonical = f"{render_header(user, lang)}\n<pre>{render_terminal_box(body)}</pre>" if user else f"<pre>{render_terminal_box(body)}</pre>"
+    plain = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+    is_home = "OPERATOR CONSOLE" in plain
+    if user and is_home:
+        active, _ = auth.verify_token(user.id)
+        terminal = f"NEURAL GOLD v3.2 // OPERATOR CONSOLE\n\n{boot(granted=active)}"
+        action = f">> {t(lang, 'select_module')}" if active else f">> {t(lang, 'access')}"
+    else:
+        body = re.sub(r"\[ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC \]", "", plain)
+        body = re.sub(r"(?im)^\s*(OPERATOR|STATUS)\s*:\s*.*$", "", body)
+        body = re.sub(r"(?im)^\s*TELEGRAM_ID\s*:\s*.*$", "", body)
+        body = body.translate(str.maketrans('', '', '┍┑┕┙│◤◥◣◢━'))
+        terminal = render_terminal_box(body.strip(), 40)
+        action = ""
+    canonical = f"{render_header(user, lang)}\n<pre>{render_terminal_box(terminal, 40)}</pre>" if user else f"<pre>{terminal}</pre>"
+    if action:
+        canonical += f"\n\n{action}"
     if query and edit:
         try:
             await query.edit_message_text(text=canonical, parse_mode='HTML', reply_markup=keyboard)
@@ -325,7 +335,6 @@ async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, ed
         except BadRequest as exc:
             if 'not modified' in str(exc).lower():
                 return
-            logger.debug('Could not edit callback message: %s', exc)
         except Exception as exc:
             logger.debug('Could not edit callback message: %s', exc)
     try:
