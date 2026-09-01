@@ -48,13 +48,19 @@ jobs:
           if '"loading":"Loading..."' not in s:
               s = s.replace('"active":"ACTIVE",', '"active":"Active","inactive":"Inactive","loading":"Loading...",', 1)
           id_start = s.find('T["id"] = {')
-          id_end = s.find('\n}\n\n# Vietnamese', id_start)
+          id_end = s.find('\n\n# Vietnamese', id_start)
           if id_start < 0 or id_end < 0:
               raise SystemExit('i18n Indonesian block not found')
           block = s[id_start:id_end]
           block = re.sub(r'"active":"[^"]*"', '"active":"aktif"', block, count=1) if '"active":' in block else block
-          block = re.sub(r'"inactive":"[^"]*"', '"inactive":"nonaktif"', block, count=1) if '"inactive":' in block else block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","inactive":"nonaktif",', 1)
-          block = re.sub(r'"loading":"[^"]*"', '"loading":"Memuat..."', block, count=1) if '"loading":' in block else block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","loading":"Memuat...",', 1)
+          if '"inactive":' in block:
+              block = re.sub(r'"inactive":"[^"]*"', '"inactive":"nonaktif"', block, count=1)
+          else:
+              block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","inactive":"nonaktif",', 1)
+          if '"loading":' in block:
+              block = re.sub(r'"loading":"[^"]*"', '"loading":"Memuat..."', block, count=1)
+          else:
+              block = block.replace('"access_off":"○ AKSES BELUM AKTIF",', '"access_off":"○ AKSES BELUM AKTIF","loading":"Memuat...",', 1)
           s = s[:id_start] + block + s[id_end:]
           p.write_text(s, encoding='utf-8')
 
