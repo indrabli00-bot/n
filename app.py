@@ -17,6 +17,7 @@ import database
 import expiry_notifier
 import fulfillment_recovery
 import main
+import runtime_hardening
 import ui_contract
 import whop_api_phase2
 import whop_storage
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
     global telegram_app
     main.setup_logging()
     database.init_db()
+    runtime_hardening.install()
     whop_storage.init_phase2_db()
     ui_contract.install(main)
     telegram_app = main.build_application()
