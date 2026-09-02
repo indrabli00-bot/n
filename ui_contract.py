@@ -27,8 +27,8 @@ MODULES = {
     "analysis": "STRUCTURE MAP",
 }
 
-# Canonical customer geometry: terminal width and two-column module rows share
-# the same 40-character visual contract.
+# Canonical customer geometry: every terminal line is exactly PANEL_WIDTH and
+# every keyboard row occupies the same logical width: 40 characters total.
 PANEL_WIDTH = 40
 MODULE_BUTTON_WIDTH = 20
 
@@ -52,8 +52,14 @@ def _money(value: float) -> str:
 
 
 def _button_text(label: str, width: int = MODULE_BUTTON_WIDTH) -> str:
-    """Pad button labels to the same logical width used by the UI contract."""
+    """Pad button labels to the requested logical width."""
     return str(label).ljust(width)
+
+
+def _terminal_text(content: str) -> str:
+    """Render terminal content at the exact same logical width as the panel."""
+    wrapped = ts.render_terminal_box(content, max_width=PANEL_WIDTH)
+    return "\n".join(line.ljust(PANEL_WIDTH) for line in wrapped.splitlines())
 
 
 def _nav(update: Update) -> list[list[InlineKeyboardButton]]:
@@ -77,7 +83,7 @@ def _header(update: Update, screen: str) -> str:
 
 
 def _screen(update: Update, screen: str, terminal: str, subtitle: str, keyboard: InlineKeyboardMarkup) -> tuple[str, InlineKeyboardMarkup]:
-    body = ts.render_terminal_box(terminal, max_width=PANEL_WIDTH)
+    body = _terminal_text(terminal)
     return f"{_header(update, screen)}\n\n<pre>{body}</pre>\n\n&gt;&gt; {subtitle}", keyboard
 
 
@@ -185,7 +191,6 @@ async def render_account(update: Update, context) -> None:
     else:
         terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : INACTIVE", "SUBSCRIPTION: NONE"])
         rows = _locked_module_rows(update)
-    # Account owns the secondary customer modules as well as subscription tools.
     rows.extend([
         [InlineKeyboardButton(_button_text(f"🌐 {t(_lang(update), 'language')}"), callback_data="settings:language"),
          InlineKeyboardButton(_button_text(f"❓ {t(_lang(update), 'support')}"), callback_data="screen:help")],
