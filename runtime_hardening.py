@@ -7,13 +7,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+import logging
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import inspect, text
 
 import database
 import whop_storage
 import whop_webhook_phase2
 
+logger = logging.getLogger("neural_gold.hardening")
 
 _REQUIRED_PHASE2_COLUMNS = {
     "whop_orders": {"telegram_id", "duration_days", "payment_id", "token_hash"},
@@ -23,11 +25,7 @@ _REQUIRED_PHASE2_COLUMNS = {
 
 
 def _atomic_activate_user_token(telegram_id: int, raw_token: str, duration_days: int) -> bool:
-    """Atomically burn a token before granting access.
-
-    The single UPDATE is the ownership claim: only one concurrent request can
-    change is_used from FALSE to TRUE for a given token hash.
-    """
+    """Atomically burn a token before granting access."""
     token_hash = database._hash_token(raw_token)
     now = datetime.now(timezone.utc)
     try:
@@ -61,8 +59,7 @@ def _atomic_activate_user_token(telegram_id: int, raw_token: str, duration_days:
                     {"telegram_id": telegram_id, "expiry": expiry, "token_hash": token_hash, "now": now},
                 )
             else:
-                current_raw = user["subscription_expiry"]
-                current = database.normalize_datetime_utc(current_raw)
+                current = database.normalize_datetime_utc(user["subscription_expiry"])
                 base = current if user["is_active"] and current and current > now else now
                 expiry = base + timedelta(days=effective_days)
                 conn.execute(
@@ -76,20 +73,12 @@ def _atomic_activate_user_token(telegram_id: int, raw_token: str, duration_days:
                 )
         return True
     except Exception:
-        import logging
-        logging.getLogger("neural_gold.hardening").exception(
-            "Atomic token activation failed telegram_id=%s", telegram_id
-        )
+        logger.exception("Atomic token activation failed telegram_id=%s", telegram_id)
         return False
 
 
 def _claim_webhook_with_stale_recovery(event_id: str, event_type: str, payment_id: str | None = None) -> bool:
-    """Claim a webhook and recover abandoned processing claims safely.
-
-    ``processed_at`` doubles as the claim timestamp while status=processing.
-    Existing pre-hardening rows with NULL processed_at are reclaimable, while
-    a fresh processing claim is protected by the five-minute stale window.
-    """
+    """Claim a webhook and recover abandoned processing claims safely."""
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(minutes=5)
     try:
@@ -122,10 +111,7 @@ def _claim_webhook_with_stale_recovery(event_id: str, event_type: str, payment_i
             )
             return reclaimed.rowcount == 1
     except Exception:
-        import logging
-        logging.getLogger("neural_gold.hardening").exception(
-            "Webhook claim failed event=%s", event_id
-        )
+        logger.exception("Webhook claim failed event=%s", event_id)
         return False
 
 
@@ -143,7 +129,7 @@ def _validate_phase2_schema() -> None:
 
 
 class _StrictPlanDurations(dict):
-    """Prevent an unknown plan from silently becoming a 30-day grant."""
+    """Reject unknown plans instead of granting implicit access."""
 
     def get(self, key, default=None):  # type: ignore[override]
         if key in self:
@@ -164,13 +150,12 @@ def install() -> None:
     whop_storage.claim_webhook = _claim_webhook_with_stale_recovery
 
     original_init = whop_storage.init_phase2_db
+
     @wraps(original_init)
     def init_phase2_db_hardened() -> None:
         original_init()
         _validate_phase2_schema()
-    whop_storage.init_phase2_db = init_phase2_db_hardened
 
-    whop_webhook_phase2.PLAN_DURATIONS = _StrictPlanDurations(
-        whop_webhook_phase2.PLAN_DURATIONS
-    )
+    whop_storage.init_phase2_db = init_phase2_db_hardened
+    whop_webhook_phase2.PLAN_DURATIONS = _StrictPlanDurations(whop_webhook_phase2.PLAN_DURATIONS)
     database._neural_gold_hardening_installed = True
