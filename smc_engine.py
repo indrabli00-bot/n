@@ -94,7 +94,6 @@ def generate_signal(candles_5m,candles_15m,min_confidence=MIN_CONFIDENCE):
     m5,m5bos,_=analyze_structure_bos(candles_5m); oh,ol,inob=detect_order_block(candles_5m,tf); eh,el,sh,sl=detect_liquidity_zones(candles_5m); grab,gs=detect_liquidity_grab(candles_5m); fvg,fs=detect_fvg(candles_5m); pat,ps=check_candle_pattern(candles_5m); rsi=calculate_rsi(candles_5m)
     long=30 if tf=="BULLISH" else 0; short=30 if tf=="BEARISH" else 0; lr=[]; sr=[]
     (lr if tf=="BULLISH" else sr).append(f"15M {tf.title()} ({bos or 'trend'}{' + CHoCH' if choch else ''})")
-    if choch:(lr if tf=="BULLISH" else sr).__class__
     if tf=="BULLISH" and choch:long+=10;lr.append("15M CHoCH Reversal")
     if tf=="BEARISH" and choch:short+=10;sr.append("15M CHoCH Reversal")
     if m5=="BULLISH":long+=15;lr.append(f"M5 Bullish{' BOS' if m5bos else ''}")
