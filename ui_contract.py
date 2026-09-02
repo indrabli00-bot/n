@@ -51,8 +51,9 @@ def _money(value: float) -> str:
     return f"{value:,.2f}"
 
 
-def _button_text(label: str) -> str:
-    return str(label).ljust(MODULE_BUTTON_WIDTH)
+def _button_text(label: str, width: int = MODULE_BUTTON_WIDTH) -> str:
+    """Pad button labels to the same logical width used by the UI contract."""
+    return str(label).ljust(width)
 
 
 def _nav(update: Update) -> list[list[InlineKeyboardButton]]:
@@ -102,7 +103,7 @@ async def _present(update: Update, text: str, keyboard: InlineKeyboardMarkup, ed
 def _module_rows(update: Update, refresh: str | None = None) -> list[list[InlineKeyboardButton]]:
     rows: list[list[InlineKeyboardButton]] = []
     if refresh:
-        rows.append([InlineKeyboardButton(t(_lang(update), "refresh"), callback_data=f"refresh:{refresh}")])
+        rows.append([InlineKeyboardButton(_button_text(t(_lang(update), "refresh"), PANEL_WIDTH), callback_data=f"refresh:{refresh}")])
     rows.extend([
         [InlineKeyboardButton(_button_text("MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("NEURAL STRIKES"), callback_data="screen:signal")],
         [InlineKeyboardButton(_button_text("STRUCTURE MAP"), callback_data="screen:analysis")],
@@ -114,7 +115,7 @@ def _locked_module_rows(update: Update) -> list[list[InlineKeyboardButton]]:
     return [
         [InlineKeyboardButton(_button_text("🔒 MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("🔒 NEURAL STRIKES"), callback_data="screen:signal")],
         [InlineKeyboardButton(_button_text("🔒 STRUCTURE MAP"), callback_data="screen:analysis")],
-        [InlineKeyboardButton(f"💎 {t(_lang(update), 'activate_premium')}", callback_data="screen:activate")],
+        [InlineKeyboardButton(_button_text(f"💎 {t(_lang(update), 'activate_premium')}", PANEL_WIDTH), callback_data="screen:activate")],
     ]
 
 
@@ -122,9 +123,9 @@ def _access_keyboard(update: Update, module: str | None = None) -> InlineKeyboar
     import phase2_bot
     tid = update.effective_user.id
     rows = [[
-        InlineKeyboardButton(f"🟢 {t(_lang(update), 'days7')}", url=phase2_bot.checkout_link(tid, 7)),
-        InlineKeyboardButton(f"🟡 {t(_lang(update), 'days14')}", url=phase2_bot.checkout_link(tid, 14)),
-    ], [InlineKeyboardButton(f"🔵 {t(_lang(update), 'days30')}", url=phase2_bot.checkout_link(tid, 30))]]
+        InlineKeyboardButton(_button_text(f"🟢 {t(_lang(update), 'days7')}"), url=phase2_bot.checkout_link(tid, 7)),
+        InlineKeyboardButton(_button_text(f"🟡 {t(_lang(update), 'days14')}"), url=phase2_bot.checkout_link(tid, 14)),
+    ], [InlineKeyboardButton(_button_text(f"🔵 {t(_lang(update), 'days30')}", PANEL_WIDTH), url=phase2_bot.checkout_link(tid, 30))]]
     return _keyboard(update, rows)
 
 
@@ -144,8 +145,8 @@ async def render_menu(update: Update, context) -> None:
     rows = [
         [InlineKeyboardButton(_button_text("MARKET PULSE"), callback_data="screen:price"), InlineKeyboardButton(_button_text("NEURAL STRIKES"), callback_data="screen:signal")],
         [InlineKeyboardButton(_button_text("STRUCTURE MAP"), callback_data="screen:analysis")],
-        [InlineKeyboardButton(f"🌐 {t(_lang(update), 'language')}", callback_data="settings:language")],
-        [InlineKeyboardButton(f"❓ {t(_lang(update), 'support')}", callback_data="screen:help")],
+        [InlineKeyboardButton(_button_text(f"🌐 {t(_lang(update), 'language')}", PANEL_WIDTH), callback_data="settings:language")],
+        [InlineKeyboardButton(_button_text(f"❓ {t(_lang(update), 'support')}", PANEL_WIDTH), callback_data="screen:help")],
     ]
     terminal = "[ SYSTEM ]: NAVIGATION ONLINE\n[ MODE ]: CUSTOMER CONTROL"
     text, keyboard = _screen(update, "Menu", terminal, "MENU // Navigation", _keyboard(update, rows))
@@ -153,7 +154,7 @@ async def render_menu(update: Update, context) -> None:
 
 
 async def render_language(update: Update, context) -> None:
-    rows = [[InlineKeyboardButton(label, callback_data=data)] for label, data in language_buttons()]
+    rows = [[InlineKeyboardButton(_button_text(label, PANEL_WIDTH), callback_data=data)] for label, data in language_buttons()]
     terminal = "[ LANGUAGE ]: SELECT INTERFACE LANGUAGE\n[ AVAILABLE ]: ENGLISH / BAHASA INDONESIA"
     text, keyboard = _screen(update, "Language", terminal, "LANGUAGE // Select language", _keyboard(update, rows))
     await _present(update, text, keyboard)
@@ -161,7 +162,8 @@ async def render_language(update: Update, context) -> None:
 
 async def render_help(update: Update, context) -> None:
     body = t(_lang(update), "help_body")
-    text, keyboard = _screen(update, "Help", body, "HELP // Support", _keyboard(update, [[InlineKeyboardButton(t(_lang(update), "contact"), url=f"tg://user?id={ADMIN_TELEGRAM_ID}")]] if ADMIN_TELEGRAM_ID else []))
+    contact = [[InlineKeyboardButton(_button_text(t(_lang(update), "contact"), PANEL_WIDTH), url=f"tg://user?id={ADMIN_TELEGRAM_ID}")]] if ADMIN_TELEGRAM_ID else []
+    text, keyboard = _screen(update, "Help", body, "HELP // Support", _keyboard(update, contact))
     await _present(update, text, keyboard)
 
 
@@ -176,11 +178,20 @@ async def render_account(update: Update, context) -> None:
         expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
         days_left = max(0, (expiry - datetime.now(timezone.utc)).days) if expiry else 0
         terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : PREMIUM ACTIVE", f"EXPIRY      : {expiry_text}", f"DAYS LEFT   : {days_left}"])
-        rows = [[InlineKeyboardButton(f"🔄 {t(_lang(update), 'renew')}", callback_data="screen:renew")], [InlineKeyboardButton(f"📊 {t(_lang(update), 'history')}", callback_data="screen:history")]]
+        rows = [
+            [InlineKeyboardButton(_button_text(f"🔄 {t(_lang(update), 'renew')}"), callback_data="screen:renew")],
+            [InlineKeyboardButton(_button_text(f"📊 {t(_lang(update), 'history')}"), callback_data="screen:history")],
+        ]
     else:
         terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : INACTIVE", "SUBSCRIPTION: NONE"])
         rows = _locked_module_rows(update)
-    text, keyboard = _screen(update, "Account", terminal, "ACCOUNT // " + ("Active subscription" if active else "Inactive subscription"), _keyboard(update, rows))
+    # Account owns the secondary customer modules as well as subscription tools.
+    rows.extend([
+        [InlineKeyboardButton(_button_text(f"🌐 {t(_lang(update), 'language')}"), callback_data="settings:language"),
+         InlineKeyboardButton(_button_text(f"❓ {t(_lang(update), 'support')}"), callback_data="screen:help")],
+    ])
+    subtitle = "ACCOUNT // " + ("Active subscription" if active else "Inactive subscription")
+    text, keyboard = _screen(update, "Account", terminal, subtitle, _keyboard(update, rows))
     await _present(update, text, keyboard)
 
 
