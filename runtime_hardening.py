@@ -23,6 +23,8 @@ _REQUIRED_PHASE2_COLUMNS = {
     "whop_webhook_events": {"id", "status", "processed_at"},
     "whop_fulfillment": {"payment_id", "order_id", "status", "claim_id", "attempts"},
 }
+_MAX_FULFILLMENT_ATTEMPTS = 3
+_MIN_FULFILLMENT_STALE_MINUTES = 10
 
 
 def _atomic_activate_user_token(telegram_id: int, raw_token: str, duration_days: int) -> bool:
@@ -173,6 +175,31 @@ class _StrictPlanDurations(dict):
         return default
 
 
+def _claim_fulfillment_hardened(
+    payment_id: str,
+    order_id: str,
+    stale_minutes: int = _MIN_FULFILLMENT_STALE_MINUTES,
+    max_attempts: int = _MAX_FULFILLMENT_ATTEMPTS,
+) -> str | None:
+    """Protect fulfillment claims from exhausted retries and zero-minute leases."""
+    current = whop_storage.get_fulfillment(payment_id)
+    if current:
+        status = current.get("status")
+        attempts = int(current.get("attempts") or 0)
+        if status == "failed" and attempts >= max_attempts:
+            logger.error(
+                "Fulfillment retry limit reached payment=%s attempts=%s",
+                payment_id,
+                attempts,
+            )
+            return None
+
+    # Never allow a caller to turn a live processing lease into an immediately
+    # reclaimable lease. The existing reconciliation path passes stale_minutes=0.
+    effective_stale = max(int(stale_minutes), _MIN_FULFILLMENT_STALE_MINUTES)
+    return _ORIGINAL_CLAIM_FULFILLMENT(payment_id, order_id, stale_minutes=effective_stale)
+
+
 def install() -> None:
     """Install hardening patches exactly once."""
     if getattr(database, "_neural_gold_hardening_installed", False):
@@ -180,6 +207,10 @@ def install() -> None:
 
     database.activate_user_token = _atomic_activate_user_token
     whop_storage.claim_webhook = _claim_webhook_with_stale_recovery
+
+    global _ORIGINAL_CLAIM_FULFILLMENT
+    _ORIGINAL_CLAIM_FULFILLMENT = whop_storage.claim_fulfillment
+    whop_storage.claim_fulfillment = _claim_fulfillment_hardened
 
     original_init = whop_storage.init_phase2_db
 
@@ -200,3 +231,6 @@ def install() -> None:
 
     whop_api_phase2.fetch_payment = fetch_payment_validated
     database._neural_gold_hardening_installed = True
+
+
+_ORIGINAL_CLAIM_FULFILLMENT = whop_storage.claim_fulfillment
