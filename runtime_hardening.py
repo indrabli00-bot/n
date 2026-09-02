@@ -12,6 +12,7 @@ import logging
 from sqlalchemy import inspect, text
 
 import database
+import whop_api_phase2
 import whop_storage
 import whop_webhook_phase2
 
@@ -78,7 +79,12 @@ def _atomic_activate_user_token(telegram_id: int, raw_token: str, duration_days:
 
 
 def _claim_webhook_with_stale_recovery(event_id: str, event_type: str, payment_id: str | None = None) -> bool:
-    """Claim a webhook and recover abandoned processing claims safely."""
+    """Claim a webhook and recover abandoned processing claims safely.
+
+    Database failures are raised instead of being converted to ``False``.
+    ``False`` therefore means only that the event is already claimed/processed,
+    while infrastructure failure reaches the HTTP handler and gets a retryable 5xx.
+    """
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(minutes=5)
     try:
@@ -112,7 +118,33 @@ def _claim_webhook_with_stale_recovery(event_id: str, event_type: str, payment_i
             return reclaimed.rowcount == 1
     except Exception:
         logger.exception("Webhook claim failed event=%s", event_id)
-        return False
+        raise
+
+
+def _validate_remote_payment_plan(payment: dict) -> dict:
+    """Validate Whop plan identity before remote reconciliation can grant access."""
+    plan = payment.get("plan") or {}
+    plan_id = str(plan.get("id") or "")
+    expected_days = whop_webhook_phase2.PLAN_DURATIONS.get(plan_id)
+    if expected_days is None:
+        raise whop_webhook_phase2.FulfillmentRetryableError(
+            f"Unknown Whop plan_id: {plan_id!r}; refusing remote fulfillment"
+        )
+
+    metadata = payment.get("metadata") or {}
+    raw_days = metadata.get("plan_days")
+    if raw_days not in (None, ""):
+        try:
+            metadata_days = int(raw_days)
+        except (TypeError, ValueError) as exc:
+            raise whop_webhook_phase2.FulfillmentRetryableError(
+                f"Invalid metadata.plan_days for plan {plan_id!r}"
+            ) from exc
+        if metadata_days != expected_days:
+            raise whop_webhook_phase2.FulfillmentRetryableError(
+                f"Plan duration mismatch for {plan_id!r}: metadata={metadata_days}, expected={expected_days}"
+            )
+    return payment
 
 
 def _validate_phase2_schema() -> None:
@@ -158,4 +190,13 @@ def install() -> None:
 
     whop_storage.init_phase2_db = init_phase2_db_hardened
     whop_webhook_phase2.PLAN_DURATIONS = _StrictPlanDurations(whop_webhook_phase2.PLAN_DURATIONS)
+
+    original_fetch_payment = whop_api_phase2.fetch_payment
+
+    @wraps(original_fetch_payment)
+    async def fetch_payment_validated(payment_id: str) -> dict:
+        payment = await original_fetch_payment(payment_id)
+        return _validate_remote_payment_plan(payment)
+
+    whop_api_phase2.fetch_payment = fetch_payment_validated
     database._neural_gold_hardening_installed = True
