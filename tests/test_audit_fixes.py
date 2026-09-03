@@ -19,13 +19,9 @@ class AuditFixTests(unittest.TestCase):
         self.assertIsNotNone(levels)
         entry_low, entry_high, tp1, tp2, tp3, sl, basis = levels
         r1, r2, r3 = tp1 - 3010.0, tp2 - 3010.0, tp3 - 3010.0
-        self.assertGreater(r1, 0)
-        self.assertGreater(r2, r1)
-        self.assertGreater(r3, r2)
-        self.assertAlmostEqual(r2 / r1, 2.0, delta=0.01)
-        self.assertAlmostEqual(r3 / r1, 3.0, delta=0.01)
-        self.assertLess(sl, entry_low)
-        self.assertEqual(basis, "STRUCTURE/ATR")
+        self.assertGreater(r1, 0); self.assertGreater(r2, r1); self.assertGreater(r3, r2)
+        self.assertAlmostEqual(r2 / r1, 2.0, delta=0.01); self.assertAlmostEqual(r3 / r1, 3.0, delta=0.01)
+        self.assertLess(sl, entry_low); self.assertEqual(basis, "STRUCTURE/ATR")
 
     def test_smc_signal_accepts_live_reference_price(self):
         smc = importlib.import_module("smc_engine")
@@ -34,63 +30,62 @@ class AuditFixTests(unittest.TestCase):
             base = 3000.0 + i * 0.2
             candles.append({"open": base - 0.2, "high": base + 0.8, "low": base - 0.8, "close": base + 0.2})
         signal = smc.generate_signal(candles, candles, reference_price=3055.5)
-        self.assertEqual(signal["signal_price"], 3055.5)
-        self.assertEqual(signal["signal_price_source"], "LIVE_REFERENCE")
+        self.assertEqual(signal["signal_price"], 3055.5); self.assertEqual(signal["signal_price_source"], "LIVE_REFERENCE")
 
     def test_api_passes_live_bid_as_signal_reference(self):
-        api = importlib.import_module("api_handler")
-        captured = {}
-
+        api = importlib.import_module("api_handler"); captured = {}
         async def fake_signal(reference_price=None):
             captured["price"] = reference_price
-            return {"direction": "HOLD", "confidence": 0, "entry_low": 0.0, "entry_high": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0, "sl": 0.0, "reasons": [], "tf_bias": "NEUTRAL"}
-
+            return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":[],"tf_bias":"NEUTRAL"}
         class Session:
-            last_fetch_time = None
-            last_price_bid = None
-            last_price_ask = None
-            last_price_high = None
-            last_price_low = None
-
-        with patch.object(api.database, "get_or_create_session", return_value=Session()), patch.object(api, "fetch_xauusd_price", new=AsyncMock(return_value={"bid": 3055.5, "ask": 3055.9, "high": 3060, "low": 3040})), patch.object(api, "get_smc_signal", new=fake_signal), patch.object(api.database, "update_session"):
+            last_fetch_time = last_price_bid = last_price_ask = last_price_high = last_price_low = None
+        with patch.object(api.database, "get_or_create_session", return_value=Session()), patch.object(api, "fetch_xauusd_price", new=AsyncMock(return_value={"bid":3055.5,"ask":3055.9,"high":3060,"low":3040})), patch.object(api, "get_smc_signal", new=fake_signal), patch.object(api.database, "update_session"):
             result = asyncio.run(api.get_cached_or_fresh_price(12345))
-        self.assertEqual(result["bid"], 3055.5)
-        self.assertEqual(captured["price"], 3055.5)
+        self.assertEqual(result["bid"], 3055.5); self.assertEqual(captured["price"], 3055.5)
 
     def test_telegram_webhook_requires_secret_even_when_unconfigured(self):
-        app_module = importlib.import_module("app")
-        app_module.TELEGRAM_WEBHOOK_SECRET = "expected-secret"
-        app_module.telegram_app = None
-        request = type("Request", (), {})()
-        request.json = AsyncMock(return_value={})
-        with self.assertRaises(Exception) as ctx:
-            asyncio.run(app_module.telegram_webhook(request, None))
+        app_module = importlib.import_module("app"); app_module.TELEGRAM_WEBHOOK_SECRET = "expected-secret"; app_module.telegram_app = None
+        request = type("Request", (), {})(); request.json = AsyncMock(return_value={})
+        with self.assertRaises(Exception) as ctx: asyncio.run(app_module.telegram_webhook(request, None))
         self.assertIn("403", str(ctx.exception))
 
     def test_notification_sweep_query_exists(self):
-        storage = importlib.import_module("whop_storage")
-        self.assertTrue(callable(storage.list_unnotified_orders))
+        storage = importlib.import_module("whop_storage"); self.assertTrue(callable(storage.list_unnotified_orders))
 
     def test_cache_contract_is_ten_seconds(self):
-        api = importlib.import_module("api_handler")
-        self.assertEqual(api.SESSION_CACHE_TTL, 10)
-        self.assertEqual(api.CANDLE_CACHE_TTL, 10)
+        api = importlib.import_module("api_handler"); self.assertEqual(api.SESSION_CACHE_TTL, 10); self.assertEqual(api.CANDLE_CACHE_TTL, 10)
 
     def test_remote_reconcile_rejects_unknown_plan(self):
         module = importlib.import_module("whop_webhook_phase2")
-
         async def fake_payment(_payment_id):
-            return {"status": "paid", "metadata": {"telegram_id": "123", "neural_order_id": "ord_x"}, "plan": {"id": "unknown_plan"}}
-
+            return {"status":"paid","metadata":{"telegram_id":"123","neural_order_id":"ord_x"},"plan":{"id":"unknown_plan"}}
         with patch.object(module.whop_api_phase2, "fetch_payment", new=fake_payment):
             result = asyncio.run(module.reconcile_payment_remote("pay_test"))
-        self.assertFalse(result["ok"])
-        self.assertIn("Unknown or invalid plan duration", result["reason"])
+        self.assertFalse(result["ok"]); self.assertIn("Unknown or invalid plan duration", result["reason"])
+
+    def test_remote_reconcile_rejects_metadata_plan_mismatch(self):
+        module = importlib.import_module("whop_webhook_phase2")
+        async def fake_payment(_payment_id):
+            return {"status":"paid","metadata":{"telegram_id":"123","neural_order_id":"ord_mismatch","plan_days":"30"},"plan":{"id":"plan_ksl11weFJ0z41"}}
+        with patch.object(module.whop_api_phase2, "fetch_payment", new=fake_payment):
+            result = asyncio.run(module.reconcile_payment_remote("pay_mismatch"))
+        self.assertFalse(result["ok"]); self.assertIn("Plan duration mismatch", result["reason"])
 
     def test_notification_signature_has_no_unused_raw_token(self):
         module = importlib.import_module("whop_webhook_phase2")
         self.assertNotIn("raw_token", inspect.signature(module.notify_customer).parameters)
 
+    def test_remote_reconcile_uses_existing_payment_binding(self):
+        module = importlib.import_module("whop_webhook_phase2"); storage = importlib.import_module("whop_storage"); db = importlib.import_module("database")
+        storage.create_order("bound_order", 987, "plan_ksl11weFJ0z41", 7)
+        cid = storage.claim_fulfillment("pay_bound", "bound_order", stale_minutes=0)
+        db.fulfill_payment(987, 7, "bound_order", "pay_bound", cid)
+        async def fake_payment(_payment_id):
+            return {"status":"paid","metadata":{"telegram_id":"987","neural_order_id":"different_order"},"plan":{"id":"plan_ksl11weFJ0z41"}}
+        with patch.object(module.whop_api_phase2, "fetch_payment", new=fake_payment):
+            result = asyncio.run(module.reconcile_payment_remote("pay_bound"))
+        self.assertTrue(result["ok"]); self.assertIn("ALREADY", result["status"])
+        self.assertIsNone(storage.get_order("different_order"))
 
-if __name__ == "__main__":
-    unittest.main()
+
+if __name__ == "__main__": unittest.main()
