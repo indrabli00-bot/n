@@ -28,7 +28,9 @@ async def get_cached_or_fresh_price(user_id: int) -> dict[str, Any]:
         sess = database.get_or_create_session(user_id)
     except Exception as exc:
         logger.warning("Session lookup failed: %s", exc)
-        return await fetch_xauusd_price()
+        price = await fetch_xauusd_price()
+        _latest_smc_signal = await get_smc_signal(reference_price=float(price["bid"]))
+        return price
 
     if sess.last_fetch_time:
         last_fetch = database.normalize_datetime_utc(sess.last_fetch_time)
@@ -43,7 +45,7 @@ async def get_cached_or_fresh_price(user_id: int) -> dict[str, Any]:
                 "change": 0.0, "change_percent": 0.0, "volume": "N/A",
                 "timestamp": last_fetch.isoformat(),
             }
-            _latest_smc_signal = await get_smc_signal()
+            _latest_smc_signal = await get_smc_signal(reference_price=float(price["bid"]))
             return price
 
     price_data = await fetch_xauusd_price()
@@ -55,11 +57,11 @@ async def get_cached_or_fresh_price(user_id: int) -> dict[str, Any]:
         )
     except Exception as exc:
         logger.warning("Failed to persist price cache: %s", exc)
-    _latest_smc_signal = await get_smc_signal()
+    _latest_smc_signal = await get_smc_signal(reference_price=float(price_data["bid"]))
     return price_data
 
 async def fetch_candles(interval: str, outputsize: int = 100) -> list[dict[str, Any]] | None:
-    """Fetch XAU/USD candles from TwelveData for the merged SMC engine."""
+    """Fetch XAU/USD candles from TwelveData with a strict 10-second cache."""
     api_key = os.getenv("TWELVEDATA_API_KEY", "").strip()
     if not api_key:
         return None
@@ -90,11 +92,11 @@ async def fetch_candles(interval: str, outputsize: int = 100) -> list[dict[str, 
         logger.warning("TwelveData %s candle fetch failed: %s", interval, exc)
         return None
 
-async def get_smc_signal() -> dict[str, Any] | None:
+async def get_smc_signal(reference_price: float | None = None) -> dict[str, Any] | None:
     candles_5m, candles_15m = await asyncio.gather(fetch_candles("5min", 100), fetch_candles("15min", 100))
     if not candles_5m or not candles_15m:
-        return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE 5M/15M CANDLE DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
-    return smc_engine.generate_signal(candles_5m, candles_15m)
+        return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE 5M/15M CANDLE DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP","signal_price":reference_price or 0.0,"signal_price_source":"LIVE_REFERENCE" if reference_price is not None else "NONE"}
+    return smc_engine.generate_signal(candles_5m, candles_15m, reference_price=reference_price)
 
 def _ema(values: list[float], period: int) -> float:
     if not values:
@@ -162,22 +164,13 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
     lowest_low = min(float(c["low"]) for c in stoch_window)
     stoch_k = 50.0 if highest_high == lowest_low else ((last_close - lowest_low) / (highest_high - lowest_low)) * 100
 
-    return {
-        "rsi": rsi,
-        "macd_hist": round(macd_hist, 2),
-        "macd_signal": round(signal_line, 2),
-        "ema_trend": ema_trend,
-        "ema": round(ema20, 2),
-        "atr": round(atr, 2),
-        "bb_position": bb_position,
-        "stoch_k": round(stoch_k, 2),
-    }
+    return {"rsi": rsi, "macd_hist": round(macd_hist, 2), "macd_signal": round(signal_line, 2), "ema_trend": ema_trend, "ema": round(ema20, 2), "atr": round(atr, 2), "bb_position": bb_position, "stoch_k": round(stoch_k, 2)}
 
 def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
     """Compatibility wrapper: return live candle indicators plus the current SMC signal."""
     candles = _candle_cache.get("5min:100", (None, []))[1]
     technical = _technical_indicators(candles)
-    sig = _latest_smc_signal or {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
+    sig = _latest_smc_signal or {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP","signal_price":price,"signal_price_source":"LIVE_REFERENCE"}
     technical["smc_signal"] = sig
     return technical
 
@@ -185,4 +178,4 @@ def _determine_signal(price: float, indicators: dict[str, Any]) -> dict[str, Any
     smc_signal = indicators.get("smc_signal")
     if smc_signal is not None:
         return smc_signal
-    return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
+    return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP","signal_price":price,"signal_price_source":"LIVE_REFERENCE"}
