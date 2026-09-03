@@ -15,7 +15,7 @@ import smc_engine
 
 logger = logging.getLogger(__name__)
 SESSION_CACHE_TTL = 30
-CANDLE_CACHE_TTL = 240
+CANDLE_CACHE_TTL = 60
 _candle_cache: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
 _latest_smc_signal: dict[str, Any] | None = None
 
@@ -109,20 +109,25 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
     """Calculate Structure Map indicators directly from the live 5-minute candle series."""
     closes = [float(c["close"]) for c in candles]
     if len(closes) < 35:
-        return {"rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "ema_trend": "Data Unavailable", "ema": None, "atr": 0.0}
+        return {"rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "ema_trend": "Data Unavailable", "ema": None, "atr": 0.0, "bb_position": "Data Unavailable", "stoch_k": None}
 
     rsi = smc_engine.calculate_rsi(candles)
-    ema20 = _ema(closes[-60:], 20)
-    ema50 = _ema(closes[-60:], 50)
+    ema20 = _ema(closes, 20)
+    ema50 = _ema(closes, 50)
     ema_trend = "Bullish Alignment" if ema20 > ema50 else "Bearish Alignment" if ema20 < ema50 else "Converging"
 
-    macd_series = []
-    for i in range(26, len(closes)):
-        series = closes[:i + 1]
-        macd_series.append(_ema(series[-60:], 12) - _ema(series[-60:], 26))
-    macd_line = macd_series[-1] if macd_series else 0.0
-    macd_signal = _ema(macd_series[-9:], 9) if macd_series else 0.0
-    macd_hist = macd_line - macd_signal
+    ema12_series = []
+    ema26_series = []
+    e12 = e26 = closes[0]
+    a12, a26 = 2 / 13, 2 / 27
+    for value in closes:
+        e12 = a12 * value + (1 - a12) * e12
+        e26 = a26 * value + (1 - a26) * e26
+        ema12_series.append(e12)
+        ema26_series.append(e26)
+    macd_series = [a - b for a, b in zip(ema12_series, ema26_series)]
+    signal_line = _ema(macd_series, 9)
+    macd_hist = macd_series[-1] - signal_line
 
     true_ranges = []
     for i in range(1, len(candles)):
@@ -135,7 +140,7 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "rsi": rsi,
         "macd_hist": round(macd_hist, 2),
-        "macd_signal": round(macd_signal, 2),
+        "macd_signal": round(signal_line, 2),
         "ema_trend": ema_trend,
         "ema": round(ema20, 2),
         "atr": round(atr, 2),
