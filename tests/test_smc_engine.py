@@ -1,4 +1,5 @@
 from smc_engine import calculate_rsi, detect_fvg, check_candle_pattern, generate_signal
+import api_handler
 
 def c(o,h,l,cl): return {"open":o,"high":h,"low":l,"close":cl}
 
@@ -25,3 +26,14 @@ def test_neutral_structure_returns_hold_with_confirmation_guidance():
     assert signal["direction"]=="HOLD"
     assert any("WAIT FOR 15M BIAS CONFIRMATION" in r for r in signal["reasons"])
     assert signal["tp1"]==signal["tp2"]==signal["tp3"]==signal["sl"]==0.0
+
+def test_structure_map_uses_real_ema_macd_and_atr():
+    candles=[]
+    for i in range(60):
+        close=100.0+i*0.5
+        candles.append(c(99.0+i*0.5, close+1.5, close-1.0, close))
+    indicators=api_handler._technical_indicators(candles)
+    assert indicators["ema"] is not None
+    assert indicators["atr"] > 0
+    assert indicators["macd_hist"] > 0
+    assert indicators["ema_trend"] == "Bullish Alignment"
