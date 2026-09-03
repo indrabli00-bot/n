@@ -38,3 +38,21 @@ def test_atr_uses_true_range_not_zero():
         candles.append({"time": str(i), "open": close, "high": close + 2, "low": close - 1, "close": close + 0.5})
     data = _technical_indicators(candles)
     assert 0 < data["atr"] < 4
+
+
+def test_bollinger_position_is_calculated_from_price_location():
+    candles = [candle(i, 2300.0) for i in range(60)]
+    for i in range(40, 60):
+        candles[i]["close"] = 2300.0 + (i - 39) * 2.0
+        candles[i]["high"] = candles[i]["close"] + 1.0
+        candles[i]["low"] = candles[i]["close"] - 1.0
+    data = _technical_indicators(candles)
+    assert data["bb_position"] in {"Upper Band", "Upper Half"}
+
+
+def test_stochastic_k_is_calculated_from_14_candle_range():
+    candles = [candle(i, 2300 + i * 0.1) for i in range(60)]
+    data = _technical_indicators(candles)
+    expected = ((candles[-1]["close"] - min(c["low"] for c in candles[-14:])) / (max(c["high"] for c in candles[-14:]) - min(c["low"] for c in candles[-14:])) * 100)
+    assert data["stoch_k"] == round(expected, 2)
+    assert 0 <= data["stoch_k"] <= 100
