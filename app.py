@@ -17,6 +17,7 @@ import database
 import expiry_notifier
 import fulfillment_recovery
 import main
+import market_candles
 import runtime_hardening
 import ui_contract
 import whop_api_phase2
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
 
     main.setup_logging()
     database.init_db()
+    market_candles.init_db()
     runtime_hardening.install()
     whop_storage.init_phase2_db()
     ui_contract.install(main)
@@ -51,10 +53,14 @@ async def lifespan(app: FastAPI):
     await command_localization.install(telegram_app.bot, database_admin_id())
     expiry_notifier.schedule(telegram_app)
     fulfillment_recovery.schedule(telegram_app)
+    market_candles.schedule(telegram_app)
     await telegram_app.start()
     webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
     try:
-        await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=True)
+        # Keep Telegram's queued updates across redeploys/restarts. A transient
+        # restart must not silently discard customer actions or payment-related
+        # callbacks that arrived while the service was unavailable.
+        await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=False)
         logger.info("Telegram webhook configured: %s", webhook_url)
     except Exception:
         logger.exception("Telegram webhook registration failed: %s", webhook_url)
@@ -93,7 +99,10 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "neural-gold", "telegram": telegram_app is not None}
+    ready = telegram_app is not None and telegram_app.running
+    if not ready:
+        return JSONResponse(status_code=503, content={"status": "degraded", "service": "neural-gold", "telegram": False})
+    return {"status": "ok", "service": "neural-gold", "telegram": True}
 
 
 @app.get("/checkout/{days}")
