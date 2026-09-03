@@ -21,7 +21,7 @@ import runtime_hardening
 import ui_contract
 import whop_api_phase2
 import whop_storage
-from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET
+from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, WHOP_API_KEY, WHOP_WEBHOOK_SECRET
 from whop_webhook_phase2 import handle_event, notify_customer, verify_signature
 
 logger = logging.getLogger("neural_gold.belmo")
@@ -31,6 +31,15 @@ telegram_app = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global telegram_app
+    if not BELMO_PUBLIC_URL:
+        raise RuntimeError("BELMO_PUBLIC_URL is required for the Belmo webhook runtime")
+    if not TELEGRAM_WEBHOOK_SECRET:
+        raise RuntimeError("TELEGRAM_WEBHOOK_SECRET is required for the Belmo webhook runtime")
+    if not WHOP_API_KEY:
+        raise RuntimeError("WHOP_API_KEY is required for Phase 2 checkout/revalidation")
+    if not WHOP_WEBHOOK_SECRET:
+        raise RuntimeError("WHOP_WEBHOOK_SECRET is required for Phase 2 webhook fulfillment")
+
     main.setup_logging()
     database.init_db()
     runtime_hardening.install()
@@ -43,26 +52,25 @@ async def lifespan(app: FastAPI):
     expiry_notifier.schedule(telegram_app)
     fulfillment_recovery.schedule(telegram_app)
     await telegram_app.start()
-    if BELMO_PUBLIC_URL:
-        if not TELEGRAM_WEBHOOK_SECRET:
-            raise RuntimeError("TELEGRAM_WEBHOOK_SECRET is required when BELMO_PUBLIC_URL is configured")
-        webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
-        try:
-            await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=True)
-            logger.info("Telegram webhook configured: %s", webhook_url)
-        except Exception:
-            logger.exception("Telegram webhook registration failed: %s", webhook_url)
-    else:
-        logger.warning("BELMO_PUBLIC_URL is not set; webhook registration skipped.")
+    webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
+    try:
+        await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=True)
+        logger.info("Telegram webhook configured: %s", webhook_url)
+    except Exception:
+        logger.exception("Telegram webhook registration failed: %s", webhook_url)
+        await telegram_app.stop()
+        await telegram_app.shutdown()
+        telegram_app = None
+        raise RuntimeError("Telegram webhook registration failed; startup aborted")
     yield
     if telegram_app:
         try:
-            if BELMO_PUBLIC_URL:
-                await telegram_app.bot.delete_webhook(drop_pending_updates=False)
+            await telegram_app.bot.delete_webhook(drop_pending_updates=False)
         except Exception:
             logger.exception("Failed to delete Telegram webhook")
         await telegram_app.stop()
         await telegram_app.shutdown()
+        telegram_app = None
 
 
 def database_admin_id() -> int | None:
@@ -101,7 +109,7 @@ async def checkout_redirect(days: int, token: str):
         raise HTTPException(status_code=400, detail="Invalid payment link")
     if signed_days != days or expires < int(time.time()):
         raise HTTPException(status_code=410, detail="Payment link expired")
-    key = (TELEGRAM_BOT_TOKEN or "neural-gold").encode("utf-8")
+    key = TELEGRAM_BOT_TOKEN.encode("utf-8")
     expected = hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(status_code=403, detail="Invalid payment link")
