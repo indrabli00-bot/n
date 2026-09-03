@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -81,6 +82,39 @@ class StartLatencyTests(unittest.TestCase):
 
         asyncio.run(run())
         self.assertTrue(fake_app.scheduled)
+
+    def test_callback_exception_isolated_from_global_error_handler(self):
+        guard = importlib.import_module("callback_guard")
+
+        class FakeUser:
+            id = 456
+            language_code = "en"
+
+        class FakeMessage:
+            reply_text = AsyncMock()
+
+        class FakeQuery:
+            data = "screen:price"
+            from_user = FakeUser()
+            message = FakeMessage()
+            answer = AsyncMock()
+            edit_message_text = AsyncMock()
+
+        class FakeUpdate:
+            effective_user = FakeUser()
+            callback_query = FakeQuery()
+
+        original = AsyncMock(side_effect=RuntimeError("simulated callback failure"))
+        module = types.SimpleNamespace(callback_router=original)
+        guard.install(module)
+
+        async def run():
+            await module.callback_router(FakeUpdate(), object())
+
+        asyncio.run(run())
+        original.assert_awaited_once()
+        FakeQuery.answer.assert_awaited_once()
+        FakeQuery.edit_message_text.assert_awaited_once()
 
 
 if __name__ == "__main__":
