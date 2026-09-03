@@ -20,8 +20,6 @@ import instant_start
 import main
 import market_candles
 import runtime_hardening
-import terminal_style
-import ui_contract
 import whop_api_phase2
 import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, WHOP_API_KEY, WHOP_WEBHOOK_SECRET
@@ -67,13 +65,9 @@ async def lifespan(app: FastAPI):
         database.init_db()
         market_candles.init_db()
         runtime_hardening.install()
-        # Keep one canonical navigation renderer for both legacy and Phase 2 UI.
-        ui_contract._nav = lambda update: terminal_style.render_persistent_nav(ui_contract._lang(update)).inline_keyboard
         whop_storage.init_phase2_db()
-        ui_contract.install(main)
         telegram_app = main.build_application()
-        # Belmo uses a dedicated /start fast path in handler group -1. It sends
-        # an immediate shell before database/auth work, then finalizes in a task.
+        # Keep /start fast without introducing a second customer UI renderer.
         telegram_app.add_handler(CommandHandler("start", instant_start.handle_start), group=-1)
         await telegram_app.initialize()
         await main.post_init(telegram_app)
@@ -84,8 +78,6 @@ async def lifespan(app: FastAPI):
         await telegram_app.start()
         started = True
         webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
-        # Preserve Telegram's queued updates across redeploys/restarts. A transient
-        # restart must not silently discard customer actions or callbacks.
         await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=False)
         webhook_registered = True
         logger.info("Telegram webhook configured: %s", webhook_url)
@@ -174,9 +166,6 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
         update = Update.de_json(data, telegram_app.bot)
         if update is None:
             raise ValueError("Invalid Telegram update")
-        # Telegram should receive a fast 2xx acknowledgement. Handler work is
-        # scheduled on PTB's task manager so slow DB/API operations cannot cause
-        # webhook timeouts and duplicate deliveries.
         telegram_app.create_task(telegram_app.process_update(update), update=update, name="telegram_webhook_update")
         logger.info("WEBHOOK_ACCEPTED update_id=%s latency_ms=%.0f", data.get("update_id"), (time.perf_counter() - started) * 1000)
         return {"ok": True}
