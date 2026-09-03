@@ -4,6 +4,7 @@ import types
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from telegram import InlineKeyboardButton
 from telegram.ext import ApplicationHandlerStop
 
 
@@ -115,6 +116,17 @@ class StartLatencyTests(unittest.TestCase):
         original.assert_awaited_once()
         FakeQuery.answer.assert_awaited_once()
         FakeQuery.edit_message_text.assert_awaited_once()
+
+    def test_keyboard_accepts_tuple_shaped_navigation_rows(self):
+        module = importlib.import_module("ui_contract")
+        update = types.SimpleNamespace()
+        body_row = [InlineKeyboardButton("MODULE", callback_data="screen:price")]
+        nav_button = InlineKeyboardButton("MENU", callback_data="nav:home")
+        with patch.object(module, "_nav", return_value=((nav_button,),)):
+            markup = module._keyboard(update, [body_row])
+        self.assertEqual(len(markup.inline_keyboard), 2)
+        self.assertEqual(markup.inline_keyboard[0][0].callback_data, "screen:price")
+        self.assertEqual(markup.inline_keyboard[1][0].callback_data, "nav:home")
 
 
 if __name__ == "__main__":
