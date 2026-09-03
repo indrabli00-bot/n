@@ -83,7 +83,9 @@ def build_candles(interval_minutes: int, outputsize: int = 100) -> list[dict] | 
         rows = conn.execute(
             text("""
                 SELECT sampled_at, price FROM market_price_samples
-                WHERE sampled_at >= :cutoff AND sampled_at < :current_bucket
+                WHERE source = 'GOLD_API'
+                  AND sampled_at >= :cutoff
+                  AND sampled_at < :current_bucket
                 ORDER BY sampled_at ASC
             """),
             {"cutoff": cutoff, "current_bucket": current_bucket},
