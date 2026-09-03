@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from telegram import InlineKeyboardButton
+from telegram.ext import ApplicationHandlerStop
 
 
 class StartLatencyTests(unittest.TestCase):
@@ -42,9 +43,8 @@ class StartLatencyTests(unittest.TestCase):
 
         async def run():
             with patch.object(module, "_initialize_and_refresh", new=AsyncMock()):
-                with self.assertRaises(Exception) as raised:
+                with self.assertRaises(ApplicationHandlerStop):
                     await module.handle_start(update, context)
-            self.assertEqual(raised.exception.__class__.__name__, "ApplicationHandlerStop")
 
         asyncio.run(run())
         update.message.reply_text.assert_awaited_once()
