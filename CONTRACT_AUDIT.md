@@ -8,6 +8,7 @@ The production contract is enforced at the `app.py` boundary and by the Phase 2 
 - Telegram transport: FastAPI webhook
 - Startup fails closed without `BELMO_PUBLIC_URL`, `TELEGRAM_WEBHOOK_SECRET`, `WHOP_API_KEY`, or `WHOP_WEBHOOK_SECRET`.
 - Telegram webhook registration failure aborts startup.
+- Telegram webhook registration preserves pending updates across restarts.
 - `/health` is only considered production-ready when `telegram` is `true`.
 
 ## Customer UI contract
@@ -17,6 +18,14 @@ The production contract is enforced at the `app.py` boundary and by the Phase 2 
 - Customer module labels remain `MARKET PULSE`, `NEURAL STRIKES`, and `STRUCTURE MAP`.
 - Premium access uses exactly 7 / 14 / 30 day plans.
 - Legacy `phase2_bot.py` UI routes are removed; it is checkout-link infrastructure only.
+
+## Market-data contract
+
+- `GOLDAPI_API_KEY` is the only market-data API credential.
+- The runtime contains no TwelveData credential or endpoint.
+- Live XAU/USD spot data comes from GoldAPI.io, with the existing keyless live-price fallback cascade only for price-display continuity.
+- M5/M15 SMC candles are built only from persisted live GoldAPI samples; no synthetic or historical candle backfill is allowed.
+- If contiguous M5/M15 coverage is not available, NEURAL STRIKES fails closed to `HOLD / DATA_GAP`.
 
 ## Payment contract
 
@@ -33,8 +42,9 @@ The production contract is enforced at the `app.py` boundary and by the Phase 2 
 Every `main` push must pass:
 
 1. Python compilation
-2. UI hardcode guard
-3. Pytest
-4. Full unittest discovery
+2. Production contract guard
+3. UI hardcode guard
+4. Pytest
+5. Full unittest discovery
 
 No redeploy should be considered ready while the final `main` commit is not green.
