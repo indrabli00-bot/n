@@ -23,6 +23,7 @@ TELEGRAM_WEBHOOK_SECRET=...
 GOLDAPI_API_KEY=...
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE
 WHOP_API_KEY=...
+WHOP_COMPANY_ID=...
 WHOP_WEBHOOK_SECRET=...
 LOG_LEVEL=INFO
 ```
@@ -34,11 +35,11 @@ LOG_LEVEL=INFO
 ## Startup sequence
 
 1. Validate production secrets and public URL.
-2. Initialize the application database and Phase 2 Whop storage.
+2. Initialize the application database, Phase 2 Whop storage, and GoldAPI candle sample storage.
 3. Install runtime hardening and the canonical customer UI contract.
 4. Initialize/start the Telegram application.
-5. Register the Telegram webhook at `/telegram/webhook`.
-6. Start expiry and fulfillment recovery jobs.
+5. Register the Telegram webhook at `/telegram/webhook` without dropping queued updates.
+6. Start expiry, fulfillment recovery, and the 60-second GoldAPI market-sample job.
 
 If Telegram webhook registration fails, startup is aborted instead of leaving a superficially healthy HTTP service with a non-working bot.
 
@@ -55,6 +56,8 @@ If Telegram webhook registration fails, startup is aborted instead of leaving a 
 ## Market data
 
 `GOLDAPI_API_KEY` is used for the primary XAU/USD live price feed. The runtime does not require a TwelveData credential. If the primary feed is unavailable, the existing keyless fallback cascade is used according to the price-source contract; no fabricated price is generated.
+
+GoldAPI does not provide native M5/M15 candles in the documented API contract. NEURAL GOLD therefore stores one real GoldAPI spot sample per minute and aggregates only contiguous sampled data into M5/M15 bars. The current SMC lookback is 60 M5 bars plus 20 M15 bars, so a fresh deployment needs approximately 5 hours of contiguous samples before NEURAL STRIKES can leave `HOLD / DATA_GAP`. This is deliberate fail-closed behavior, not a fabricated historical backfill.
 
 ## Whop recovery
 
@@ -76,8 +79,9 @@ Use an external persistent PostgreSQL database for paid production. SQLite is ap
 - [ ] `GOLDAPI_API_KEY` is configured with a valid GoldAPI.io key
 - [ ] `DATABASE_URL` points to the production PostgreSQL database
 - [ ] Telegram webhook secret matches the value configured in the deployment
-- [ ] Whop webhook secret matches the Whop webhook configuration
 - [ ] Whop API key is active and has the permissions required by the checkout/revalidation endpoints
+- [ ] Whop company ID is configured when using company validation
+- [ ] Whop webhook secret matches the Whop webhook configuration
 - [ ] Whop webhook URL is `https://<BELMO_PUBLIC_URL>/webhooks/whop`
 - [ ] Telegram webhook URL is `https://<BELMO_PUBLIC_URL>/telegram/webhook`
 - [ ] `/health` reports `telegram: true` after startup
