@@ -45,11 +45,13 @@ async def lifespan(app: FastAPI):
     await telegram_app.start()
 
     if BELMO_PUBLIC_URL:
+        if not TELEGRAM_WEBHOOK_SECRET:
+            raise RuntimeError("TELEGRAM_WEBHOOK_SECRET is required when BELMO_PUBLIC_URL is configured")
         webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
         try:
             await telegram_app.bot.set_webhook(
                 url=webhook_url,
-                secret_token=TELEGRAM_WEBHOOK_SECRET or None,
+                secret_token=TELEGRAM_WEBHOOK_SECRET,
                 drop_pending_updates=True,
             )
             logger.info("Telegram webhook configured: %s", webhook_url)
@@ -127,7 +129,7 @@ async def checkout_redirect(days: int, token: str):
 
 @app.post("/telegram/webhook")
 async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
-    if TELEGRAM_WEBHOOK_SECRET and x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET:
+    if not TELEGRAM_WEBHOOK_SECRET or x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     if telegram_app is None:
         raise HTTPException(status_code=503, detail="Bot is starting")
