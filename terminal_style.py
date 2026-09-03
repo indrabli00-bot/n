@@ -96,11 +96,11 @@ def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH) -> str
 
 
 def render_persistent_nav(lang: str):
-    """Return the canonical persistent two-button navigation row."""
+    """Return the premium persistent navigation row with balanced labels."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"🏠 {t(lang, 'menu')}", callback_data="nav:home"),
-        InlineKeyboardButton(f"👨‍💼 {t(lang, 'account')}", callback_data="screen:account"),
+        InlineKeyboardButton(f"⌂  {t(lang, 'menu')}", callback_data="nav:home"),
+        InlineKeyboardButton(f"◈  {t(lang, 'account')}", callback_data="screen:account"),
     ]])
 
 
