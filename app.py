@@ -29,6 +29,22 @@ logger = logging.getLogger("neural_gold.belmo")
 telegram_app = None
 
 
+async def _shutdown_telegram_application() -> None:
+    global telegram_app
+    if telegram_app is None:
+        return
+    try:
+        if telegram_app.running:
+            await telegram_app.stop()
+    except Exception:
+        logger.exception("Telegram application stop failed during cleanup")
+    try:
+        await telegram_app.shutdown()
+    except Exception:
+        logger.exception("Telegram application shutdown failed during cleanup")
+    telegram_app = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global telegram_app
@@ -41,42 +57,51 @@ async def lifespan(app: FastAPI):
     if not WHOP_WEBHOOK_SECRET:
         raise RuntimeError("WHOP_WEBHOOK_SECRET is required for Phase 2 webhook fulfillment")
 
-    main.setup_logging()
-    database.init_db()
-    market_candles.init_db()
-    runtime_hardening.install()
-    whop_storage.init_phase2_db()
-    ui_contract.install(main)
-    telegram_app = main.build_application()
-    await telegram_app.initialize()
-    await main.post_init(telegram_app)
-    await command_localization.install(telegram_app.bot, database_admin_id())
-    expiry_notifier.schedule(telegram_app)
-    fulfillment_recovery.schedule(telegram_app)
-    market_candles.schedule(telegram_app)
-    await telegram_app.start()
-    webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
+    started = False
+    webhook_registered = False
     try:
-        # Keep Telegram's queued updates across redeploys/restarts. A transient
-        # restart must not silently discard customer actions or payment-related
-        # callbacks that arrived while the service was unavailable.
+        main.setup_logging()
+        database.init_db()
+        market_candles.init_db()
+        runtime_hardening.install()
+        whop_storage.init_phase2_db()
+        ui_contract.install(main)
+        telegram_app = main.build_application()
+        await telegram_app.initialize()
+        await main.post_init(telegram_app)
+        await command_localization.install(telegram_app.bot, database_admin_id())
+        expiry_notifier.schedule(telegram_app)
+        fulfillment_recovery.schedule(telegram_app)
+        market_candles.schedule(telegram_app)
+        await telegram_app.start()
+        started = True
+        webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
+        # Preserve Telegram's queued updates across redeploys/restarts. A transient
+        # restart must not silently discard customer actions or callbacks.
         await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=False)
+        webhook_registered = True
         logger.info("Telegram webhook configured: %s", webhook_url)
+        yield
     except Exception:
-        logger.exception("Telegram webhook registration failed: %s", webhook_url)
-        await telegram_app.stop()
-        await telegram_app.shutdown()
-        telegram_app = None
-        raise RuntimeError("Telegram webhook registration failed; startup aborted")
-    yield
-    if telegram_app:
-        try:
-            await telegram_app.bot.delete_webhook(drop_pending_updates=False)
-        except Exception:
-            logger.exception("Failed to delete Telegram webhook")
-        await telegram_app.stop()
-        await telegram_app.shutdown()
-        telegram_app = None
+        logger.exception("Belmo startup/runtime lifecycle failed")
+        if telegram_app is not None:
+            if webhook_registered:
+                try:
+                    await telegram_app.bot.delete_webhook(drop_pending_updates=False)
+                except Exception:
+                    logger.exception("Failed to delete Telegram webhook during cleanup")
+            await _shutdown_telegram_application()
+        raise
+    finally:
+        if telegram_app is not None:
+            if webhook_registered:
+                try:
+                    await telegram_app.bot.delete_webhook(drop_pending_updates=False)
+                except Exception:
+                    logger.exception("Failed to delete Telegram webhook")
+            await _shutdown_telegram_application()
+        elif started:
+            logger.warning("Telegram application marked started but cleanup reference was lost")
 
 
 def database_admin_id() -> int | None:
