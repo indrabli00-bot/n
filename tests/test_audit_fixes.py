@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import inspect
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -79,11 +80,7 @@ class AuditFixTests(unittest.TestCase):
         module = importlib.import_module("whop_webhook_phase2")
 
         async def fake_payment(_payment_id):
-            return {
-                "status": "paid",
-                "metadata": {"telegram_id": "123", "neural_order_id": "ord_x"},
-                "plan": {"id": "unknown_plan"},
-            }
+            return {"status": "paid", "metadata": {"telegram_id": "123", "neural_order_id": "ord_x"}, "plan": {"id": "unknown_plan"}}
 
         with patch.object(module.whop_api_phase2, "fetch_payment", new=fake_payment):
             result = asyncio.run(module.reconcile_payment_remote("pay_test"))
@@ -92,7 +89,7 @@ class AuditFixTests(unittest.TestCase):
 
     def test_notification_signature_has_no_unused_raw_token(self):
         module = importlib.import_module("whop_webhook_phase2")
-        self.assertNotIn("raw_token", str(module.notify_customer.__annotations__))
+        self.assertNotIn("raw_token", inspect.signature(module.notify_customer).parameters)
 
 
 if __name__ == "__main__":
