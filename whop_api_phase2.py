@@ -7,7 +7,7 @@ from typing import Any
 import aiohttp
 
 import whop_storage
-from config import BELMO_PUBLIC_URL, WHOP_API_KEY
+from config import BELMO_PUBLIC_URL, WHOP_API_KEY, WHOP_COMPANY_ID
 
 WHOP_API_BASE = "https://api.whop.com/api/v1"
 PLAN_IDS = {
@@ -94,6 +94,14 @@ async def create_checkout_for_user(
                     return None, order_id, f"whop_http_{response.status}:{detail}"
                 checkout_id = str(body.get("id") or "")
                 purchase_url = str(body.get("purchase_url") or "")
+                returned_plan_id = str((body.get("plan") or {}).get("id") or "")
+                returned_company_id = str(body.get("company_id") or "")
+                if returned_plan_id != plan_id:
+                    whop_storage.update_order(order_id, status="checkout_failed")
+                    return None, order_id, "whop_plan_mismatch_in_checkout_response"
+                if WHOP_COMPANY_ID and returned_company_id and returned_company_id != WHOP_COMPANY_ID:
+                    whop_storage.update_order(order_id, status="checkout_failed")
+                    return None, order_id, "whop_company_mismatch_in_checkout_response"
                 if not checkout_id or not purchase_url:
                     whop_storage.update_order(order_id, status="checkout_failed")
                     return None, order_id, "whop_missing_checkout_response"
