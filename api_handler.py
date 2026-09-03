@@ -148,8 +148,8 @@ async def get_smc_signal(reference_price: float | None = None) -> dict[str, Any]
     return smc_engine.generate_signal(candles_5m, candles_15m, reference_price=reference_price)
 
 
-def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
-    """Compatibility wrapper using the current persisted GoldAPI-derived bars."""
+def get_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
+    """Return technical indicators from persisted live GoldAPI-derived bars."""
     candles_5m = market_candles.get_candles("5min", 60) or []
     candles_15m = market_candles.get_candles("15min", 20) or []
     technical = _technical_indicators(candles_5m)
