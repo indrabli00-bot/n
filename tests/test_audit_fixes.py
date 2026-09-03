@@ -75,6 +75,25 @@ class AuditFixTests(unittest.TestCase):
         self.assertEqual(api.SESSION_CACHE_TTL, 10)
         self.assertEqual(api.CANDLE_CACHE_TTL, 10)
 
+    def test_remote_reconcile_rejects_unknown_plan(self):
+        module = importlib.import_module("whop_webhook_phase2")
+
+        async def fake_payment(_payment_id):
+            return {
+                "status": "paid",
+                "metadata": {"telegram_id": "123", "neural_order_id": "ord_x"},
+                "plan": {"id": "unknown_plan"},
+            }
+
+        with patch.object(module.whop_api_phase2, "fetch_payment", new=fake_payment):
+            result = asyncio.run(module.reconcile_payment_remote("pay_test"))
+        self.assertFalse(result["ok"])
+        self.assertIn("Unknown or invalid plan duration", result["reason"])
+
+    def test_notification_signature_has_no_unused_raw_token(self):
+        module = importlib.import_module("whop_webhook_phase2")
+        self.assertNotIn("raw_token", str(module.notify_customer.__annotations__))
+
 
 if __name__ == "__main__":
     unittest.main()
