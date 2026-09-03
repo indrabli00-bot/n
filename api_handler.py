@@ -36,25 +36,13 @@ async def get_cached_or_fresh_price(user_id: int) -> dict[str, Any]:
         last_fetch = database.normalize_datetime_utc(sess.last_fetch_time)
         age = (datetime.now(timezone.utc) - last_fetch).total_seconds() if last_fetch else float("inf")
         if age < SESSION_CACHE_TTL and sess.last_price_bid is not None and sess.last_price_ask is not None:
-            price = {
-                "source": "SESSION_CACHE", "symbol": "XAU/USD",
-                "bid": float(sess.last_price_bid), "ask": float(sess.last_price_ask),
-                "close": (float(sess.last_price_bid) + float(sess.last_price_ask)) / 2,
-                "high": float(sess.last_price_high or sess.last_price_ask),
-                "low": float(sess.last_price_low or sess.last_price_bid),
-                "change": 0.0, "change_percent": 0.0, "volume": "N/A",
-                "timestamp": last_fetch.isoformat(),
-            }
+            price = {"source": "SESSION_CACHE", "symbol": "XAU/USD", "bid": float(sess.last_price_bid), "ask": float(sess.last_price_ask), "close": (float(sess.last_price_bid) + float(sess.last_price_ask)) / 2, "high": float(sess.last_price_high or sess.last_price_ask), "low": float(sess.last_price_low or sess.last_price_bid), "change": 0.0, "change_percent": 0.0, "volume": "N/A", "timestamp": last_fetch.isoformat()}
             _latest_smc_signal = await get_smc_signal(reference_price=float(price["bid"]))
             return price
 
     price_data = await fetch_xauusd_price()
     try:
-        database.update_session(
-            user_id, last_price_bid=price_data["bid"], last_price_ask=price_data["ask"],
-            last_price_high=price_data["high"], last_price_low=price_data["low"],
-            last_fetch_time=datetime.now(timezone.utc),
-        )
+        database.update_session(user_id, last_price_bid=price_data["bid"], last_price_ask=price_data["ask"], last_price_high=price_data["high"], last_price_low=price_data["low"], last_fetch_time=datetime.now(timezone.utc))
     except Exception as exc:
         logger.warning("Failed to persist price cache: %s", exc)
     _latest_smc_signal = await get_smc_signal(reference_price=float(price_data["bid"]))
@@ -80,10 +68,7 @@ async def fetch_candles(interval: str, outputsize: int = 100) -> list[dict[str, 
         if "values" not in data:
             logger.warning("TwelveData candle error: %s", data.get("message") or data)
             return None
-        candles = [{
-            "time": str(c["datetime"]), "open": float(c["open"]), "high": float(c["high"]),
-            "low": float(c["low"]), "close": float(c["close"])
-        } for c in reversed(data["values"])]
+        candles = [{"time": str(c["datetime"]), "open": float(c["open"]), "high": float(c["high"]), "low": float(c["low"]), "close": float(c["close"])} for c in reversed(data["values"])]
         if len(candles) < 20:
             return None
         _candle_cache[key] = (now, candles)
@@ -112,12 +97,10 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
     closes = [float(c["close"]) for c in candles]
     if len(closes) < 35:
         return {"rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "ema_trend": "Data Unavailable", "ema": None, "atr": 0.0, "bb_position": "Data Unavailable", "stoch_k": None}
-
     rsi = smc_engine.calculate_rsi(candles)
     ema20 = _ema(closes, 20)
     ema50 = _ema(closes, 50)
     ema_trend = "Bullish Alignment" if ema20 > ema50 else "Bearish Alignment" if ema20 < ema50 else "Converging"
-
     ema12_series = []
     ema26_series = []
     e12 = e26 = closes[0]
@@ -130,15 +113,11 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
     macd_series = [a - b for a, b in zip(ema12_series, ema26_series)]
     signal_line = _ema(macd_series, 9)
     macd_hist = macd_series[-1] - signal_line
-
     true_ranges = []
     for i in range(1, len(candles)):
-        high = float(candles[i]["high"])
-        low = float(candles[i]["low"])
-        prev_close = float(candles[i - 1]["close"])
+        high = float(candles[i]["high"]); low = float(candles[i]["low"]); prev_close = float(candles[i - 1]["close"])
         true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
     atr = sum(true_ranges[-14:]) / min(14, len(true_ranges)) if true_ranges else 0.0
-
     bb_window = closes[-20:]
     bb_mean = sum(bb_window) / len(bb_window)
     bb_variance = sum((value - bb_mean) ** 2 for value in bb_window) / len(bb_window)
@@ -158,19 +137,21 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
         bb_position = "Lower Half"
     else:
         bb_position = "Mid-Band"
-
     stoch_window = candles[-14:]
     highest_high = max(float(c["high"]) for c in stoch_window)
     lowest_low = min(float(c["low"]) for c in stoch_window)
     stoch_k = 50.0 if highest_high == lowest_low else ((last_close - lowest_low) / (highest_high - lowest_low)) * 100
-
     return {"rsi": rsi, "macd_hist": round(macd_hist, 2), "macd_signal": round(signal_line, 2), "ema_trend": ema_trend, "ema": round(ema20, 2), "atr": round(atr, 2), "bb_position": bb_position, "stoch_k": round(stoch_k, 2)}
 
 def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
-    """Compatibility wrapper: return live candle indicators plus the current SMC signal."""
-    candles = _candle_cache.get("5min:100", (None, []))[1]
-    technical = _technical_indicators(candles)
-    sig = _latest_smc_signal or {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP","signal_price":price,"signal_price_source":"LIVE_REFERENCE"}
+    """Compatibility wrapper: calculate the signal from this request's live price, not shared state."""
+    candles_5m = _candle_cache.get("5min:100", (None, []))[1]
+    candles_15m = _candle_cache.get("15min:100", (None, []))[1]
+    technical = _technical_indicators(candles_5m)
+    if candles_5m and candles_15m:
+        sig = smc_engine.generate_signal(candles_5m, candles_15m, reference_price=float(price))
+    else:
+        sig = {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP","signal_price":price,"signal_price_source":"LIVE_REFERENCE"}
     technical["smc_signal"] = sig
     return technical
 
