@@ -14,7 +14,7 @@ import price_sources
 import smc_engine
 
 logger = logging.getLogger(__name__)
-SESSION_CACHE_TTL = 30
+SESSION_CACHE_TTL = 10
 CANDLE_CACHE_TTL = 10
 _candle_cache: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
 _latest_smc_signal: dict[str, Any] | None = None
@@ -137,6 +137,31 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
         true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
     atr = sum(true_ranges[-14:]) / min(14, len(true_ranges)) if true_ranges else 0.0
 
+    bb_window = closes[-20:]
+    bb_mean = sum(bb_window) / len(bb_window)
+    bb_variance = sum((value - bb_mean) ** 2 for value in bb_window) / len(bb_window)
+    bb_std = bb_variance ** 0.5
+    bb_upper = bb_mean + 2 * bb_std
+    bb_lower = bb_mean - 2 * bb_std
+    last_close = closes[-1]
+    if bb_std == 0:
+        bb_position = "Mid-Band"
+    elif last_close >= bb_upper:
+        bb_position = "Upper Band"
+    elif last_close <= bb_lower:
+        bb_position = "Lower Band"
+    elif last_close > bb_mean:
+        bb_position = "Upper Half"
+    elif last_close < bb_mean:
+        bb_position = "Lower Half"
+    else:
+        bb_position = "Mid-Band"
+
+    stoch_window = candles[-14:]
+    highest_high = max(float(c["high"]) for c in stoch_window)
+    lowest_low = min(float(c["low"]) for c in stoch_window)
+    stoch_k = 50.0 if highest_high == lowest_low else ((last_close - lowest_low) / (highest_high - lowest_low)) * 100
+
     return {
         "rsi": rsi,
         "macd_hist": round(macd_hist, 2),
@@ -144,8 +169,8 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
         "ema_trend": ema_trend,
         "ema": round(ema20, 2),
         "atr": round(atr, 2),
-        "bb_position": "Mid-Band",
-        "stoch_k": 50.0,
+        "bb_position": bb_position,
+        "stoch_k": round(stoch_k, 2),
     }
 
 def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
