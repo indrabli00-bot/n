@@ -3,6 +3,8 @@ import importlib
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from telegram.ext import ApplicationHandlerStop
+
 
 class StartLatencyTests(unittest.TestCase):
     def test_start_sends_shell_before_database_work(self):
@@ -34,17 +36,17 @@ class StartLatencyTests(unittest.TestCase):
         class FakeContext:
             application = FakeApplication()
 
+        update = FakeUpdate()
+        context = FakeContext()
+
         async def run():
             with patch.object(module, "_initialize_and_refresh", new=AsyncMock()):
-                with self.assertRaises(Exception) as ctx:
-                    await module.handle_start(FakeUpdate(), FakeContext())
-            self.assertEqual(ctx.exception.__class__.__name__, "ApplicationHandlerStop")
+                with self.assertRaises(ApplicationHandlerStop):
+                    await module.handle_start(update, context)
 
         asyncio.run(run())
-        update = FakeUpdate()
-        # The assertions above intentionally focus on ordering: reply_text must be
-        # available without waiting for database/auth work.
-        self.assertTrue(update.message.reply_text)
+        update.message.reply_text.assert_awaited_once()
+        self.assertTrue(context.application.created)
 
     def test_webhook_acknowledges_before_handler_finishes(self):
         app_module = importlib.import_module("app")
