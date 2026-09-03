@@ -9,12 +9,17 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationHandlerStop, ContextTypes
 
 import auth
+import callback_guard
 import database
 import main
 import terminal_style
 from i18n import detect_language, t
 
 logger = logging.getLogger("neural_gold.instant_start")
+
+# Install before app.py calls main.build_application(); the guard only wraps
+# callback dispatch and never changes the existing routes or business logic.
+callback_guard.install(main)
 
 
 def _instant_keyboard(lang: str) -> InlineKeyboardMarkup:
