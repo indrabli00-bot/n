@@ -16,6 +16,7 @@ import command_localization
 import database
 import expiry_notifier
 import fulfillment_recovery
+import instant_start
 import main
 import market_candles
 import runtime_hardening
@@ -24,6 +25,7 @@ import ui_contract
 import whop_api_phase2
 import whop_storage
 from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, WHOP_API_KEY, WHOP_WEBHOOK_SECRET
+from telegram.ext import CommandHandler
 from whop_webhook_phase2 import handle_event, notify_customer, verify_signature
 
 logger = logging.getLogger("neural_gold.belmo")
@@ -70,6 +72,9 @@ async def lifespan(app: FastAPI):
         whop_storage.init_phase2_db()
         ui_contract.install(main)
         telegram_app = main.build_application()
+        # Belmo uses a dedicated /start fast path in handler group -1. It sends
+        # an immediate shell before database/auth work, then finalizes in a task.
+        telegram_app.add_handler(CommandHandler("start", instant_start.handle_start), group=-1)
         await telegram_app.initialize()
         await main.post_init(telegram_app)
         await command_localization.install(telegram_app.bot, database_admin_id())
@@ -169,8 +174,11 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
         update = Update.de_json(data, telegram_app.bot)
         if update is None:
             raise ValueError("Invalid Telegram update")
-        await telegram_app.process_update(update)
-        logger.info("WEBHOOK_OK update_id=%s latency_ms=%.0f", data.get("update_id"), (time.perf_counter() - started) * 1000)
+        # Telegram should receive a fast 2xx acknowledgement. Handler work is
+        # scheduled on PTB's task manager so slow DB/API operations cannot cause
+        # webhook timeouts and duplicate deliveries.
+        telegram_app.create_task(telegram_app.process_update(update), update=update, name="telegram_webhook_update")
+        logger.info("WEBHOOK_ACCEPTED update_id=%s latency_ms=%.0f", data.get("update_id"), (time.perf_counter() - started) * 1000)
         return {"ok": True}
     except Exception as exc:
         logger.error("WEBHOOK_FAIL latency_ms=%.0f error=%s", (time.perf_counter() - started) * 1000, exc)
