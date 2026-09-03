@@ -5,12 +5,11 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from telegram import InlineKeyboardButton
-from telegram.ext import ApplicationHandlerStop
 
 
 class StartLatencyTests(unittest.TestCase):
-    def test_start_sends_shell_before_database_work(self):
-        module = importlib.import_module("instant_start")
+    def test_start_uses_single_canonical_main_controller(self):
+        module = importlib.import_module("main")
 
         class FakeUser:
             id = 123
@@ -19,36 +18,19 @@ class StartLatencyTests(unittest.TestCase):
             language_code = "en"
 
         class FakeMessage:
-            def __init__(self):
-                self.reply_text = AsyncMock(return_value=self)
-                self.edit_text = AsyncMock()
+            reply_text = AsyncMock()
 
-        class FakeUpdate:
-            effective_user = FakeUser()
-            message = FakeMessage()
-
-        class FakeApplication:
-            def __init__(self):
-                self.created = False
-
-            def create_task(self, coroutine, **kwargs):
-                self.created = True
-                coroutine.close()
-
-        class FakeContext:
-            application = FakeApplication()
-
-        update = FakeUpdate()
-        context = FakeContext()
+        update = types.SimpleNamespace(effective_user=FakeUser(), message=FakeMessage(), callback_query=None)
+        context = types.SimpleNamespace()
 
         async def run():
-            with patch.object(module, "_initialize_and_refresh", new=AsyncMock()):
-                with self.assertRaises(ApplicationHandlerStop):
-                    await module.handle_start(update, context)
+            with patch.object(module.database, "get_user_by_telegram_id", return_value=object()), \
+                 patch.object(module.auth, "verify_token", return_value=(False, None)), \
+                 patch.object(module, "render_home", new=AsyncMock()) as render_home:
+                await module.start_command(update, context)
+                render_home.assert_awaited_once_with(update, context, edit=False)
 
         asyncio.run(run())
-        update.message.reply_text.assert_awaited_once()
-        self.assertTrue(context.application.created)
 
     def test_webhook_acknowledges_before_handler_finishes(self):
         app_module = importlib.import_module("app")
