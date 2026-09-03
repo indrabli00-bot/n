@@ -15,7 +15,7 @@ import smc_engine
 
 logger = logging.getLogger(__name__)
 SESSION_CACHE_TTL = 30
-CANDLE_CACHE_TTL = 60
+CANDLE_CACHE_TTL = 10
 _candle_cache: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
 _latest_smc_signal: dict[str, Any] | None = None
 
