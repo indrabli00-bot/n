@@ -52,7 +52,9 @@ def verify_signature(payload: bytes, headers: dict) -> dict:
     if not WHOP_WEBHOOK_SECRET:
         raise ValueError("WHOP_WEBHOOK_SECRET is not configured")
     h = {str(k).lower(): str(v) for k, v in headers.items()}
-    webhook_id, timestamp, signature = h.get("webhook-id", ""), h.get("webhook-timestamp", ""), h.get("webhook-signature", "")
+    webhook_id = h.get("webhook-id", "")
+    timestamp = h.get("webhook-timestamp", "")
+    signature = h.get("webhook-signature", "")
     if not webhook_id or not timestamp or not signature:
         raise ValueError("Missing webhook verification headers")
     try:
@@ -70,43 +72,69 @@ def verify_signature(payload: bytes, headers: dict) -> dict:
 
 
 def _resolve_duration(plan_id: str, order: dict | None = None) -> int:
+    """Resolve duration only from an allow-listed Whop plan.
+
+    The local order is used only to cross-check its stored duration. It is never
+    a fallback for an unknown plan, because that would let an unrecognised plan
+    inherit an old 7/14/30-day entitlement.
+    """
+    plan_id = str(plan_id or "")
     duration = PLAN_DURATIONS.get(plan_id)
-    if duration is None and order is not None:
-        try:
-            duration = int(order["duration_days"])
-        except (KeyError, TypeError, ValueError):
-            duration = None
-    if duration not in (7, 14, 30):
+    if duration is None:
         raise FulfillmentRetryableError(f"Unknown or invalid plan duration: {plan_id}")
+    if order is not None:
+        try:
+            order_days = int(order["duration_days"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise FulfillmentRetryableError(f"Invalid stored duration for order plan={plan_id}") from exc
+        if order_days != duration:
+            raise FulfillmentRetryableError(
+                f"Plan duration mismatch: plan={plan_id} expected={duration} order={order_days}"
+            )
     return duration
+
+
+def _validate_payment_plan(payment: dict, order: dict | None = None) -> tuple[str, int]:
+    plan = payment.get("plan") or {}
+    plan_id = str(plan.get("id") or payment.get("plan_id") or "")
+    duration = _resolve_duration(plan_id, order)
+    metadata = payment.get("metadata") or {}
+    raw_days = metadata.get("plan_days")
+    if raw_days not in (None, ""):
+        try:
+            metadata_days = int(raw_days)
+        except (TypeError, ValueError) as exc:
+            raise FulfillmentRetryableError(f"Invalid metadata.plan_days for plan {plan_id}") from exc
+        if metadata_days != duration:
+            raise FulfillmentRetryableError(
+                f"Plan duration mismatch: plan={plan_id} expected={duration} metadata={metadata_days}"
+            )
+    return plan_id, duration
 
 
 def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     metadata = payment.get("metadata") or {}
     order_id = str(metadata.get("neural_order_id") or "")
     payment_id = str(payment.get("id") or "")
-    plan = payment.get("plan") or {}
-    plan_id = str(plan.get("id") or payment.get("plan_id") or "")
     if not order_id or not payment_id:
         raise FulfillmentRetryableError(f"Payment missing order/payment identity payment={payment_id}")
     order = whop_storage.get_order(order_id)
-    duration = _resolve_duration(plan_id, order)
+    plan_id, duration = _validate_payment_plan(payment, order)
     if order is None:
         try:
             telegram_id = int(str(metadata.get("telegram_id") or ""))
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise FulfillmentRetryableError("Missing valid metadata.telegram_id") from exc
         if not whop_storage.create_order(order_id, telegram_id, plan_id, duration):
             raise FulfillmentRetryableError(f"Failed to recreate order {order_id}")
         order = whop_storage.get_order(order_id)
         if order is None:
             raise FulfillmentRetryableError(f"Recreated order {order_id} cannot be read")
-    if duration != int(order["duration_days"]):
-        whop_storage.update_order(order_id, status="rejected_plan_mismatch", payment_id=payment_id)
-        return None
     existing = whop_storage.get_order_by_payment(payment_id)
     if existing is not None and existing.get("token_hash"):
         return None
+    if order.get("status") in {"active", "customer_notified", "membership_active"} and order.get("payment_id") not in (None, payment_id):
+        raise FulfillmentRetryableError(f"Order {order_id} is already fulfilled by another payment")
     claim_id = whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=STALE_FULFILLMENT_MINUTES)
     if not claim_id:
         return None
@@ -229,6 +257,8 @@ def reconcile_payment(payment_id: str) -> dict:
     if fulfillment and fulfillment.get("status") == "fulfilled":
         user = database.get_user_by_telegram_id(int(order["telegram_id"]))
         return {"ok": True, "status": "ALREADY FULFILLED", "telegram_id": order["telegram_id"], "expiry": user.subscription_expiry.isoformat() if user and user.subscription_expiry else None}
+    if fulfillment is None:
+        return {"ok": False, "reason": "NO FULFILLMENT CLAIM — REMOTE WHOP REVALIDATION REQUIRED"}
     claim_id = whop_storage.claim_fulfillment(payment_id, order["id"], stale_minutes=0)
     if not claim_id:
         return {"ok": False, "reason": "CLAIM FAILED — processing by another worker"}
@@ -253,31 +283,33 @@ async def reconcile_payment_remote(payment_id: str) -> dict:
     order_id = str(metadata.get("neural_order_id") or "") or f"ng_rec_{payment_id[-12:].lower()}"
     try:
         telegram_id = int(str(metadata.get("telegram_id") or ""))
-    except ValueError:
-        return {"ok": False, "reason": "METADATA_TELEGRAM_ID_MISSING"}
-    plan_id = str((payment.get("plan") or {}).get("id") or "")
-    try:
-        metadata_days = int(metadata.get("plan_days") or 0)
     except (TypeError, ValueError):
-        metadata_days = 0
-    if metadata_days:
-        if metadata_days not in (7, 14, 30):
-            return {"ok": False, "reason": "INVALID_PLAN_DAYS"}
-        duration = metadata_days
-    else:
+        return {"ok": False, "reason": "METADATA_TELEGRAM_ID_MISSING"}
+    try:
+        plan_id, duration = _validate_payment_plan(payment)
+    except FulfillmentRetryableError as exc:
+        return {"ok": False, "reason": str(exc)}
+    existing_order = whop_storage.get_order(order_id)
+    if existing_order is not None:
         try:
-            duration = _resolve_duration(plan_id)
+            _resolve_duration(plan_id, existing_order)
         except FulfillmentRetryableError as exc:
             return {"ok": False, "reason": str(exc)}
-    membership_id = str((payment.get("membership") or {}).get("id") or "") or None
-    if not whop_storage.get_order(order_id):
-        if not whop_storage.create_order(order_id, telegram_id, plan_id or "unknown", duration):
+        if int(existing_order["telegram_id"]) != telegram_id:
+            return {"ok": False, "reason": "ORDER_TELEGRAM_ID_MISMATCH"}
+    else:
+        if not whop_storage.create_order(order_id, telegram_id, plan_id, duration):
             return {"ok": False, "reason": "FAILED_TO_CREATE_LOCAL_ORDER"}
+    membership_id = str((payment.get("membership") or {}).get("id") or "") or None
     whop_storage.update_order(order_id, payment_id=payment_id, membership_id=membership_id)
     claim_id = whop_storage.claim_fulfillment(payment_id, order_id, stale_minutes=0)
     if not claim_id:
         return {"ok": True, "status": "ALREADY FULFILLED", "telegram_id": telegram_id}
-    database.fulfill_payment(telegram_id, duration, order_id, payment_id, claim_id)
+    try:
+        database.fulfill_payment(telegram_id, duration, order_id, payment_id, claim_id)
+    except Exception as exc:
+        whop_storage.record_fulfillment_failure(payment_id, str(exc)[:200])
+        raise FulfillmentRetryableError(f"Remote fulfillment failed payment={payment_id}") from exc
     return {"ok": True, "status": "FULFILLED VIA WHOP REVALIDATION", "telegram_id": telegram_id, "duration_days": duration}
 
 
