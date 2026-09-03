@@ -107,6 +107,8 @@ def handle_payment_succeeded(payment: dict) -> tuple[str, int, str] | None:
     if bound_order is not None and str(bound_order.get("id")) != order_id:
         raise FulfillmentRetryableError(f"Payment {payment_id} already bound to order {bound_order.get('id')}")
     order = whop_storage.get_order(order_id)
+    if order is not None and order.get("payment_id") and str(order["payment_id"]) != payment_id:
+        raise FulfillmentRetryableError(f"Order {order_id} already bound to payment {order['payment_id']}")
     plan_id, duration = _validate_payment_plan(payment, order)
     if order is None:
         try:
@@ -281,6 +283,8 @@ async def reconcile_payment_remote(payment_id: str) -> dict:
         return {"ok": False, "reason": str(exc)}
     existing_order = bound_order or whop_storage.get_order(order_id)
     if existing_order is not None:
+        if existing_order.get("payment_id") and str(existing_order["payment_id"]) != payment_id:
+            return {"ok": False, "reason": "ORDER_ALREADY_BOUND_TO_DIFFERENT_PAYMENT"}
         try:
             _resolve_duration(plan_id, existing_order)
         except FulfillmentRetryableError as exc:
