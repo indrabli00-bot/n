@@ -12,10 +12,25 @@ import smc_engine
 
 logger = logging.getLogger(__name__)
 SESSION_CACHE_TTL = 10
-# Kept as a compatibility contract for callers/tests. Intraday candles are now
-# persisted GoldAPI-derived samples rather than a second market-data provider.
 CANDLE_CACHE_TTL = 10
 _latest_smc_signal: dict[str, Any] | None = None
+
+
+def _data_gap_signal(reference_price: float | None = None) -> dict[str, Any]:
+    return {
+        "direction": "HOLD",
+        "confidence": 0,
+        "entry_low": 0.0,
+        "entry_high": 0.0,
+        "tp1": 0.0,
+        "tp2": 0.0,
+        "tp3": 0.0,
+        "sl": 0.0,
+        "reasons": ["LIVE 5M/15M CANDLE DATA UNAVAILABLE", "WAIT FOR LIVE DATA BEFORE ENTRY"],
+        "tf_bias": "DATA_GAP",
+        "signal_price": float(reference_price or 0.0),
+        "signal_price_source": "LIVE_REFERENCE" if reference_price is not None else "NONE",
+    }
 
 
 async def fetch_xauusd_price() -> dict[str, Any]:
@@ -73,102 +88,37 @@ async def fetch_candles(interval: str, outputsize: int = 100) -> list[dict[str, 
     return market_candles.get_candles(interval, outputsize)
 
 
-def _ema(values: list[float], period: int) -> float:
-    if not values:
-        return 0.0
-    alpha = 2 / (period + 1)
-    result = values[0]
-    for value in values[1:]:
-        result = alpha * value + (1 - alpha) * result
-    return result
-
-
-def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
-    """Calculate Structure Map indicators directly from the live 5-minute candle series."""
-    closes = [float(c["close"]) for c in candles]
-    if len(closes) < 35:
-        return {"rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "ema_trend": "Data Unavailable", "ema": None, "atr": 0.0, "bb_position": "Data Unavailable", "stoch_k": None}
-    rsi = smc_engine.calculate_rsi(candles)
-    ema20 = _ema(closes, 20)
-    ema50 = _ema(closes, 50)
-    ema_trend = "Bullish Alignment" if ema20 > ema50 else "Bearish Alignment" if ema20 < ema50 else "Converging"
-    ema12_series = []
-    ema26_series = []
-    e12 = e26 = closes[0]
-    a12, a26 = 2 / 13, 2 / 27
-    for value in closes:
-        e12 = a12 * value + (1 - a12) * e12
-        e26 = a26 * value + (1 - a26) * e26
-        ema12_series.append(e12)
-        ema26_series.append(e26)
-    macd_series = [a - b for a, b in zip(ema12_series, ema26_series)]
-    signal_line = _ema(macd_series, 9)
-    macd_hist = macd_series[-1] - signal_line
-    true_ranges = []
-    for i in range(1, len(candles)):
-        high = float(candles[i]["high"])
-        low = float(candles[i]["low"])
-        prev_close = float(candles[i - 1]["close"])
-        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
-    atr = sum(true_ranges[-14:]) / min(14, len(true_ranges)) if true_ranges else 0.0
-    bb_window = closes[-20:]
-    bb_mean = sum(bb_window) / len(bb_window)
-    bb_variance = sum((value - bb_mean) ** 2 for value in bb_window) / len(bb_window)
-    bb_std = bb_variance ** 0.5
-    bb_upper = bb_mean + 2 * bb_std
-    bb_lower = bb_mean - 2 * bb_std
-    last_close = closes[-1]
-    if bb_std == 0:
-        bb_position = "Mid-Band"
-    elif last_close >= bb_upper:
-        bb_position = "Upper Band"
-    elif last_close <= bb_lower:
-        bb_position = "Lower Band"
-    elif last_close > bb_mean:
-        bb_position = "Upper Half"
-    elif last_close < bb_mean:
-        bb_position = "Lower Half"
-    else:
-        bb_position = "Mid-Band"
-    stoch_window = candles[-14:]
-    highest_high = max(float(c["high"]) for c in stoch_window)
-    lowest_low = min(float(c["low"]) for c in stoch_window)
-    stoch_k = 50.0 if highest_high == lowest_low else ((last_close - lowest_low) / (highest_high - lowest_low)) * 100
-    return {"rsi": rsi, "macd_hist": round(macd_hist, 2), "macd_signal": round(signal_line, 2), "ema_trend": ema_trend, "ema": round(ema20, 2), "atr": round(atr, 2), "bb_position": bb_position, "stoch_k": round(stoch_k, 2)}
-
-
-async def get_smc_signal(reference_price: float | None = None) -> dict[str, Any] | None:
-    # SMC needs 60 contiguous 5M bars and 20 contiguous 15M bars. Both series
-    # are built from real GoldAPI samples; if either series is not warmed up,
-    # fail closed instead of inventing history.
+async def get_smc_signal(reference_price: float | None = None) -> dict[str, Any]:
+    """Generate the only canonical customer signal from persisted live candles."""
     import asyncio
-    candles_5m, candles_15m = await asyncio.gather(fetch_candles("5min", 60), fetch_candles("15min", 20))
+
+    candles_5m, candles_15m = await asyncio.gather(
+        fetch_candles("5min", 60),
+        fetch_candles("15min", 20),
+    )
     if not candles_5m or not candles_15m:
-        return {"direction": "HOLD", "confidence": 0, "entry_low": 0.0, "entry_high": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0, "sl": 0.0, "reasons": ["LIVE 5M/15M CANDLE DATA UNAVAILABLE", "WAIT FOR LIVE DATA BEFORE ENTRY"], "tf_bias": "DATA_GAP", "signal_price": reference_price or 0.0, "signal_price_source": "LIVE_REFERENCE" if reference_price is not None else "NONE"}
+        return _data_gap_signal(reference_price)
     return smc_engine.generate_signal(candles_5m, candles_15m, reference_price=reference_price)
 
 
+def get_latest_smc_signal() -> dict[str, Any] | None:
+    """Return the latest signal already computed during the price refresh."""
+    return _latest_smc_signal
+
+
 def get_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
-    """Return technical indicators from persisted live GoldAPI-derived bars."""
+    """Return Structure Map indicators from the same persisted live candle engine."""
     candles_5m = market_candles.get_candles("5min", 60) or []
     candles_15m = market_candles.get_candles("15min", 20) or []
-    technical = _technical_indicators(candles_5m)
-    if candles_5m and candles_15m:
-        sig = smc_engine.generate_signal(candles_5m, candles_15m, reference_price=float(price))
-    else:
-        sig = {"direction": "HOLD", "confidence": 0, "entry_low": 0.0, "entry_high": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0, "sl": 0.0, "reasons": ["LIVE SMC DATA UNAVAILABLE", "WAIT FOR LIVE DATA BEFORE ENTRY"], "tf_bias": "DATA_GAP", "signal_price": price, "signal_price_source": "LIVE_REFERENCE"}
-    technical["smc_signal"] = sig
+    if not candles_5m or not candles_15m:
+        technical = {"rsi": None, "macd_hist": None, "macd_signal": None, "ema_trend": "Data Unavailable", "ema": None, "atr": None, "bb_position": "Data Unavailable", "stoch_k": None}
+        technical["smc_signal"] = _data_gap_signal(price)
+        return technical
+
+    technical = smc_engine.get_technical_indicators(candles_5m)
+    technical["smc_signal"] = smc_engine.generate_signal(candles_5m, candles_15m, reference_price=float(price))
     return technical
 
 
-# Deprecated compatibility alias for older internal callers. The implementation
-# is canonical above and performs no simulation or fabricated market data.
-def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
-    return get_technical_indicators(price, change_pct)
-
-
 def _determine_signal(price: float, indicators: dict[str, Any]) -> dict[str, Any]:
-    smc_signal = indicators.get("smc_signal")
-    if smc_signal is not None:
-        return smc_signal
-    return {"direction": "HOLD", "confidence": 0, "entry_low": 0.0, "entry_high": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0, "sl": 0.0, "reasons": ["LIVE SMC DATA UNAVAILABLE", "WAIT FOR LIVE DATA BEFORE ENTRY"], "tf_bias": "DATA_GAP", "signal_price": price, "signal_price_source": "LIVE_REFERENCE"}
+    return indicators.get("smc_signal") or _data_gap_signal(price)
