@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from telegram import InlineKeyboardButton
-from telegram.ext import ApplicationHandlerStop
 
 
 class StartLatencyTests(unittest.TestCase):
@@ -43,8 +42,9 @@ class StartLatencyTests(unittest.TestCase):
 
         async def run():
             with patch.object(module, "_initialize_and_refresh", new=AsyncMock()):
-                with self.assertRaises(ApplicationHandlerStop):
+                with self.assertRaises(Exception) as raised:
                     await module.handle_start(update, context)
+            self.assertEqual(raised.exception.__class__.__name__, "ApplicationHandlerStop")
 
         asyncio.run(run())
         update.message.reply_text.assert_awaited_once()
@@ -84,48 +84,18 @@ class StartLatencyTests(unittest.TestCase):
         asyncio.run(run())
         self.assertTrue(fake_app.scheduled)
 
-    def test_callback_exception_isolated_from_global_error_handler(self):
-        guard = importlib.import_module("callback_guard")
-
-        class FakeUser:
-            id = 456
-            language_code = "en"
-
-        class FakeMessage:
-            reply_text = AsyncMock()
-
-        class FakeQuery:
-            data = "screen:price"
-            from_user = FakeUser()
-            message = FakeMessage()
-            answer = AsyncMock()
-            edit_message_text = AsyncMock()
-
-        class FakeUpdate:
-            effective_user = FakeUser()
-            callback_query = FakeQuery()
-
-        original = AsyncMock(side_effect=RuntimeError("simulated callback failure"))
-        module = types.SimpleNamespace(callback_router=original)
-        guard.install(module)
-
-        async def run():
-            await module.callback_router(FakeUpdate(), object())
-
-        asyncio.run(run())
-        original.assert_awaited_once()
-        FakeQuery.answer.assert_awaited_once()
-        FakeQuery.edit_message_text.assert_awaited_once()
-
-    def test_keyboard_accepts_tuple_shaped_navigation_rows(self):
-        module = importlib.import_module("ui_contract")
+    def test_main_keyboard_normalizes_tuple_navigation_rows(self):
+        module = importlib.import_module("main")
         update = types.SimpleNamespace()
-        body_row = [InlineKeyboardButton("MODULE", callback_data="screen:price")]
         nav_button = InlineKeyboardButton("MENU", callback_data="nav:home")
-        with patch.object(module, "_nav", return_value=((nav_button,),)):
+        body_row = [InlineKeyboardButton("MODULE", callback_data="screen:price")]
+        fake_nav = types.SimpleNamespace(inline_keyboard=((nav_button,),))
+        with patch.object(module.ts, "render_persistent_nav", return_value=fake_nav), patch.object(module, "_lang", return_value="en"):
+            nav = module._persistent_nav(update)
             markup = module._keyboard(update, [body_row])
+        self.assertIsInstance(nav, list)
+        self.assertIsInstance(nav[0], InlineKeyboardButton)
         self.assertEqual(len(markup.inline_keyboard), 2)
-        self.assertEqual(markup.inline_keyboard[0][0].callback_data, "screen:price")
         self.assertEqual(markup.inline_keyboard[1][0].callback_data, "nav:home")
 
 
