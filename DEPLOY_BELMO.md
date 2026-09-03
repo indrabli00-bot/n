@@ -9,7 +9,7 @@
 - Whop webhook: `POST /webhooks/whop`
 - Health: `GET /health`
 
-The production entry point is `app.py`. `main.py` is the **single canonical customer Telegram UI/controller**. `app.py` owns HTTP/webhook transport; service modules own market data, authentication, database, and Whop operations. There is no second customer UI contract installed at runtime.
+The production entry point is `app.py`. `main.py` is the **single canonical customer Telegram UI/controller**. `app.py` owns HTTP/webhook transport; service modules own market data, authentication, database, and Whop operations. No second customer UI contract is installed at runtime.
 
 ## Required Belmo environment variables
 
@@ -37,7 +37,7 @@ LOG_LEVEL=INFO
 1. Validate production secrets and public URL.
 2. Initialize the application database, Phase 2 Whop storage, and GoldAPI candle sample storage.
 3. Install runtime hardening.
-4. Build the Telegram application from the canonical `main.py` controller. The dedicated fast `/start` adapter is only a latency mechanism; it does not replace the canonical UI/controller.
+4. Build the Telegram application from the canonical `main.py` controller.
 5. Initialize/start the Telegram application.
 6. Register the Telegram webhook at `/telegram/webhook` without dropping queued updates.
 7. Start expiry, fulfillment recovery, and the 60-second GoldAPI market-sample job.
@@ -47,14 +47,13 @@ If Telegram webhook registration fails, startup is aborted instead of leaving a 
 ## Telegram flow
 
 1. Customer sends `/start`.
-2. The fast path responds immediately; database/auth finalization runs without blocking the initial response.
-3. The canonical `main.py` UI remains the single source for customer navigation and module rendering.
-4. Inactive customer sees the premium access screen.
-5. Customer chooses 7D / 14D / 30D.
-6. The signed checkout link creates a real Whop checkout.
-7. `payment.succeeded` is verified by signature and allow-listed plan ID.
-8. Fulfillment activates the Telegram account atomically and idempotently.
-9. Customer notification is delivered independently; failed notification remains recoverable.
+2. `main.py` handles the command and owns the customer UI.
+3. Inactive customer sees the premium access screen.
+4. Customer chooses 7D / 14D / 30D.
+5. The signed checkout link creates a real Whop checkout.
+6. `payment.succeeded` is verified by signature and allow-listed plan ID.
+7. Fulfillment activates the Telegram account atomically and idempotently.
+8. Customer notification is delivered independently; failed notification remains recoverable.
 
 ## Market data
 
