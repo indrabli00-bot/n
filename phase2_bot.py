@@ -1,7 +1,7 @@
 """NEURAL GOLD v3.2 checkout-link adapter.
 
-Customer navigation is owned by ``ui_contract.py``. This module intentionally
-contains only the checkout URL contract used by the canonical access screen.
+Customer-facing Telegram navigation is owned exclusively by ``main.py``.
+This module only provides the checkout URL contract used by the access screen.
 """
 from __future__ import annotations
 
