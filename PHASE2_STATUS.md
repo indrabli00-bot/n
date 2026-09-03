@@ -4,7 +4,7 @@
 
 **READY FOR BELMO REDEPLOY after final CI verification.**
 
-Production code is on `main`. The runtime uses `app.py` with Telegram and Whop webhooks, strict allow-listed plan validation, idempotent fulfillment, notification recovery, and the canonical customer UI contract.
+Production code is on `main`. The runtime uses `app.py` with Telegram and Whop webhooks, strict allow-listed plan validation, idempotent fulfillment, notification recovery, and `main.py` as the single canonical customer UI/controller.
 
 ## Required deployment state
 
@@ -15,6 +15,5 @@ Production code is on `main`. The runtime uses `app.py` with Telegram and Whop w
 - `WHOP_API_KEY`
 - `WHOP_WEBHOOK_SECRET`
 - `GOLDAPI_API_KEY`
-- `TWELVEDATA_API_KEY`
 
 Do not mark the deployment healthy until `/health` reports `telegram: true`.
