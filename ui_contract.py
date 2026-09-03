@@ -19,16 +19,9 @@ import database
 import terminal_style as ts
 import whop_storage
 from config import ADMIN_TELEGRAM_ID
-from i18n import LANGUAGES, detect_language, language_buttons, t
+from i18n import LANGUAGES, language_buttons, t
 
-MODULES = {
-    "price": "MARKET PULSE",
-    "signal": "NEURAL STRIKES",
-    "analysis": "STRUCTURE MAP",
-}
-
-# Canonical customer geometry: every terminal line is exactly PANEL_WIDTH and
-# every keyboard row occupies the same logical width: 40 characters total.
+MODULES = {"price": "MARKET PULSE", "signal": "NEURAL STRIKES", "analysis": "STRUCTURE MAP"}
 PANEL_WIDTH = 40
 MODULE_BUTTON_WIDTH = 20
 
@@ -52,12 +45,10 @@ def _money(value: float) -> str:
 
 
 def _button_text(label: str, width: int = MODULE_BUTTON_WIDTH) -> str:
-    """Pad button labels to the requested logical width."""
     return str(label).ljust(width)
 
 
 def _terminal_text(content: str) -> str:
-    """Render terminal content at the exact same logical width as the panel."""
     wrapped = ts.render_terminal_box(content, max_width=PANEL_WIDTH)
     return "\n".join(line.ljust(PANEL_WIDTH) for line in wrapped.splitlines())
 
@@ -77,8 +68,10 @@ def _keyboard(update: Update, rows: list[list[InlineKeyboardButton]] | None = No
 def _header(update: Update, screen: str) -> str:
     user = update.effective_user
     active = _active(update)
-    operator = (f"@{user.username}" if user and user.username else (user.first_name if user else "OPERATOR"))
-    status = "ACTIVE" if active else "INACTIVE"
+    operator = f"@{user.username}" if user and user.username else (user.first_name if user else "OPERATOR")
+    status_key = "active" if active else "inactive"
+    status_icon = "🟢" if active else "🔴"
+    status = f"{t(_lang(update), status_key)} {status_icon}"
     return f"NEURAL GOLD v3.2 / {ts.stamp()} / {screen}\nOPERATOR: {_esc(operator)}\nSTATUS: {status}"
 
 
@@ -137,11 +130,7 @@ def _access_keyboard(update: Update, module: str | None = None) -> InlineKeyboar
 
 async def render_home(update: Update, context, edit: bool = True) -> None:
     active = _active(update)
-    terminal = "\n".join([
-        "[ SYSTEM ]: INITIALIZING...",
-        "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...",
-        "[ ACCESS ]: GRANTED // WELCOME OPERATOR" if active else "[ ACCESS ]: PENDING // CLEARANCE REQUIRED",
-    ])
+    terminal = "\n".join(["[ SYSTEM ]: INITIALIZING...", "[ STATUS ]: SYNCING GLOBAL BULLION RESERVES...", "[ ACCESS ]: GRANTED // WELCOME OPERATOR" if active else "[ ACCESS ]: PENDING // CLEARANCE REQUIRED"])
     rows = _module_rows(update) if active else _locked_module_rows(update)
     text, keyboard = _screen(update, "Home", terminal, "HOME // Select module", _keyboard(update, rows))
     await _present(update, text, keyboard, edit=edit)
@@ -184,18 +173,12 @@ async def render_account(update: Update, context) -> None:
         expiry_text = expiry.strftime("%d %b %Y • %H:%M UTC") if expiry else "—"
         days_left = max(0, (expiry - datetime.now(timezone.utc)).days) if expiry else 0
         terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : PREMIUM ACTIVE", f"EXPIRY      : {expiry_text}", f"DAYS LEFT   : {days_left}"])
-        rows = [
-            [InlineKeyboardButton(_button_text(f"🔄 {t(_lang(update), 'renew')}"), callback_data="screen:renew")],
-            [InlineKeyboardButton(_button_text(f"📊 {t(_lang(update), 'history')}"), callback_data="screen:history")],
-        ]
+        rows = [[InlineKeyboardButton(_button_text(f"🔄 {t(_lang(update), 'renew')}"), callback_data="screen:renew")], [InlineKeyboardButton(_button_text(f"📊 {t(_lang(update), 'history')}"), callback_data="screen:history")]]
     else:
         terminal = "\n".join(["[ OPERATOR HUB ]", f"TELEGRAM_ID : {user.id}", "CLEARANCE   : INACTIVE", "SUBSCRIPTION: NONE"])
         rows = _locked_module_rows(update)
-    rows.extend([
-        [InlineKeyboardButton(_button_text(f"🌐 {t(_lang(update), 'language')}"), callback_data="settings:language"),
-         InlineKeyboardButton(_button_text(f"❓ {t(_lang(update), 'support')}"), callback_data="screen:help")],
-    ])
-    subtitle = "ACCOUNT // " + ("Active subscription" if active else "Inactive subscription")
+    rows.extend([[InlineKeyboardButton(_button_text(f"🌐 {t(_lang(update), 'language')}"), callback_data="settings:language"), InlineKeyboardButton(_button_text(f"❓ {t(_lang(update), 'support')}"), callback_data="screen:help")]])
+    subtitle = "ACCOUNT // Active subscription" if active else "ACCOUNT // Inactive subscription"
     text, keyboard = _screen(update, "Account", terminal, subtitle, _keyboard(update, rows))
     await _present(update, text, keyboard)
 
@@ -280,14 +263,29 @@ async def render_renew(update: Update, context) -> None:
     await render_access(update, context)
 
 
+def install(main_module) -> None:
+    main_module.render_home = render_home
+    main_module.render_menu = render_menu
+    main_module.render_account = render_account
+    main_module.render_history = render_history
+    main_module.render_price = render_price
+    main_module.render_signal = render_signal
+    main_module.render_analysis = render_analysis
+    main_module.render_activate = render_activate
+    main_module.render_access = render_access
+    main_module.render_renew = render_renew
+    main_module.render_help = render_help
+    main_module.start_command = _start
+    main_module.callback_router = callback_router
+
+
 async def _start(update: Update, context) -> None:
     user = update.effective_user
     if not user:
         return
     try:
-        existing = database.get_user_by_telegram_id(user.id)
-        if existing is None:
-            database.create_user(user.id, user.username, user.first_name, detect_language(user.language_code))
+        if database.get_user_by_telegram_id(user.id) is None:
+            database.create_user(user.id, user.username, user.first_name, "en")
     except Exception:
         pass
     await render_home(update, context, edit=False)
@@ -321,16 +319,7 @@ async def callback_router(update: Update, context) -> None:
         database.set_user_language(query.from_user.id, lang)
         await render_menu(update, context)
         return
-    routes = {
-        "price": render_price,
-        "signal": render_signal,
-        "analysis": render_analysis,
-        "activate": render_activate,
-        "access": render_activate,
-        "renew": render_renew,
-        "history": render_history,
-        "help": render_help,
-    }
+    routes = {"price": render_price, "signal": render_signal, "analysis": render_analysis, "activate": render_activate, "access": render_activate, "renew": render_renew, "history": render_history, "help": render_help}
     if data.startswith("screen:"):
         target = data.split(":", 1)[1]
         if target in MODULES and not _active(update):
@@ -345,21 +334,11 @@ async def callback_router(update: Update, context) -> None:
         handler = routes.get(target)
         if handler:
             await handler(update, context)
-        return
 
 
-def install(main_module) -> None:
-    """Install the contract into the legacy main module before build_application."""
-    main_module.render_home = render_home
-    main_module.render_menu = render_menu
-    main_module.render_account = render_account
-    main_module.render_history = render_history
-    main_module.render_price = render_price
-    main_module.render_signal = render_signal
-    main_module.render_analysis = render_analysis
-    main_module.render_activate = render_activate
-    main_module.render_access = render_access
-    main_module.render_renew = render_renew
-    main_module.render_help = render_help
-    main_module.start_command = _start
-    main_module.callback_router = callback_router
+async def render_settings(update: Update, context) -> None:
+    await render_menu(update, context)
+
+
+async def render_support(update: Update, context) -> None:
+    await render_help(update, context)
