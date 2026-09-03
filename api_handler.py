@@ -94,11 +94,11 @@ async def fetch_candles(interval: str, outputsize: int = 100) -> list[dict[str, 
 async def get_smc_signal() -> dict[str, Any] | None:
     candles_5m, candles_15m = await asyncio.gather(fetch_candles("5min", 100), fetch_candles("15min", 100))
     if not candles_5m or not candles_15m:
-        return None
+        return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE 5M/15M CANDLE DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
     return smc_engine.generate_signal(candles_5m, candles_15m)
 
 def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
-    """Return SMC-derived indicators when live candles are available; otherwise use deterministic fallback."""
+    """Return live SMC-derived indicators; never fabricate a trading signal when SMC data is unavailable."""
     if _latest_smc_signal is not None:
         sig = _latest_smc_signal
         return {
@@ -111,49 +111,14 @@ def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str,
             "stoch_k": 50.0,
             "smc_signal": sig,
         }
-    digest = hashlib.sha256(f"{round(price, 2)}:{round(change_pct, 4)}".encode("utf-8")).digest()
-    seed = int.from_bytes(digest[:4], "big")
-    offsets = [((seed >> (i * 4)) & 0xF) / 15.0 - 0.5 for i in range(7)]
-    temporal = max(0.0, min(100.0, 50 + change_pct * 80 + offsets[0] * 10))
-    phase = change_pct * 15 + offsets[1]
-    variance = 10.0 + ((seed >> 28) % 13)
-    trend_delta = change_pct + offsets[2] * 0.1
-    trend = "Bullish Alignment" if trend_delta > 0.08 else ("Bearish Alignment" if trend_delta < -0.08 else "Converging")
-    envelope = ["Upper Band", "Mid-Band", "Lower Band"][seed % 3]
-    flux = max(0.0, min(100.0, 50 + change_pct * 100 + offsets[3] * 20))
-    return {"rsi": round(temporal, 1), "macd_hist": round(phase, 2), "macd_signal": round(phase + offsets[4] * 0.6, 2), "atr": round(variance, 1), "ema_trend": trend, "bb_position": envelope, "stoch_k": round(flux, 1)}
+    return {
+        "rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "atr": 0.0,
+        "ema_trend": "Data Unavailable", "bb_position": "Unavailable", "stoch_k": 50.0,
+        "smc_signal": {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"},
+    }
 
 def _determine_signal(price: float, indicators: dict[str, Any]) -> dict[str, Any]:
     smc_signal = indicators.get("smc_signal")
     if smc_signal is not None:
         return smc_signal
-    score = 0.0
-    temporal = indicators["rsi"]
-    if temporal < 30: score += 2.0
-    elif temporal > 70: score -= 2.0
-    elif temporal < 45: score += 0.8
-    elif temporal > 55: score -= 0.8
-    phase = indicators["macd_hist"]
-    if phase > 0.5: score += 1.5
-    elif phase < -0.5: score -= 1.5
-    if "Bullish" in indicators["ema_trend"]: score += 1.0
-    elif "Bearish" in indicators["ema_trend"]: score -= 1.0
-    flux = indicators["stoch_k"]
-    if flux < 20: score += 1.0
-    elif flux > 80: score -= 1.0
-    if indicators["bb_position"] == "Lower Band": score += 0.5
-    elif indicators["bb_position"] == "Upper Band": score -= 0.5
-    confidence = max(40.0, min(95.0, 50 + score * 5))
-    direction = "BUY" if score > 1.0 else ("SELL" if score < -1.0 else "HOLD")
-    atr = indicators["atr"]
-    entry_low, entry_high = round(price - 0.30, 2), round(price + 0.30, 2)
-    if direction == "BUY":
-        tp1, tp2, tp3, sl = round(price + atr * 0.5, 2), round(price + atr, 2), round(price + atr * 1.6, 2), round(price - atr * 0.8, 2)
-    elif direction == "SELL":
-        tp1, tp2, tp3, sl = round(price - atr * 0.5, 2), round(price - atr, 2), round(price - atr * 1.6, 2), round(price + atr * 0.8, 2)
-    else:
-        tp1 = tp2 = tp3 = sl = 0.0
-    momentum = "STRONG BULLISH" if score > 2 else "BULLISH" if score > 0.5 else "STRONG BEARISH" if score < -2 else "BEARISH" if score < -0.5 else "NEUTRAL"
-    volatility = "LOW" if atr < 13 else "MEDIUM" if atr < 18 else "HIGH"
-    liquidity = "HIGH" if volatility == "LOW" else "MEDIUM" if volatility == "MEDIUM" else "LOW"
-    return {"direction": direction, "confidence": round(confidence, 1), "entry_low": entry_low, "entry_high": entry_high, "tp1": tp1, "tp2": tp2, "tp3": tp3, "sl": sl, "risk_reward": 0.0, "liquidity": liquidity, "volatility": volatility, "momentum": momentum}
+    return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
