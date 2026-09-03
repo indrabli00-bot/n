@@ -61,8 +61,33 @@ def render_header(user, lang: str) -> str:
     return f"NEURAL GOLD {NEURAL_VERSION}\n{stamp()}\nOPERATOR : {operator}\nSTATUS   : {status}"
 
 
+def _hold_diagnostics(content: str) -> list[str]:
+    """Return actionable HOLD context from the latest live SMC result."""
+    if "[ NEURAL STRIKES ]" not in content or "SIGNAL : HOLD" not in content:
+        return []
+    try:
+        import api_handler
+        signal = api_handler._latest_smc_signal or {}
+        reasons = [str(x) for x in signal.get("reasons", []) if str(x).strip()]
+        if not reasons:
+            reasons = ["CONFIRMATION NOT DETECTED", "WAIT FOR A VALID M5 SETUP"]
+        tf_bias = str(signal.get("tf_bias", "")).upper()
+        if tf_bias == "DATA_GAP":
+            status = "WAITING FOR LIVE DATA"
+            action = "DO NOT ENTER // WAIT FOR LIVE 5M/15M DATA"
+        else:
+            status = "WAITING FOR CONFIRMATION"
+            action = "DO NOT ENTER // WAIT FOR CONFIRMED M5 SETUP"
+        return ["STATUS : " + status, "REASON : " + reasons[0], "ACTION : " + action]
+    except Exception:
+        return ["STATUS : WAITING FOR CONFIRMATION", "ACTION : DO NOT ENTER // WAIT FOR M5 CONFIRMATION"]
+
+
 def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH) -> str:
-    """Return terminal content only; the caller owns the Telegram <pre> tag."""
+    """Return terminal content and actionable HOLD diagnostics when applicable."""
+    diagnostics = _hold_diagnostics(content)
+    if diagnostics:
+        content = content.rstrip() + "\n" + "\n".join(diagnostics)
     return "\n".join(
         part
         for raw_line in content.split("\n")
