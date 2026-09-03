@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 import aiohttp
 
@@ -9,7 +10,6 @@ import whop_storage
 from config import BELMO_PUBLIC_URL, WHOP_API_KEY
 
 WHOP_API_BASE = "https://api.whop.com/api/v1"
-WHOP_API_V2 = "https://api.whop.com/api/v2"
 PLAN_IDS = {
     7: "plan_ksl11weFJ0z41",
     14: "plan_Yc1JnCIP8jgII",
@@ -22,23 +22,25 @@ def plan_id_for_days(days: int) -> str | None:
 
 
 async def fetch_payment(payment_id: str) -> dict[str, Any]:
-    """Whop API v2: ambil detail payment untuk revalidation (Kelompok 1).
-
-    Dipakai /reconcile saat payment tidak ada di DB lokal (webhook hilang):
-    sistem bertanya langsung ke Whop alih-alih bergantung pada delivery.
-    """
+    """Fetch a payment from Whop v1 for remote reconciliation."""
     if not WHOP_API_KEY:
         raise RuntimeError("WHOP_API_KEY_not_configured")
     headers = {"Authorization": f"Bearer {WHOP_API_KEY}", "Accept": "application/json"}
     timeout = aiohttp.ClientTimeout(total=15)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(
-            f"{WHOP_API_V2}/payments/{payment_id}", headers=headers
+            f"{WHOP_API_BASE}/payments/{payment_id}", headers=headers
         ) as response:
             if response.status == 404:
                 raise RuntimeError("payment_not_found_on_whop")
             response.raise_for_status()
             return await response.json(content_type=None)
+
+
+def _payment_is_successful(payment: dict[str, Any]) -> bool:
+    status = str(payment.get("status") or "").lower()
+    substatus = str(payment.get("substatus") or "").lower()
+    return status == "paid" or substatus == "succeeded"
 
 
 async def create_checkout_for_user(
@@ -54,10 +56,8 @@ async def create_checkout_for_user(
     if not whop_storage.create_order(order_id, telegram_id, plan_id, duration_days):
         return None, None, "database_order_create_failed"
 
-    # Whop's current Checkout Configurations API accepts an existing plan
-    # through the top-level `plan_id`. The company is already scoped by the
-    # company API key, so no company_id or inline {"id": ...} plan object is
-    # required here.
+    # Whop's Checkout Configurations API accepts an existing plan through the
+    # top-level `plan_id`. The company is scoped by the API key.
     payload = {
         "plan_id": plan_id,
         "mode": "payment",
@@ -69,7 +69,7 @@ async def create_checkout_for_user(
         },
     }
     if BELMO_PUBLIC_URL:
-        payload["redirect_url"] = f"{BELMO_PUBLIC_URL}/"
+        payload["redirect_url"] = f"{BELMO_PUBLIC_URL}/?checkout_status=success"
 
     headers = {
         "Authorization": f"Bearer {WHOP_API_KEY}",
