@@ -6,38 +6,22 @@ Status: LOCKED
 
 Use exactly one canonical form on every customer-facing keyboard:
 
-- `🏠 Menu` — callback `nav:home`
-- `👨‍💼 Akun` — callback `screen:account`
+- `🏠 ⌂ MENU` — callback `nav:home`
+- `👨‍💼 ACCOUNT` — callback `screen:account`
 
 Keep this pair as the final keyboard row.
 
 ## Status
 
-Use exactly these status labels and emojis in the header:
-
-- Active state: `Aktif 🟢`
-- Inactive state: `Nonaktif 🔴`
-
-Render the status label through i18n while keeping the emoji mapping fixed.
+Render active/inactive status through `i18n.py` while keeping the product's fixed status semantics and emoji mapping.
 
 ## Refresh
 
-Use one canonical refresh action:
-
-- `↻ Segarkan` in Indonesian
-- `↻ Refresh` in English
-
-The `↻` symbol is the single refresh indicator.
+Use one canonical refresh action through i18n. The `↻` symbol is the single refresh indicator.
 
 ## Loading
 
-Use one canonical loading action through i18n:
-
-- Indonesian: `Memuat...`
-- English: `Loading...`
-- Spanish: `Cargando...`
-
-Deliver it only through Telegram callback feedback (`query.answer(..., show_alert=False)`).
+Use one canonical loading action through i18n and deliver it only through Telegram callback feedback (`query.answer(..., show_alert=False)`).
 
 ## Brand/module terms
 
