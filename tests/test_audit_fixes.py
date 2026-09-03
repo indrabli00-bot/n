@@ -1,9 +1,6 @@
 import asyncio
 import importlib
-import math
-import os
 import unittest
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 
@@ -11,10 +8,12 @@ class AuditFixTests(unittest.TestCase):
     def test_smc_trade_levels_use_structure_and_scale_targets_from_risk(self):
         smc = importlib.import_module("smc_engine")
         candles = []
-        price = 3000.0
         for i in range(70):
-            close = price + i * 0.15
+            close = 3000.0 + i * 0.15
             candles.append({"open": close - 0.4, "high": close + 0.6, "low": close - 0.8, "close": close})
+        # Create a confirmed 5M swing low below the live reference price.
+        candles[62] = {"open": 3009.0, "high": 3009.4, "low": 2998.0, "close": 3000.0}
+        candles[63] = {"open": 3000.0, "high": 3004.0, "low": 2999.0, "close": 3003.0}
         candles[-1]["close"] = 3010.0
         levels = smc._build_trade_levels(candles, "BUY", 3010.0)
         self.assertIsNotNone(levels)
