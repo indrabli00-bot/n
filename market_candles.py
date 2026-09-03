@@ -127,14 +127,17 @@ async def collect_job() -> None:
     await sample_goldapi()
 
 
-def schedule(scheduler) -> None:
-    scheduler.add_job(
+def schedule(application) -> None:
+    job_queue = application.job_queue
+    if job_queue is None:
+        logger.warning("JobQueue unavailable; GoldAPI intraday sampler is not scheduled.")
+        return
+    if job_queue.get_jobs_by_name("goldapi_market_sample"):
+        return
+    job_queue.run_repeating(
         collect_job,
-        "interval",
-        seconds=SAMPLE_INTERVAL_SECONDS,
-        max_instances=1,
-        coalesce=True,
-        id="goldapi_market_sample",
-        replace_existing=True,
+        interval=SAMPLE_INTERVAL_SECONDS,
+        first=5,
+        name="goldapi_market_sample",
     )
     logger.info("GoldAPI intraday sampler scheduled every %ds.", SAMPLE_INTERVAL_SECONDS)
