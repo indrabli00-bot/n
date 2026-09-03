@@ -22,7 +22,6 @@ _MIN_COVERAGE = {5: 3, 15: 9}
 
 CREATE_SQL = """
 CREATE TABLE IF NOT EXISTS market_price_samples (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     sampled_at TIMESTAMP NOT NULL,
     price FLOAT NOT NULL,
     source VARCHAR(64) NOT NULL
@@ -79,9 +78,7 @@ def build_candles(interval_minutes: int, outputsize: int = 100) -> list[dict] | 
         return None
     now = datetime.now(timezone.utc)
     current_bucket = _bucket_start(now, interval_minutes)
-    needed_buckets = outputsize
-    lookback = timedelta(minutes=interval_minutes * (needed_buckets + 2))
-    cutoff = current_bucket - lookback
+    cutoff = current_bucket - timedelta(minutes=interval_minutes * outputsize)
     with database.engine.begin() as conn:
         rows = conn.execute(
             text("""
@@ -103,32 +100,27 @@ def build_candles(interval_minutes: int, outputsize: int = 100) -> list[dict] | 
         buckets.setdefault(_bucket_start(ts, interval_minutes), []).append((ts, float(row["price"])))
 
     minimum = _MIN_COVERAGE[interval_minutes]
-    complete: list[dict] = []
-    bucket = cutoff + timedelta(minutes=interval_minutes)
-    while bucket < current_bucket:
+    candles: list[dict] = []
+    bucket = cutoff
+    for _ in range(outputsize):
         samples = buckets.get(bucket)
-        if samples and len(samples) >= minimum:
-            values = [value for _, value in samples]
-            complete.append({
-                "time": bucket.isoformat(),
-                "open": values[0],
-                "high": max(values),
-                "low": min(values),
-                "close": values[-1],
-            })
+        if not samples or len(samples) < minimum:
+            return None
+        values = [value for _, value in samples]
+        candles.append({
+            "time": bucket.isoformat(),
+            "open": values[0],
+            "high": max(values),
+            "low": min(values),
+            "close": values[-1],
+        })
         bucket += timedelta(minutes=interval_minutes)
-
-    if len(complete) < outputsize:
-        return None
-    return complete[-outputsize:]
+    return candles
 
 
 def get_candles(interval: str, outputsize: int = 100) -> list[dict] | None:
-    mapping = {"5min": 5, "15min": 15}
-    minutes = mapping.get(str(interval).lower())
-    if minutes is None:
-        return None
-    return build_candles(minutes, outputsize)
+    minutes = {"5min": 5, "15min": 15}.get(str(interval).lower())
+    return build_candles(minutes, outputsize) if minutes is not None else None
 
 
 async def collect_job() -> None:
