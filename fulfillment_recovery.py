@@ -1,4 +1,4 @@
-"""Fulfillment recovery worker: periodic stale-claim recovery + admin alerting."""
+"""Fulfillment recovery worker: stale-claim recovery and notification delivery."""
 from __future__ import annotations
 
 import logging
@@ -16,8 +16,7 @@ _INTERVAL_SECONDS = 60
 def build_admin_alert(item: dict) -> str:
     tg = item.get("telegram_id")
     return (
-        "<b>⚠ FULFILLMENT FAILURE</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>⚠ FULFILLMENT FAILURE</b>\n━━━━━━━━━━━━━━━━━━━━\n"
         f"PAYMENT: <code>{item.get('payment_id')}</code>\n"
         f"ORDER: <code>{item.get('order_id')}</code>\n"
         f"USER: <code>{tg if tg is not None else '?'}</code>\n"
@@ -29,8 +28,11 @@ def build_admin_alert(item: dict) -> str:
 
 
 async def recovery_job(telegram_app) -> dict:
-    """Recover stale claims and deliver any missed customer notifications."""
-    report = recover_stale_fulfillments(stale_minutes=STALE_FULFILLMENT_MINUTES, max_attempts=MAX_FULFILLMENT_ATTEMPTS)
+    """Recover stale claims and deliver every pending customer notification."""
+    report = recover_stale_fulfillments(
+        stale_minutes=STALE_FULFILLMENT_MINUTES,
+        max_attempts=MAX_FULFILLMENT_ATTEMPTS,
+    )
     if telegram_app is not None:
         notified = set()
         for item in report["recovered"]:
@@ -38,7 +40,6 @@ async def recovery_job(telegram_app) -> dict:
                 await notify_customer(
                     telegram_app.bot,
                     int(item["telegram_id"]),
-                    "",
                     int(item["duration_days"]),
                     item["order_id"],
                 )
@@ -52,21 +53,21 @@ async def recovery_job(telegram_app) -> dict:
                 await notify_customer(
                     telegram_app.bot,
                     int(order["telegram_id"]),
-                    "",
                     int(order["duration_days"]),
                     order["id"],
                 )
             except Exception:
                 logger.exception("Pending fulfillment notification failed order=%s", order["id"])
-    if report["exhausted"] and ADMIN_TELEGRAM_ID:
-        bot = telegram_app.bot
+    if report["exhausted"] and telegram_app is not None and ADMIN_TELEGRAM_ID:
         for item in report["exhausted"]:
             try:
-                await bot.send_message(chat_id=ADMIN_TELEGRAM_ID, text=build_admin_alert(item), parse_mode="HTML")
+                await telegram_app.bot.send_message(
+                    chat_id=ADMIN_TELEGRAM_ID,
+                    text=build_admin_alert(item),
+                    parse_mode="HTML",
+                )
             except Exception:
                 logger.exception("Failed to send fulfillment alert to admin")
-    if report["recovered"]:
-        logger.info("Recovery worker recovered %d fulfillment(s).", len(report["recovered"]))
     return report
 
 
@@ -82,5 +83,4 @@ def schedule(telegram_app) -> None:
         id="fulfillment_recovery",
     )
     scheduler.start()
-    logger.info("Fulfillment recovery worker scheduled (every %ds, stale>%dmin, max_attempts=%d).",
-                _INTERVAL_SECONDS, STALE_FULFILLMENT_MINUTES, MAX_FULFILLMENT_ATTEMPTS)
+    logger.info("Fulfillment recovery worker scheduled every %ds.", _INTERVAL_SECONDS)
