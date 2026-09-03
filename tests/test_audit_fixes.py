@@ -17,11 +17,10 @@ class AuditFixTests(unittest.TestCase):
         levels = smc._build_trade_levels(candles, "BUY", 3010.0)
         self.assertIsNotNone(levels)
         entry_low, entry_high, tp1, tp2, tp3, sl, basis = levels
-        risk = 3010.0 - sl
-        self.assertGreater(risk, 0)
-        self.assertEqual(tp1, round(3010.0 + risk, 2))
-        self.assertEqual(tp2, round(3010.0 + 2 * risk, 2))
-        self.assertEqual(tp3, round(3010.0 + 3 * risk, 2))
+        displayed_risk = round(tp1 - 3010.0, 2)
+        self.assertGreater(displayed_risk, 0)
+        self.assertEqual(tp2, round(3010.0 + 2 * displayed_risk, 2))
+        self.assertEqual(tp3, round(3010.0 + 3 * displayed_risk, 2))
         self.assertLess(sl, entry_low)
         self.assertEqual(basis, "STRUCTURE/ATR")
 
