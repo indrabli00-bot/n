@@ -1,4 +1,4 @@
-from smc_engine import calculate_rsi, detect_fvg, check_candle_pattern
+from smc_engine import calculate_rsi, detect_fvg, check_candle_pattern, generate_signal
 
 def c(o,h,l,cl): return {"open":o,"high":h,"low":l,"close":cl}
 
@@ -18,3 +18,10 @@ def test_bullish_engulfing():
 
 def test_bearish_engulfing():
     assert check_candle_pattern([c(99,104,98,103),c(104,105,98,99)])==("BEARISH_ENGULF",2)
+
+def test_neutral_structure_returns_hold_with_confirmation_guidance():
+    candles=[c(100+i*0.01,101+i*0.01,99+i*0.01,100+i*0.01) for i in range(25)]
+    signal=generate_signal(candles,candles)
+    assert signal["direction"]=="HOLD"
+    assert any("WAIT FOR 15M BIAS CONFIRMATION" in r for r in signal["reasons"])
+    assert signal["tp1"]==signal["tp2"]==signal["tp3"]==signal["sl"]==0.0
