@@ -7,7 +7,6 @@ UI state while the original exception remains fully logged for diagnosis.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
@@ -41,7 +40,7 @@ def _safe_message(update: Update) -> str:
 def install(main_module) -> None:
     """Wrap the canonical callback router once, without changing its routes."""
     current = getattr(main_module, "callback_router")
-    if getattr(current, "_neural_gold_guarded", False):
+    if getattr(current, "_neural_gold_guarded", False) is True:
         return
 
     async def guarded(update: Update, context) -> None:
