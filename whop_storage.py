@@ -154,6 +154,29 @@ def get_order_by_membership(membership_id: str) -> dict | None:
         return dict(row) if row else None
 
 
+def list_unnotified_orders(min_age_seconds: int = 90, limit: int = 50) -> list[dict]:
+    """Return completed orders whose customer notification is still pending."""
+    cutoff = _now() - timedelta(seconds=min_age_seconds)
+    try:
+        with database.engine.begin() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT id, telegram_id, duration_days, payment_id, status, notified_at, updated_at
+                    FROM whop_orders
+                    WHERE notified_at IS NULL
+                      AND status IN ('active', 'active_notification_failed', 'customer_notified')
+                      AND updated_at <= :cutoff
+                    ORDER BY updated_at ASC
+                    LIMIT :limit
+                """),
+                {"cutoff": cutoff, "limit": limit},
+            ).mappings().all()
+            return [dict(r) for r in rows if r["status"] != "customer_notified"]
+    except Exception:
+        logger.exception("list_unnotified_orders failed")
+        return []
+
+
 def claim_webhook(event_id: str, event_type: str, payment_id: str | None = None) -> bool:
     """Atomically claim an event for processing, while allowing failed events to retry."""
     now = _now()
