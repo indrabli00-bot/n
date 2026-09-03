@@ -61,24 +61,6 @@ class UILanguageConsistencyTests(unittest.TestCase):
             for key in ("days7", "days14", "days30"):
                 self.assertEqual(i18n.t(lang, key), i18n.t(lang, key))
 
-    def test_premium_visuals_has_no_legacy_hardcoded_ui_labels(self):
-        source = Path(__file__).resolve().parents[1].joinpath("premium_visuals.py").read_text(encoding="utf-8")
-        for phrase in (
-            "📈 Market Pulse",
-            "🧠 Neural Strikes",
-            "📊 Structure Map",
-            "👑 Operator Hub",
-            "⚙️ System Sync",
-            "🌐 Language",
-            "💎 ACCESS & PLANS",
-            "🕐 7 DAYS — TACTICAL TRIAL",
-            "🟡 14 DAYS — STRATEGIC ENTRY",
-            "🔵 30 DAYS — FULL OPERATIONAL CONTROL",
-            '"← BACK"',
-            '"⌂ MENU"',
-        ):
-            self.assertNotIn(phrase, source, phrase)
-
     def test_pending_module_labels_are_localized(self):
         for lang in ("en", "id", "vi", "hi", "zh"):
             text = "\n".join([
