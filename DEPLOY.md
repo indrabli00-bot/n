@@ -1,16 +1,16 @@
-# NEURAL GOLD v3.2 — Belmo Phase 1 Deployment
+# NEURAL GOLD v3.2 — Belmo Production Deployment
+
+The production deployment contract is maintained in `DEPLOY_BELMO.md`.
 
 ## Runtime
 
-Belmo Starter API Service:
-- Python
 - Start command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- One long-running HTTP service
-- Telegram uses webhook mode
+- Telegram transport: FastAPI webhook at `/telegram/webhook`
+- Whop webhook: `/webhooks/whop`
+- Health: `/health` (HTTP 200 only when the Telegram application is running)
+- Database: external persistent PostgreSQL for paid production
 
-## Environment Variables
-
-Set these in Belmo (do not upload `.env` with secrets):
+## Required environment variables
 
 ```text
 TELEGRAM_BOT_TOKEN=...
@@ -18,46 +18,20 @@ ADMIN_TELEGRAM_ID=...
 BELMO_PUBLIC_URL=https://YOUR-BELMO-DOMAIN
 TELEGRAM_WEBHOOK_SECRET=...
 GOLDAPI_API_KEY=...
-DATABASE_URL=sqlite:///xauusd_bot.db
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE
+WHOP_API_KEY=...
 WHOP_WEBHOOK_SECRET=...
 LOG_LEVEL=INFO
 ```
 
-## Telegram webhook
+`GOLDAPI_API_KEY` is the only market-data API credential. TwelveData is not part of the runtime contract.
 
-The application registers:
+## Market-data readiness
 
-`POST /telegram/webhook`
+GoldAPI.io supplies the live XAU/USD spot price and daily historical data. It does not provide native M5/M15 candles in the documented API contract. NEURAL GOLD therefore builds M5/M15 bars only from persisted live GoldAPI samples collected every 60 seconds. No synthetic or historical candle backfill is created. After a fresh deployment, NEURAL STRIKES remains `HOLD / DATA_GAP` until sufficient contiguous samples exist for its requested lookback.
 
-Telegram sends the secret header automatically when `TELEGRAM_WEBHOOK_SECRET`
-is configured.
+## Production rule
 
-## Health
+Do not redeploy until the final `main` commit has a green Phase 2 CI run and Belmo `/health` reports `telegram: true`.
 
-`GET /health`
-
-## Phase 1 payment flow
-
-1. Customer sends `/start`.
-2. Inactive customer is routed directly to ACCESS / PLANS.
-3. Customer chooses 7D / 14D / 30D and opens the real Whop checkout.
-4. Customer taps `I HAVE PAID`.
-5. Bot sends a payment notice to the configured admin.
-6. Admin verifies the Whop payment manually.
-7. Admin creates a token with:
-   - `/addtoken 7`
-   - `/addtoken 14`
-   - `/addtoken 30`
-8. Admin sends the token to the customer.
-9. Customer taps ACTIVATE TOKEN and enters the token.
-10. Subscription expiry is calculated using timezone-aware UTC.
-
-## Important
-
-- MT5 is not used.
-- No price is fabricated if GoldAPI is unavailable.
-- SQLite is suitable for initial testing, but do not assume local container
-  storage is durable forever. Move subscription state to an external
-  persistent database before scaling paid production.
-- The included `whop_webhook.py` is Phase 2 groundwork; it is not required
-  for Phase 1 manual verification.
+See `DEPLOY_BELMO.md` for the complete pre-redeploy checklist.
