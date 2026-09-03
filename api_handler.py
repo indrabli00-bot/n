@@ -138,7 +138,11 @@ def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 async def get_smc_signal(reference_price: float | None = None) -> dict[str, Any] | None:
-    candles_5m, candles_15m = await __import__("asyncio").gather(fetch_candles("5min", 100), fetch_candles("15min", 100))
+    # SMC needs 60 contiguous 5M bars and 20 contiguous 15M bars. Both series
+    # are built from real GoldAPI samples; if either series is not warmed up,
+    # fail closed instead of inventing history.
+    import asyncio
+    candles_5m, candles_15m = await asyncio.gather(fetch_candles("5min", 60), fetch_candles("15min", 20))
     if not candles_5m or not candles_15m:
         return {"direction": "HOLD", "confidence": 0, "entry_low": 0.0, "entry_high": 0.0, "tp1": 0.0, "tp2": 0.0, "tp3": 0.0, "sl": 0.0, "reasons": ["LIVE 5M/15M CANDLE DATA UNAVAILABLE", "WAIT FOR LIVE DATA BEFORE ENTRY"], "tf_bias": "DATA_GAP", "signal_price": reference_price or 0.0, "signal_price_source": "LIVE_REFERENCE" if reference_price is not None else "NONE"}
     return smc_engine.generate_signal(candles_5m, candles_15m, reference_price=reference_price)
@@ -146,8 +150,8 @@ async def get_smc_signal(reference_price: float | None = None) -> dict[str, Any]
 
 def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
     """Compatibility wrapper using the current persisted GoldAPI-derived bars."""
-    candles_5m = market_candles.get_candles("5min", 100) or []
-    candles_15m = market_candles.get_candles("15min", 100) or []
+    candles_5m = market_candles.get_candles("5min", 60) or []
+    candles_15m = market_candles.get_candles("15min", 20) or []
     technical = _technical_indicators(candles_5m)
     if candles_5m and candles_15m:
         sig = smc_engine.generate_signal(candles_5m, candles_15m, reference_price=float(price))
