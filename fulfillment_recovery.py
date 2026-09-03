@@ -29,27 +29,35 @@ def build_admin_alert(item: dict) -> str:
 
 
 async def recovery_job(telegram_app) -> dict:
-    """Recover stale claims and deliver recovered access to the customer."""
+    """Recover stale claims and deliver any missed customer notifications."""
     report = recover_stale_fulfillments(stale_minutes=STALE_FULFILLMENT_MINUTES, max_attempts=MAX_FULFILLMENT_ATTEMPTS)
-    if report["recovered"] and telegram_app is not None:
+    if telegram_app is not None:
+        notified = set()
         for item in report["recovered"]:
             try:
-                claim = whop_storage.get_fulfillment(item["payment_id"])
-                order = whop_storage.get_order(item["order_id"])
-                if not claim or not order:
-                    continue
-                # Recovery now returns the raw token so customer delivery is complete.
-                raw_token = item.get("raw_token")
-                if raw_token:
-                    await notify_customer(
-                        telegram_app.bot,
-                        int(item["telegram_id"]),
-                        raw_token,
-                        int(item["duration_days"]),
-                        item["order_id"],
-                    )
+                await notify_customer(
+                    telegram_app.bot,
+                    int(item["telegram_id"]),
+                    "",
+                    int(item["duration_days"]),
+                    item["order_id"],
+                )
+                notified.add(item["order_id"])
             except Exception:
                 logger.exception("Recovered fulfillment notification failed payment=%s", item.get("payment_id"))
+        for order in whop_storage.list_unnotified_orders(min_age_seconds=90):
+            if order["id"] in notified:
+                continue
+            try:
+                await notify_customer(
+                    telegram_app.bot,
+                    int(order["telegram_id"]),
+                    "",
+                    int(order["duration_days"]),
+                    order["id"],
+                )
+            except Exception:
+                logger.exception("Pending fulfillment notification failed order=%s", order["id"])
     if report["exhausted"] and ADMIN_TELEGRAM_ID:
         bot = telegram_app.bot
         for item in report["exhausted"]:
