@@ -20,6 +20,7 @@ TELEGRAM_WEBHOOK_SECRET=...
 GOLDAPI_API_KEY=...
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE
 WHOP_API_KEY=...
+WHOP_COMPANY_ID=...
 WHOP_WEBHOOK_SECRET=...
 LOG_LEVEL=INFO
 ```
@@ -28,7 +29,7 @@ LOG_LEVEL=INFO
 
 ## Market-data readiness
 
-GoldAPI.io supplies the live XAU/USD spot price and daily historical data. It does not provide native M5/M15 candles in the documented API contract. NEURAL GOLD therefore builds M5/M15 bars only from persisted live GoldAPI samples collected every 60 seconds. No synthetic or historical candle backfill is created. After a fresh deployment, NEURAL STRIKES remains `HOLD / DATA_GAP` until sufficient contiguous samples exist for its requested lookback.
+GoldAPI.io supplies the live XAU/USD spot price and daily historical data. It does not provide native M5/M15 candles in the documented API contract. NEURAL GOLD therefore builds M5/M15 bars only from persisted live GoldAPI samples collected every 60 seconds. No synthetic or historical candle backfill is created. After a fresh deployment, NEURAL STRIKES remains `HOLD / DATA_GAP` until approximately 5 hours of contiguous samples are available for the current SMC lookback.
 
 ## Production rule
 
