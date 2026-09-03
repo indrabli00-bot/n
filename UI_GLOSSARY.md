@@ -48,7 +48,7 @@ Keep customer-facing language consistent across all Telegram screens while allow
 - INITIALIZATION
 - INTELLIGENCE REPORT
 
-These terms are retained as a deliberate terminal/product vocabulary. Customer-facing explanatory sentences and action labels remain localized through `i18n.py`.
+These terms are deliberate terminal/product vocabulary. Customer-facing explanatory sentences and action labels remain localized through `i18n.py`.
 
 ### Non-UI / machine-readable strings
 - callback data such as `screen:price`, `nav:home`, `action:token`
@@ -56,7 +56,7 @@ These terms are retained as a deliberate terminal/product vocabulary. Customer-f
 - URLs and URL schemes
 - code/configuration values
 - version identifiers and timestamps
-- box-drawing characters and decorative symbols such as `━`, `┌`, `┐`, `└`, `┘`, `◆`
+- box-drawing characters and decorative symbols
 
 ## Localization rule
 
@@ -64,6 +64,6 @@ Human-language action copy, sentences, button labels, package descriptions, help
 
 The presentation boundary accepts already-localized text. Rendering modules call the localization catalog before passing text into the presentation boundary.
 
-The Group 3.1 direct-localization refactor is validated in the isolated branch with static guard and the full 43-test suite before promotion to `main`.
+The current GitHub Actions CI workflow is the source of truth for test counts and verification status; this document intentionally avoids historical suite numbers.
 
 When a literal is not listed here and is intended for the user, add a translation key instead of embedding the sentence directly in a rendering module.
