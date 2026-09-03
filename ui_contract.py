@@ -55,9 +55,11 @@ def _terminal_text(content: str) -> str:
 
 def _nav(update: Update) -> list[list[InlineKeyboardButton]]:
     lang = _lang(update)
+    menu = t(lang, "menu").removeprefix("⌂ ").strip().title()
+    account = t(lang, "account").strip().title()
     return [[
-        InlineKeyboardButton(_button_text(f"🏠 {t(lang, 'menu')}"), callback_data="nav:home"),
-        InlineKeyboardButton(_button_text(f"👨‍💼 {t(lang, 'account')}"), callback_data="screen:account"),
+        InlineKeyboardButton(_button_text(f"🏠 {menu}"), callback_data="nav:home"),
+        InlineKeyboardButton(_button_text(f"👨‍💼 {account}"), callback_data="screen:account"),
     ]]
 
 
@@ -71,7 +73,9 @@ def _header(update: Update, screen: str) -> str:
     operator = f"@{user.username}" if user and user.username else (user.first_name if user else "OPERATOR")
     status_key = "active" if active else "inactive"
     status_icon = "🟢" if active else "🔴"
-    status = f"{t(_lang(update), status_key)} {status_icon}"
+    status_word = t(_lang(update), status_key)
+    status_word = status_word[:1].upper() + status_word[1:]
+    status = f"{status_word} {status_icon}"
     return f"NEURAL GOLD v3.2 / {ts.stamp()} / {screen}\nOPERATOR: {_esc(operator)}\nSTATUS: {status}"
 
 
