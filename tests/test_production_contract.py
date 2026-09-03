@@ -30,9 +30,9 @@ class ProductionContractTests(unittest.TestCase):
 
     def test_goldapi_sampler_uses_primary_goldapi_source(self):
         module = __import__("market_candles")
-        with patch.object(module.price_sources, "fetch_goldapi", new=AsyncMock(return_value={"close": 3500.0})) as fetch:
+        with patch.object(module.price_sources, "fetch_goldapi", new=AsyncMock(return_value={"close": 3500.0})), patch.object(module, "record_sample") as record:
             self.assertTrue(asyncio.run(module.sample_goldapi()))
-            fetch.assert_awaited_once()
+            record.assert_called_once_with(3500.0, source="GOLD_API")
 
     def test_candle_builder_rejects_unsupported_intervals(self):
         module = __import__("market_candles")
@@ -47,5 +47,4 @@ class ProductionContractTests(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
+if __name__ == "__main__": unittest.main()
