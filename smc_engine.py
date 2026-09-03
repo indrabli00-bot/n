@@ -90,7 +90,8 @@ def calculate_rsi(candles,period=14):
 def generate_signal(candles_5m,candles_15m,min_confidence=MIN_CONFIDENCE):
     if not candles_5m or not candles_15m:return None
     price=float(candles_5m[-1]["close"]); tf,bos,choch=analyze_structure_bos(candles_15m)
-    if tf=="NEUTRAL":return None
+    if tf=="NEUTRAL":
+        return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["15M structure is neutral","WAIT FOR 15M BIAS CONFIRMATION"],"rsi":calculate_rsi(candles_5m),"tf_bias":"NEUTRAL","bos_type":"None","choch":False}
     m5,m5bos,_=analyze_structure_bos(candles_5m); oh,ol,inob=detect_order_block(candles_5m,tf); eh,el,sh,sl=detect_liquidity_zones(candles_5m); grab,gs=detect_liquidity_grab(candles_5m); fvg,fs=detect_fvg(candles_5m); pat,ps=check_candle_pattern(candles_5m); rsi=calculate_rsi(candles_5m)
     long=30 if tf=="BULLISH" else 0; short=30 if tf=="BEARISH" else 0; lr=[]; sr=[]
     (lr if tf=="BULLISH" else sr).append(f"15M {tf.title()} ({bos or 'trend'}{' + CHoCH' if choch else ''})")
@@ -112,6 +113,10 @@ def generate_signal(candles_5m,candles_15m,min_confidence=MIN_CONFIDENCE):
     elif rsi>65:short+=8;sr.append(f"RSI Overbought ({rsi})")
     if long>short and long>=min_confidence and tf=="BULLISH":sig,score,reasons="BUY",min(long,99),lr
     elif short>long and short>=min_confidence and tf=="BEARISH":sig,score,reasons="SELL",min(short,99),sr
-    else:sig,score,reasons="HOLD",max(long,short),[]
+    else:
+        sig,score="HOLD",max(long,short)
+        active=lr if tf=="BULLISH" else sr
+        reasons=active[:2] or [f"15M {tf.title()} bias present","M5 entry confirmation not detected"]
+        reasons.append(f"WAIT FOR M5 CONFIRMATION ({score}/{min_confidence})")
     d=1 if sig=="BUY" else -1
     return {"direction":sig,"confidence":score,"entry_low":round(price-.30,2) if sig!="HOLD" else 0.0,"entry_high":round(price+.30,2) if sig!="HOLD" else 0.0,"tp1":round(price+d*5,2) if sig!="HOLD" else 0.0,"tp2":round(price+d*10,2) if sig!="HOLD" else 0.0,"tp3":round(price+d*16,2) if sig!="HOLD" else 0.0,"sl":round(price-5,2) if sig=="BUY" else round(price+5,2) if sig=="SELL" else 0.0,"reasons":reasons,"rsi":rsi,"tf_bias":tf,"bos_type":bos or "None","choch":choch,"ob_high":oh,"ob_low":ol,"price_in_ob":inob,"eq_highs":eh,"eq_lows":el,"swept_high":sh,"swept_low":sl,"liquidity_grab":grab,"fvg":fvg,"pattern":pat}
