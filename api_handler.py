@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
 from datetime import datetime, timezone
@@ -97,25 +96,60 @@ async def get_smc_signal() -> dict[str, Any] | None:
         return {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE 5M/15M CANDLE DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
     return smc_engine.generate_signal(candles_5m, candles_15m)
 
-def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
-    """Return live SMC-derived indicators; never fabricate a trading signal when SMC data is unavailable."""
-    if _latest_smc_signal is not None:
-        sig = _latest_smc_signal
-        return {
-            "rsi": sig.get("rsi", 50.0),
-            "macd_hist": 0.0,
-            "macd_signal": 0.0,
-            "atr": abs(float(sig.get("tp2", price)) - price) / 1.0,
-            "ema_trend": "Bullish Alignment" if sig.get("tf_bias") == "BULLISH" else "Bearish Alignment" if sig.get("tf_bias") == "BEARISH" else "Converging",
-            "bb_position": "Mid-Band",
-            "stoch_k": 50.0,
-            "smc_signal": sig,
-        }
+def _ema(values: list[float], period: int) -> float:
+    if not values:
+        return 0.0
+    alpha = 2 / (period + 1)
+    result = values[0]
+    for value in values[1:]:
+        result = alpha * value + (1 - alpha) * result
+    return result
+
+def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
+    """Calculate Structure Map indicators directly from the live 5-minute candle series."""
+    closes = [float(c["close"]) for c in candles]
+    if len(closes) < 35:
+        return {"rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "ema_trend": "Data Unavailable", "ema": None, "atr": 0.0}
+
+    rsi = smc_engine.calculate_rsi(candles)
+    ema20 = _ema(closes[-60:], 20)
+    ema50 = _ema(closes[-60:], 50)
+    ema_trend = "Bullish Alignment" if ema20 > ema50 else "Bearish Alignment" if ema20 < ema50 else "Converging"
+
+    macd_series = []
+    for i in range(26, len(closes)):
+        series = closes[:i + 1]
+        macd_series.append(_ema(series[-60:], 12) - _ema(series[-60:], 26))
+    macd_line = macd_series[-1] if macd_series else 0.0
+    macd_signal = _ema(macd_series[-9:], 9) if macd_series else 0.0
+    macd_hist = macd_line - macd_signal
+
+    true_ranges = []
+    for i in range(1, len(candles)):
+        high = float(candles[i]["high"])
+        low = float(candles[i]["low"])
+        prev_close = float(candles[i - 1]["close"])
+        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    atr = sum(true_ranges[-14:]) / min(14, len(true_ranges)) if true_ranges else 0.0
+
     return {
-        "rsi": 50.0, "macd_hist": 0.0, "macd_signal": 0.0, "atr": 0.0,
-        "ema_trend": "Data Unavailable", "bb_position": "Unavailable", "stoch_k": 50.0,
-        "smc_signal": {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"},
+        "rsi": rsi,
+        "macd_hist": round(macd_hist, 2),
+        "macd_signal": round(macd_signal, 2),
+        "ema_trend": ema_trend,
+        "ema": round(ema20, 2),
+        "atr": round(atr, 2),
+        "bb_position": "Mid-Band",
+        "stoch_k": 50.0,
     }
+
+def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
+    """Compatibility wrapper: return live candle indicators plus the current SMC signal."""
+    candles = _candle_cache.get("5min:100", (None, []))[1]
+    technical = _technical_indicators(candles)
+    sig = _latest_smc_signal or {"direction":"HOLD","confidence":0,"entry_low":0.0,"entry_high":0.0,"tp1":0.0,"tp2":0.0,"tp3":0.0,"sl":0.0,"reasons":["LIVE SMC DATA UNAVAILABLE","WAIT FOR LIVE DATA BEFORE ENTRY"],"tf_bias":"DATA_GAP"}
+    technical["smc_signal"] = sig
+    return technical
 
 def _determine_signal(price: float, indicators: dict[str, Any]) -> dict[str, Any]:
     smc_signal = indicators.get("smc_signal")
