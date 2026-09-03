@@ -43,25 +43,18 @@ async def lifespan(app: FastAPI):
     expiry_notifier.schedule(telegram_app)
     fulfillment_recovery.schedule(telegram_app)
     await telegram_app.start()
-
     if BELMO_PUBLIC_URL:
         if not TELEGRAM_WEBHOOK_SECRET:
             raise RuntimeError("TELEGRAM_WEBHOOK_SECRET is required when BELMO_PUBLIC_URL is configured")
         webhook_url = f"{BELMO_PUBLIC_URL}/telegram/webhook"
         try:
-            await telegram_app.bot.set_webhook(
-                url=webhook_url,
-                secret_token=TELEGRAM_WEBHOOK_SECRET,
-                drop_pending_updates=True,
-            )
+            await telegram_app.bot.set_webhook(url=webhook_url, secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=True)
             logger.info("Telegram webhook configured: %s", webhook_url)
         except Exception:
             logger.exception("Telegram webhook registration failed: %s", webhook_url)
     else:
         logger.warning("BELMO_PUBLIC_URL is not set; webhook registration skipped.")
-
     yield
-
     if telegram_app:
         try:
             if BELMO_PUBLIC_URL:
@@ -86,13 +79,7 @@ app = FastAPI(title="NEURAL GOLD v3.2", version="3.2.0", lifespan=lifespan)
 @app.get("/")
 async def root(request: Request):
     if request.query_params.get("checkout_status") == "success":
-        return HTMLResponse("""<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NEURAL GOLD — PAYMENT OK</title>
-<style>body{background:#0b0c0e;color:#f3d778;font-family:Consolas,monospace;display:flex;min-height:100vh;align-items:center;justify-content:center}div{max-width:560px;border:1px solid #d69a19;border-radius:10px;padding:28px}</style></head>
-<body><div><h2>[ ACCESS ]: PAYMENT SUCCESSFUL</h2>
-<p>Your Whop payment was received.<br>Automatic fulfillment is in progress —<br>your Telegram access activates within seconds to minutes.</p>
-<p>>> Return to Telegram and press /start.<br>Still locked after 10 minutes? → MENU → Uplink.</p></div></body></html>""")
+        return HTMLResponse("""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>NEURAL GOLD — PAYMENT OK</title><style>body{background:#0b0c0e;color:#f3d778;font-family:Consolas,monospace;display:flex;min-height:100vh;align-items:center;justify-content:center}div{max-width:560px;border:1px solid #d69a19;border-radius:10px;padding:28px}</style></head><body><div><h2>[ ACCESS ]: PAYMENT SUCCESSFUL</h2><p>Your Whop payment was received.<br>Automatic fulfillment is in progress —<br>your Telegram access activates within seconds to minutes.</p><p>>> Return to Telegram and press /start.<br>Still locked after 10 minutes? → MENU → Uplink.</p></div></body></html>""")
     return {"service": "NEURAL GOLD v3.2", "status": "online"}
 
 
@@ -109,9 +96,7 @@ async def checkout_redirect(days: int, token: str):
         raw = unquote(token)
         payload, signature = raw.rsplit(".", 1)
         telegram_id_text, days_text, expires_text = payload.split(":", 2)
-        telegram_id = int(telegram_id_text)
-        signed_days = int(days_text)
-        expires = int(expires_text)
+        telegram_id, signed_days, expires = int(telegram_id_text), int(days_text), int(expires_text)
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid payment link")
     if signed_days != days or expires < int(time.time()):
@@ -153,27 +138,24 @@ async def whop_webhook(request: Request, background: BackgroundTasks):
     try:
         event = verify_signature(payload, dict(request.headers))
     except Exception as exc:
-        logger.error("Whop webhook REJECTED (%s) — periksa WHOP_WEBHOOK_SECRET: harus persis secret dari dashboard Whop", exc)
+        logger.error("Whop webhook REJECTED (%s)", exc)
         return JSONResponse(status_code=401, content={"ok": False})
-
     event_id = str(event.get("id") or request.headers.get("webhook-id") or "")
     event_type = str(event.get("type") or "")
     data = event.get("data") or {}
     if not event_id or not event_type:
         return Response(status_code=400)
-
     payment_id = str(data.get("id") or "") or None
     if not whop_storage.claim_webhook(event_id, event_type, payment_id):
         return JSONResponse(status_code=200, content={"received": True, "duplicate": True})
-
     try:
         result = handle_event(event_type, data)
         whop_storage.mark_webhook(event_id, "processed")
         if result and telegram_app is not None:
-            raw_token, duration, order_id = result
+            _, duration, order_id = result
             order = whop_storage.get_order(order_id)
             if order is not None:
-                background.add_task(notify_customer, telegram_app.bot, order["telegram_id"], raw_token, duration, order_id)
+                background.add_task(notify_customer, telegram_app.bot, order["telegram_id"], duration, order_id)
         return JSONResponse(status_code=200, content={"received": True, "processed": True})
     except Exception as exc:
         logger.exception("Whop event processing failed event=%s", event_id)
