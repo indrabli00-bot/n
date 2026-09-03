@@ -11,7 +11,6 @@ class AuditFixTests(unittest.TestCase):
         for i in range(70):
             close = 3000.0 + i * 0.15
             candles.append({"open": close - 0.4, "high": close + 0.6, "low": close - 0.8, "close": close})
-        # Create a confirmed 5M swing low below the live reference price.
         candles[62] = {"open": 3009.0, "high": 3009.4, "low": 2998.0, "close": 3000.0}
         candles[63] = {"open": 3000.0, "high": 3004.0, "low": 2999.0, "close": 3003.0}
         candles[-1]["close"] = 3010.0
@@ -20,9 +19,9 @@ class AuditFixTests(unittest.TestCase):
         entry_low, entry_high, tp1, tp2, tp3, sl, basis = levels
         risk = 3010.0 - sl
         self.assertGreater(risk, 0)
-        self.assertAlmostEqual(tp1, 3010.0 + risk, places=2)
-        self.assertAlmostEqual(tp2, 3010.0 + 2 * risk, places=2)
-        self.assertAlmostEqual(tp3, 3010.0 + 3 * risk, places=2)
+        self.assertEqual(tp1, round(3010.0 + risk, 2))
+        self.assertEqual(tp2, round(3010.0 + 2 * risk, 2))
+        self.assertEqual(tp3, round(3010.0 + 3 * risk, 2))
         self.assertLess(sl, entry_low)
         self.assertEqual(basis, "STRUCTURE/ATR")
 
