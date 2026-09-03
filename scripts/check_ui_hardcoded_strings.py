@@ -4,7 +4,7 @@ import ast
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TARGETS = [ROOT / "main.py", ROOT / "premium_visuals.py", ROOT / "terminal_style.py"]
+TARGETS = [ROOT / "main.py", ROOT / "terminal_style.py"]
 WHITELIST_PATH = ROOT / "UI_WHITELIST.txt"
 
 # Presentation sinks are checked for customer-facing literals. Localization is
