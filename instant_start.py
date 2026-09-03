@@ -18,6 +18,7 @@ logger = logging.getLogger("neural_gold.instant_start")
 
 
 def _instant_keyboard(lang: str) -> InlineKeyboardMarkup:
+    nav = terminal_style.render_persistent_nav(lang).inline_keyboard[0]
     rows = [
         [
             InlineKeyboardButton("🔒 MARKET PULSE", callback_data="screen:price"),
@@ -25,10 +26,7 @@ def _instant_keyboard(lang: str) -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton("🔒 STRUCTURE MAP", callback_data="screen:analysis")],
         [InlineKeyboardButton(f"💎 {t(lang, 'activate_premium')}", callback_data="screen:activate")],
-        [
-            InlineKeyboardButton(f"🏠 {t(lang, 'menu').removeprefix('⌂ ').strip().title()}", callback_data="nav:home"),
-            InlineKeyboardButton(f"👨‍💼 {t(lang, 'account').strip().title()}", callback_data="screen:account"),
-        ],
+        list(nav),
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -45,7 +43,7 @@ def _instant_text(user, lang: str) -> str:
             ]
         )
     )
-    return f"NEURAL GOLD {main.NEURAL_VERSION}\n{now}\nOPERATOR : {operator}\nSTATUS   : Connecting 🟡\n\n<pre>{terminal}</pre>\n\n>> {t(lang, 'select_module')}"
+    return f"NEURAL GOLD {main.NEURAL_VERSION}\n{now}\nOPERATOR : {operator}\nSTATUS   : {t(lang, 'inactive').capitalize()} 🟡\n\n<pre>{terminal}</pre>\n\n>> {t(lang, 'select_module')}"
 
 
 async def _initialize_and_refresh(message, update: Update, user, lang: str) -> None:
@@ -70,7 +68,8 @@ async def _initialize_and_refresh(message, update: Update, user, lang: str) -> N
                 "[ ACCESS ]: GRANTED // WELCOME OPERATOR" if active else "[ ACCESS ]: PENDING // CLEARANCE REQUIRED",
             ]
         )
-        text = f"NEURAL GOLD {main.NEURAL_VERSION}\n{datetime.now(timezone.utc).strftime('[ %Y-%m-%d %H:%M:%S UTC ]')}\nOPERATOR : {main._safe_user_name(user)}\nSTATUS   : {'Aktif 🟢' if active else 'Nonaktif 🔴'}\n\n<pre>{terminal_style.render_terminal_box(terminal)}</pre>\n\n>> {t(lang, 'select_module')}"
+        status_word = t(lang, "active" if active else "inactive")
+        text = f"NEURAL GOLD {main.NEURAL_VERSION}\n{datetime.now(timezone.utc).strftime('[ %Y-%m-%d %H:%M:%S UTC ]')}\nOPERATOR : {main._safe_user_name(user)}\nSTATUS   : {status_word[:1].upper() + status_word[1:]} {'🟢' if active else '🔴'}\n\n<pre>{terminal_style.render_terminal_box(terminal)}</pre>\n\n>> {t(lang, 'select_module')}"
         keyboard = await asyncio.to_thread(main.home_keyboard, update)
         await message.edit_text(text=text, parse_mode="HTML", reply_markup=keyboard)
     except Exception:
