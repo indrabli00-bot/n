@@ -98,11 +98,9 @@ def render_terminal_box(content: str, max_width: int = DEFAULT_MAX_WIDTH) -> str
 def render_persistent_nav(lang: str):
     """Return the premium persistent navigation row with canonical icons."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    menu = t(lang, "menu").removeprefix("⌂ ").strip().title()
-    account = t(lang, "account").strip().title()
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"🏠 {menu}", callback_data="nav:home"),
-        InlineKeyboardButton(f"👨‍💼 {account}", callback_data="screen:account"),
+        InlineKeyboardButton(f"🏠 {t(lang, 'menu')}", callback_data="nav:home"),
+        InlineKeyboardButton(f"👨‍💼 {t(lang, 'account')}", callback_data="screen:account"),
     ]])
 
 
