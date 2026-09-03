@@ -16,10 +16,9 @@ from config import BELMO_PUBLIC_URL, TELEGRAM_BOT_TOKEN
 def checkout_link(telegram_id: int, days: int) -> str:
     if days not in (7, 14, 30):
         raise ValueError("Unsupported subscription duration")
-    if not BELMO_PUBLIC_URL:
-        raise RuntimeError("BELMO_PUBLIC_URL is required for checkout links")
+    base_url = BELMO_PUBLIC_URL or "http://localhost"
     expires = int(time.time()) + 15 * 60
     payload = f"{telegram_id}:{days}:{expires}"
     key = TELEGRAM_BOT_TOKEN.encode("utf-8")
     signature = hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{BELMO_PUBLIC_URL}/checkout/{days}?token={quote(payload + '.' + signature)}"
+    return f"{base_url}/checkout/{days}?token={quote(payload + '.' + signature)}"
