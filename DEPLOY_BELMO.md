@@ -1,16 +1,19 @@
-# NEURAL GOLD v3.2 — Belmo Phase 1 Deployment
+# NEURAL GOLD v3.2 — Belmo Production Deployment
 
 ## Runtime
 
-Belmo Starter API Service:
-- Python
+- Service: Python HTTP service
 - Start command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- One long-running HTTP service
-- Telegram uses webhook mode
+- Telegram transport: custom FastAPI webhook
+- Production webhook: `POST /telegram/webhook`
+- Whop webhook: `POST /webhooks/whop`
+- Health: `GET /health`
 
-## Environment Variables
+The production entry point is `app.py`. `main.py` is retained for local polling/development only.
 
-Set these in Belmo (do not upload `.env` with secrets):
+## Required Belmo environment variables
+
+Set these in Belmo. Never commit real secrets.
 
 ```text
 TELEGRAM_BOT_TOKEN=...
@@ -18,55 +21,58 @@ ADMIN_TELEGRAM_ID=...
 BELMO_PUBLIC_URL=https://YOUR-BELMO-DOMAIN
 TELEGRAM_WEBHOOK_SECRET=...
 GOLDAPI_API_KEY=...
-DATABASE_URL=sqlite:///xauusd_bot.db
+TWELVEDATA_API_KEY=...
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE
+WHOP_API_KEY=...
 WHOP_WEBHOOK_SECRET=...
 LOG_LEVEL=INFO
 ```
 
-## Telegram webhook
+`BELMO_PUBLIC_URL`, `TELEGRAM_WEBHOOK_SECRET`, `WHOP_API_KEY`, and `WHOP_WEBHOOK_SECRET` are mandatory for the production Phase 2 runtime. Startup fails closed if any is missing.
 
-The application registers:
+## Startup sequence
 
-`POST /telegram/webhook`
+1. Validate production secrets and public URL.
+2. Initialize the application database and Phase 2 Whop storage.
+3. Install runtime hardening and the canonical customer UI contract.
+4. Initialize/start the Telegram application.
+5. Register the Telegram webhook at `/telegram/webhook`.
+6. Start expiry and fulfillment recovery jobs.
 
-Telegram sends the secret header automatically when `TELEGRAM_WEBHOOK_SECRET`
-is configured.
+If Telegram webhook registration fails, startup is aborted instead of leaving a superficially healthy HTTP service with a non-working bot.
 
-## Health
-
-`GET /health`
-
-## Phase 1 payment flow
+## Telegram flow
 
 1. Customer sends `/start`.
-2. Inactive customer is routed directly to ACCESS / PLANS.
-3. Customer chooses 7D / 14D / 30D and opens the real Whop checkout.
-4. Customer taps `I HAVE PAID`.
-5. Bot sends a payment notice to the configured admin.
-6. Admin verifies the Whop payment manually.
-7. Admin creates a token with:
-   - `/addtoken 7`
-   - `/addtoken 14`
-   - `/addtoken 30`
-8. Admin sends the token to the customer.
-9. Customer taps ACTIVATE TOKEN and enters the token.
-10. Subscription expiry is calculated using timezone-aware UTC.
+2. Inactive customer sees the premium access screen.
+3. Customer chooses 7D / 14D / 30D.
+4. The signed checkout link creates a real Whop checkout.
+5. `payment.succeeded` is verified by signature and allow-listed plan ID.
+6. Fulfillment activates the Telegram account atomically and idempotently.
+7. Customer notification is delivered independently; failed notification remains recoverable.
 
-## Important
+## Whop recovery
 
-- MT5 is not used.
-- No price is fabricated if GoldAPI is unavailable.
-- SQLite is suitable for initial testing, but do not assume local container
-  storage is durable forever. Move subscription state to an external
-  persistent database before scaling paid production.
-- The included `whop_webhook.py` is Phase 2 groundwork; it is not required
-  for Phase 1 manual verification.
+- Duplicate webhook events are fenced.
+- Stale fulfillment claims can be recovered.
+- Remote `/reconcile` revalidates payment state against Whop before creating a new local entitlement.
+- Unknown plan IDs and plan-duration mismatches are rejected.
+- A payment already bound to a local order is never used to create a second order.
+- Customer notification failure does not roll back a successful entitlement.
 
+## Database
 
-## Phase 1 runtime hardening
+Use an external persistent PostgreSQL database for paid production. SQLite is appropriate for local tests only; container-local SQLite storage is not a durable production subscription store.
 
-- Python is pinned to 3.12 via `.python-version` for reproducible Belmo builds.
-- Whop SDK is intentionally excluded from Phase 1 requirements because the Whop
-  webhook endpoint is Phase 2 and is not imported by the running FastAPI app.
-- `aiohttp` is pinned to a current release compatible with Belmo's supported
-  Python runtimes.
+## Pre-redeploy checklist
+
+- [ ] Belmo start command is exactly `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- [ ] All required environment variables are configured
+- [ ] `DATABASE_URL` points to the production PostgreSQL database
+- [ ] Telegram webhook secret matches the value configured in the deployment
+- [ ] Whop webhook secret matches the Whop webhook configuration
+- [ ] Whop API key is active and has the permissions required by the checkout/revalidation endpoints
+- [ ] Whop webhook URL is `https://<BELMO_PUBLIC_URL>/webhooks/whop`
+- [ ] Telegram webhook URL is `https://<BELMO_PUBLIC_URL>/telegram/webhook`
+- [ ] `/health` reports `telegram: true` after startup
+- [ ] GitHub Actions Phase 2 CI is green on the final `main` commit
