@@ -46,5 +46,16 @@ class ProductionContractTests(unittest.TestCase):
             ["bot", "telegram_id", "duration_days", "order_id"],
         )
 
+    def test_whop_reconcile_uses_v1_payment_endpoint(self):
+        module = __import__("whop_api_phase2")
+        self.assertEqual(module.WHOP_API_BASE, "https://api.whop.com/api/v1")
+        self.assertNotIn("/api/v2/", inspect.getsource(module.fetch_payment))
+
+    def test_whop_success_accepts_paid_status_or_succeeded_substatus(self):
+        module = __import__("whop_api_phase2")
+        self.assertTrue(module._payment_is_successful({"status": "paid", "substatus": "pending"}))
+        self.assertTrue(module._payment_is_successful({"status": "draft", "substatus": "succeeded"}))
+        self.assertFalse(module._payment_is_successful({"status": "open", "substatus": "pending"}))
+
 
 if __name__ == "__main__": unittest.main()
