@@ -19,6 +19,7 @@ import fulfillment_recovery
 import main
 import market_candles
 import runtime_hardening
+import terminal_style
 import ui_contract
 import whop_api_phase2
 import whop_storage
@@ -64,6 +65,8 @@ async def lifespan(app: FastAPI):
         database.init_db()
         market_candles.init_db()
         runtime_hardening.install()
+        # Keep one canonical navigation renderer for both legacy and Phase 2 UI.
+        ui_contract._nav = lambda update: terminal_style.render_persistent_nav(ui_contract._lang(update)).inline_keyboard
         whop_storage.init_phase2_db()
         ui_contract.install(main)
         telegram_app = main.build_application()
