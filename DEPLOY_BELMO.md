@@ -21,12 +21,13 @@ ADMIN_TELEGRAM_ID=...
 BELMO_PUBLIC_URL=https://YOUR-BELMO-DOMAIN
 TELEGRAM_WEBHOOK_SECRET=...
 GOLDAPI_API_KEY=...
-TWELVEDATA_API_KEY=...
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE
 WHOP_API_KEY=...
 WHOP_WEBHOOK_SECRET=...
 LOG_LEVEL=INFO
 ```
+
+`GOLDAPI_API_KEY` is the only market-price API credential required by the runtime. TwelveData is not used and must not be configured.
 
 `BELMO_PUBLIC_URL`, `TELEGRAM_WEBHOOK_SECRET`, `WHOP_API_KEY`, and `WHOP_WEBHOOK_SECRET` are mandatory for the production Phase 2 runtime. Startup fails closed if any is missing.
 
@@ -51,6 +52,10 @@ If Telegram webhook registration fails, startup is aborted instead of leaving a 
 6. Fulfillment activates the Telegram account atomically and idempotently.
 7. Customer notification is delivered independently; failed notification remains recoverable.
 
+## Market data
+
+`GOLDAPI_API_KEY` is used for the primary XAU/USD live price feed. The runtime does not require a TwelveData credential. If the primary feed is unavailable, the existing keyless fallback cascade is used according to the price-source contract; no fabricated price is generated.
+
 ## Whop recovery
 
 - Duplicate webhook events are fenced.
@@ -67,7 +72,8 @@ Use an external persistent PostgreSQL database for paid production. SQLite is ap
 ## Pre-redeploy checklist
 
 - [ ] Belmo start command is exactly `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- [ ] All required environment variables are configured
+- [ ] Only the documented environment variables are configured; no `TWELVEDATA_API_KEY` is required
+- [ ] `GOLDAPI_API_KEY` is configured with a valid GoldAPI.io key
 - [ ] `DATABASE_URL` points to the production PostgreSQL database
 - [ ] Telegram webhook secret matches the value configured in the deployment
 - [ ] Whop webhook secret matches the Whop webhook configuration
