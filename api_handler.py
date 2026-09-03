@@ -161,6 +161,12 @@ def get_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
     return technical
 
 
+# Deprecated compatibility alias for older internal callers. The implementation
+# is canonical above and performs no simulation or fabricated market data.
+def _simulate_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
+    return get_technical_indicators(price, change_pct)
+
+
 def _determine_signal(price: float, indicators: dict[str, Any]) -> dict[str, Any]:
     smc_signal = indicators.get("smc_signal")
     if smc_signal is not None:
