@@ -7,7 +7,6 @@ os.environ.setdefault('WHOP_OAUTH_CLIENT_ID', 'app_test')
 os.environ.setdefault('WHOP_OAUTH_CLIENT_SECRET', 'secret_test')
 os.environ.setdefault('WHOP_OAUTH_REDIRECT_URI', 'https://example.com/auth/whop/callback')
 os.environ.setdefault('WHOP_OAUTH_STATE_SECRET', 'state_test')
-os.environ.setdefault('WHOP_PRODUCT_URL', 'https://whop.com/example/product/')
 os.environ.setdefault('WHOP_WEBHOOK_SECRET', 'whsec_test')
 
 import database
