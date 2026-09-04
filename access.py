@@ -2,7 +2,7 @@ from __future__ import annotations
 import time
 import logging
 from telegram import Bot
-from config import ADMIN_TELEGRAM_ID, TELEGRAM_PREMIUM_CHAT_ID
+from config import TELEGRAM_PREMIUM_CHAT_ID
 from database import membership_active
 
 log = logging.getLogger('access')
@@ -10,7 +10,6 @@ _cache: dict[int, tuple[float, bool]] = {}
 TTL = 60
 
 async def channel_member(bot: Bot, telegram_id: int) -> bool:
-    if telegram_id == ADMIN_TELEGRAM_ID: return True
     cached = _cache.get(telegram_id)
     if cached and cached[0] > time.monotonic(): return cached[1]
     try:
@@ -22,6 +21,5 @@ async def channel_member(bot: Bot, telegram_id: int) -> bool:
     return ok
 
 async def has_access(bot: Bot, telegram_id: int) -> bool:
-    if telegram_id == ADMIN_TELEGRAM_ID: return True
     if not membership_active(telegram_id): return False
     return await channel_member(bot, telegram_id)
