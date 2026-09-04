@@ -9,7 +9,6 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from telegram import Update
 
-import access
 import database
 import market
 import whop
@@ -31,14 +30,12 @@ async def process_whop(data: dict) -> None:
     event = str(data.get('type') or data.get('event') or '').strip()
     event_id = str(data.get('_webhook_id') or data.get('id') or '').strip()
     if not event_id: raise ValueError('webhook_identity_missing')
-    if not await asyncio.to_thread(database.record_webhook_event, event_id, event): return
-
     payload = data.get('data') or data.get('payload') or {}
     company_id = str(data.get('company_id') or payload.get('company', {}).get('id') or '').strip()
     if company_id and company_id != WHOP_COMPANY_ID: raise ValueError('whop_company_mismatch')
-
-    if event not in {'membership.activated', 'membership.deactivated', 'membership.updated', 'membership.cancelled', 'membership.canceled', 'payment.refunded', 'refund.created', 'refund.completed'}:
-        return
+    supported = {'membership.activated', 'membership.deactivated', 'membership.updated', 'membership.cancelled', 'membership.canceled', 'payment.refunded', 'refund.created', 'refund.completed'}
+    if event not in supported: return
+    if not await asyncio.to_thread(database.record_webhook_event, event_id, event): return
 
     membership_id = str(payload.get('id') or payload.get('membership_id') or '').strip()
     user = payload.get('user') or {}
@@ -51,11 +48,8 @@ async def process_whop(data: dict) -> None:
         await asyncio.to_thread(database.sync_membership, membership_id, whop_user_id, status, _dt(payload.get('renewal_period_start')), _dt(payload.get('renewal_period_end')), product_id or WHOP_PRODUCT_ID)
         return
 
-    # Refunds are not used to create entitlement. If Whop includes the membership ID,
-    # fail closed locally until the membership lifecycle webhook confirms its new state.
     if membership_id:
         await asyncio.to_thread(database.deactivate_membership, membership_id, 'refunded')
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,36 +57,29 @@ async def lifespan(app: FastAPI):
     validate()
     await asyncio.to_thread(database.init_db)
     telegram_app = build_application()
-    await telegram_app.initialize()
-    await telegram_app.start()
+    await telegram_app.initialize(); await telegram_app.start()
     await telegram_app.bot.set_webhook(url=f'{BELMO_PUBLIC_URL}/telegram/webhook', secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=False)
     market_task = asyncio.create_task(market.run_poller(stop_event))
     yield
     stop_event.set()
-    if market_task:
-        await market_task
-    await telegram_app.bot.delete_webhook(drop_pending_updates=False)
-    await telegram_app.stop()
-    await telegram_app.shutdown()
+    if market_task: await market_task
+    await telegram_app.bot.delete_webhook(drop_pending_updates=False); await telegram_app.stop(); await telegram_app.shutdown()
 
 app = FastAPI(title='Neural Gold', version='2.0.0', lifespan=lifespan)
 
 @app.get('/health')
 async def health():
     checks = {'database': False, 'market': False, 'telegram': False}
-    try:
-        await asyncio.to_thread(database.db_ping); checks['database'] = True
+    try: await asyncio.to_thread(database.db_ping); checks['database'] = True
     except Exception: logging.getLogger('app').exception('health database check failed')
     try:
         sample = await asyncio.to_thread(database.latest_sample)
         if sample:
             ts = sample['ts'] if sample['ts'].tzinfo else sample['ts'].replace(tzinfo=timezone.utc)
-            age = (datetime.now(timezone.utc) - ts).total_seconds()
-            checks['market'] = 0 <= age <= max(180, MARKET_POLL_SECONDS * 3)
+            age = (datetime.now(timezone.utc) - ts).total_seconds(); checks['market'] = 0 <= age <= max(180, MARKET_POLL_SECONDS * 3)
     except Exception: logging.getLogger('app').exception('health market check failed')
     if telegram_app is not None:
-        try:
-            await telegram_app.bot.get_me(); checks['telegram'] = True
+        try: await telegram_app.bot.get_me(); checks['telegram'] = True
         except Exception: logging.getLogger('app').exception('health telegram check failed')
     return {'ok': all(checks.values()), 'service': 'neural-gold', 'checks': checks}
 
@@ -107,8 +94,7 @@ async def whop_oauth_callback(code: str | None = None, state: str | None = None,
         if telegram_app is not None:
             await telegram_app.bot.send_message(telegram_id, '✅ Akun Whop berhasil terhubung. Jika membership Anda ACTIVE dan Anda sudah menjadi member channel premium, akses Neural Gold akan tersedia otomatis.')
         return HTMLResponse('<h2>Whop account linked.</h2><p>You can return to Telegram and check Status Akses.</p>')
-    except ValueError as exc:
-        return HTMLResponse(f'<h2>Whop linking failed.</h2><p>{str(exc)}</p>', status_code=400)
+    except ValueError as exc: return HTMLResponse(f'<h2>Whop linking failed.</h2><p>{str(exc)}</p>', status_code=400)
     except Exception:
         logging.getLogger('app').exception('whop oauth callback failed')
         return HTMLResponse('<h2>Whop linking failed.</h2><p>Please return to Telegram and try again.</p>', status_code=500)
@@ -118,9 +104,7 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
     if x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET: raise HTTPException(403, 'invalid_secret')
     if telegram_app is None: raise HTTPException(503, 'telegram_not_ready')
     try:
-        update = Update.de_json(await request.json(), telegram_app.bot)
-        await telegram_app.process_update(update)
-        return {'ok': True}
+        update = Update.de_json(await request.json(), telegram_app.bot); await telegram_app.process_update(update); return {'ok': True}
     except Exception as exc: raise HTTPException(400, 'invalid_update') from exc
 
 @app.post('/webhooks/whop')
