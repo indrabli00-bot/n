@@ -33,8 +33,7 @@ def test_membership_lifecycle_and_renewal_window():
     database.link_whop_user(123, 'user_1')
     database.apply_membership_event(
         'evt_1', 'membership.activated', 'mem_1', 'user_1', 'active',
-        datetime.now(timezone.utc),
-        datetime.now(timezone.utc) + timedelta(days=30),
+        datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(days=30),
         'prod_neural_gold',
     )
     assert database.membership_active(123) is True
@@ -96,8 +95,7 @@ def test_webhook_idempotency():
         'data': {
             'id': 'mem_idempotent', 'user': {'id': 'user_idempotent'},
             'status': 'active', 'renewal_period_start': '2026-09-01T00:00:00Z',
-            'renewal_period_end': '2026-10-01T00:00:00Z',
-            'product': {'id': 'prod_neural_gold'},
+            'renewal_period_end': '2026-10-01T00:00:00Z', 'product': {'id': 'prod_neural_gold'},
         },
     }
     asyncio.run(process_whop(payload))
@@ -120,8 +118,7 @@ def test_failed_membership_write_is_retryable():
         'data': {
             'id': 'mem_retryable', 'user': {'id': 'user_retryable'},
             'status': 'active', 'renewal_period_start': '2026-09-01T00:00:00Z',
-            'renewal_period_end': '2026-10-01T00:00:00Z',
-            'product': {'id': 'prod_neural_gold'},
+            'renewal_period_end': '2026-10-01T00:00:00Z', 'product': {'id': 'prod_neural_gold'},
         },
     }
     original = database.apply_membership_event
@@ -162,7 +159,7 @@ def test_payment_succeeded_cannot_create_entitlement():
         assert s.get(database.WebhookEvent, 'evt_payment') is None
 
 
-def test_membership_updated_to_canceled_removes_access():
+def test_membership_deactivated_removes_access():
     database.ensure_user(124)
     database.link_whop_user(124, 'user_cancel')
     database.apply_membership_event(
@@ -171,11 +168,11 @@ def test_membership_updated_to_canceled_removes_access():
     )
     assert database.membership_active(124) is True
     payload = {
-        '_webhook_id': 'evt_cancel_update', 'type': 'membership.updated',
+        '_webhook_id': 'evt_cancel_update', 'type': 'membership.deactivated',
         'company_id': 'biz_neural_gold',
         'data': {
-            'id': 'mem_cancel', 'user': {'id': 'user_cancel'}, 'status': 'canceled',
-            'product': {'id': 'prod_neural_gold'},
+            'id': 'mem_cancel', 'user': {'id': 'user_cancel'},
+            'status': 'inactive', 'product': {'id': 'prod_neural_gold'},
         },
     }
     asyncio.run(process_whop(payload))
@@ -219,11 +216,11 @@ def test_stale_membership_event_cannot_reactivate_access():
     newer = datetime(2026, 9, 5, 12, tzinfo=timezone.utc)
     older = datetime(2026, 9, 5, 11, tzinfo=timezone.utc)
     database.apply_membership_event(
-        'evt_newer', 'membership.updated', 'mem_ordered', 'user_ordered',
-        'canceled', None, None, 'prod_neural_gold', newer,
+        'evt_newer', 'membership.deactivated', 'mem_ordered', 'user_ordered',
+        'inactive', None, None, 'prod_neural_gold', newer,
     )
     database.apply_membership_event(
-        'evt_older', 'membership.updated', 'mem_ordered', 'user_ordered',
+        'evt_older', 'membership.activated', 'mem_ordered', 'user_ordered',
         'active', None, newer + timedelta(days=30), 'prod_neural_gold', older,
     )
     with database.SessionLocal() as s:
@@ -231,18 +228,18 @@ def test_stale_membership_event_cannot_reactivate_access():
             database.WhopMembership.membership_id == 'mem_ordered'
         ))
     assert row is not None
-    assert row.status == 'canceled'
+    assert row.status == 'inactive'
 
 
 def test_missing_source_timestamp_preserves_ordering_guard():
     newer = datetime(2026, 9, 5, 14, tzinfo=timezone.utc)
     older = datetime(2026, 9, 5, 13, tzinfo=timezone.utc)
     database.apply_membership_event(
-        'evt_timestamp_new', 'membership.updated', 'mem_timestamp', 'user_timestamp',
+        'evt_timestamp_new', 'membership.activated', 'mem_timestamp', 'user_timestamp',
         'active', None, newer + timedelta(days=30), 'prod_neural_gold', newer,
     )
     database.apply_membership_event(
-        'evt_timestamp_missing', 'membership.updated', 'mem_timestamp', 'user_timestamp',
+        'evt_timestamp_missing', 'membership.deactivated', 'mem_timestamp', 'user_timestamp',
         'inactive', None, None, 'prod_neural_gold', None,
     )
     with database.SessionLocal() as s:
@@ -254,7 +251,7 @@ def test_missing_source_timestamp_preserves_ordering_guard():
     assert row.status == 'inactive'
 
     database.apply_membership_event(
-        'evt_timestamp_old', 'membership.updated', 'mem_timestamp', 'user_timestamp',
+        'evt_timestamp_old', 'membership.activated', 'mem_timestamp', 'user_timestamp',
         'active', None, newer + timedelta(days=30), 'prod_neural_gold', older,
     )
     with database.SessionLocal() as s:
