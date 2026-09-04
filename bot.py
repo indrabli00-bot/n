@@ -44,7 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu())
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = ('<b>CARA KERJA NEURAL GOLD</b>\n\n1. Data XAU/USD dikumpulkan secara berkala.\n2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n3. Engine menghasilkan kandidat setup.\n4. Untuk Premium Channel, <b>human approval</b> menjadi gate sebelum sinyal dipublikasikan.\n5. Bot Telegram menyediakan signal secara mandiri setelah akses premium aktif.\n\n'
+    text = ('<b>CARA KERJA NEURAL GOLD</b>\n\n1. Data XAU/USD dikumpulkan secara berkala.\n2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n3. Engine menghasilkan signal.\n4. Untuk Premium Channel, <b>human approval</b> menjadi gate sebelum sinyal dipublikasikan.\n5. Bot Telegram menyediakan signal secara mandiri setelah akses premium aktif.\n\n'
             '<b>Arti status</b>\n🟢 LONG — signal bullish\n🔴 SHORT — signal bearish\n🟡 HOLD — kondisi belum mendukung setup\n⚪ DATA GAP — data belum mencukupi\n\n'
             '<b>Catatan</b>\nSetup strength bukan probabilitas kemenangan dan tidak menjamin hasil trading.\n\n<i>' + DISCLAIMER + '</i>')
     await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
@@ -65,10 +65,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f'<b>ACCESS: ACTIVE</b>\nWHOP MEMBERSHIP: ACTIVE\nRENEWAL PERIOD END: {expiry}\n\nAkses bot premium aktif.', parse_mode='HTML', reply_markup=main_menu())
 
 async def signal_text(uid: int) -> str:
-    approved = await asyncio.to_thread(database.latest_approved_signal)
-    if not approved:
-        return '<b>🟡 NEURAL STRIKES</b>\n\n<b>SIGNAL:</b> HOLD\n<b>CONDITION:</b> AWAITING_HUMAN_APPROVAL\n\nBelum ada signal channel yang disetujui.\n\n<i>' + DISCLAIMER + '</i>'
-    return _format_signal(approved)
+    samples = await asyncio.to_thread(database.recent_samples)
+    result = signal_engine.analyze(samples)
+    return _format_signal(result)
 
 async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await access.has_access(context.bot, update.effective_user.id):
