@@ -13,22 +13,21 @@ _last_published_fingerprint: str | None = None
 
 
 def fingerprint(candidate: dict) -> str:
-    direction = candidate.get('signal')
-    return hashlib.sha256(json.dumps({'signal': direction}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return hashlib.sha256(json.dumps({'signal': candidate.get('signal')}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 def should_publish(candidate: dict) -> bool:
-    global _last_published_fingerprint
     direction = candidate.get('signal')
+    if direction == 'HOLD':
+        return False
     if direction not in {'LONG', 'SHORT'}:
-        if direction == 'HOLD':
-            _last_published_fingerprint = None
         return False
-    fp = fingerprint(candidate)
-    if fp == _last_published_fingerprint:
-        return False
-    _last_published_fingerprint = fp
-    return True
+    return fingerprint(candidate) != _last_published_fingerprint
+
+
+def mark_published(candidate: dict) -> None:
+    global _last_published_fingerprint
+    _last_published_fingerprint = fingerprint(candidate)
 
 
 async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
@@ -38,7 +37,8 @@ async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
         return {'candidate': candidate, 'published': False}
     try:
         await bot.send_message(chat_id, '<b>📡 NEURAL STRIKES</b>\n\n' + formatter(candidate), parse_mode='HTML')
+        mark_published(candidate)
         return {'candidate': candidate, 'published': True}
     except Exception:
-        log.exception('automatic signal channel publication failed')
+        log.exception('automatic signal channel publication failed; will retry on next market tick')
         return {'candidate': candidate, 'published': False}
