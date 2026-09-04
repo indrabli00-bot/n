@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from sqlalchemy import BigInteger, DateTime, Float, Integer, String, create_engine, inspect, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import DATABASE_URL
 
@@ -116,20 +117,13 @@ def apply_membership_event(event_id: str, event_type: str, membership_id: str, w
         membership.updated_at = datetime.now(timezone.utc)
         s.add(membership)
         s.add(WebhookEvent(event_id=event_id, event_type=event_type))
-        s.commit()
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+            if s.get(WebhookEvent, event_id): return False
+            raise
         return True
-
-def record_webhook_event(event_id: str, event_type: str) -> bool:
-    with SessionLocal() as s:
-        if s.get(WebhookEvent, event_id): return False
-        s.add(WebhookEvent(event_id=event_id, event_type=event_type)); s.commit(); return True
-
-def sync_membership(membership_id: str, whop_user_id: str, status: str, renewal_start: datetime | None, renewal_end: datetime | None, product_id: str | None) -> None:
-    with SessionLocal() as s:
-        m = s.scalar(select(WhopMembership).where(WhopMembership.membership_id == membership_id))
-        if not m: m = WhopMembership(membership_id=membership_id, whop_user_id=whop_user_id, status=status)
-        m.whop_user_id = whop_user_id; m.status = status; m.renewal_period_start = renewal_start; m.renewal_period_end = renewal_end; m.product_id = product_id; m.updated_at = datetime.now(timezone.utc)
-        s.add(m); s.commit()
 
 def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
     with SessionLocal() as s:
