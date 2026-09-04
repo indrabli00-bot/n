@@ -9,6 +9,7 @@ load_dotenv(BASE_DIR / ".env")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 ADMIN_TELEGRAM_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0") or 0)
+TELEGRAM_PREMIUM_CHAT_ID = os.getenv("TELEGRAM_PREMIUM_CHAT_ID", "").strip()
 
 BELMO_PUBLIC_URL = os.getenv("BELMO_PUBLIC_URL", "").strip().rstrip("/")
 TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
@@ -22,8 +23,6 @@ PRICE_SYMBOL = "XAU/USD"
 GOLDAPI_ENDPOINT = "https://www.goldapi.io/api/price/XAU/USD"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///xauusd_bot.db").strip()
-# SQLAlchemy's generic postgresql:// URL selects psycopg2 by default.
-# The project ships psycopg 3, so explicitly select the psycopg driver.
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len("postgresql://") :]
 elif DATABASE_URL.startswith("postgres://"):
@@ -42,5 +41,4 @@ if not GOLDAPI_API_KEY:
     raise RuntimeError("GOLDAPI_API_KEY is not set. Add it in Belmo Environment Variables.")
 
 if not BELMO_PUBLIC_URL:
-    # Allow local development; production Belmo should set the public URL.
     BELMO_PUBLIC_URL = ""
