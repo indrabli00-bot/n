@@ -25,6 +25,7 @@ from config import (
     validate,
 )
 
+log = logging.getLogger('app')
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
@@ -33,6 +34,11 @@ logging.basicConfig(
 stop_event = asyncio.Event()
 telegram_app = None
 market_task = None
+SUPPORTED_MEMBERSHIP_EVENTS = {
+    'membership.activated',
+    'membership.deactivated',
+    'membership.cancel_at_period_end_changed',
+}
 
 
 def _dt(value: str | None) -> datetime | None:
@@ -43,44 +49,28 @@ def _dt(value: str | None) -> datetime | None:
 
 
 async def process_whop(data: dict) -> None:
-    raw_event = str(data.get('type') or data.get('event') or '').strip().lower()
+    event_type = str(data.get('type') or '').strip().lower()
+    if event_type not in SUPPORTED_MEMBERSHIP_EVENTS:
+        return
+
     event_id = str(data.get('_webhook_id') or data.get('id') or '').strip()
     if not event_id:
         raise ValueError('webhook_identity_missing')
 
-    payload = data.get('data') or data.get('payload') or {}
-    company_id = str(
-        data.get('company_id') or payload.get('company', {}).get('id') or ''
-    ).strip()
+    payload = data.get('data') or {}
+    if not isinstance(payload, dict):
+        raise ValueError('webhook_payload_invalid')
+
+    company = payload.get('company') or {}
+    company_id = str(data.get('company_id') or company.get('id') or '').strip()
     if not company_id:
         raise ValueError('whop_company_missing')
     if company_id != WHOP_COMPANY_ID:
         raise ValueError('whop_company_mismatch')
 
-    deactivation_aliases = {
-        'membership.deactivated',
-        'membership.canceled',
-        'membership.cancelled',
-    }
-    if raw_event == 'membership.activated':
-        event, status = 'membership.activated', 'active'
-    elif raw_event in deactivation_aliases:
-        event, status = 'membership.deactivated', 'inactive'
-    elif raw_event == 'membership.updated':
-        event = 'membership.updated'
-        status = str(payload.get('status') or '').strip().lower()
-        if not status:
-            raise ValueError('membership_status_missing')
-    else:
-        return
-
-    membership_id = str(
-        payload.get('id') or payload.get('membership_id') or ''
-    ).strip()
+    membership_id = str(payload.get('id') or '').strip()
     user = payload.get('user') or {}
-    whop_user_id = str(
-        user.get('id') or payload.get('user_id') or ''
-    ).strip()
+    whop_user_id = str(user.get('id') or '').strip()
     product = payload.get('product') or {}
     product_id = str(product.get('id') or '').strip()
 
@@ -91,11 +81,19 @@ async def process_whop(data: dict) -> None:
     if product_id != WHOP_PRODUCT_ID:
         return
 
+    status = str(payload.get('status') or '').strip().lower()
+    if event_type == 'membership.activated':
+        status = 'active'
+    elif event_type == 'membership.deactivated':
+        status = 'inactive'
+    elif not status:
+        raise ValueError('membership_status_missing')
+
     source_updated_at = _dt(payload.get('updated_at') or payload.get('created_at'))
     await asyncio.to_thread(
         database.apply_membership_event,
         event_id,
-        event,
+        event_type,
         membership_id,
         whop_user_id,
         status,
@@ -137,16 +135,23 @@ async def lifespan(app: FastAPI):
     market_task = asyncio.create_task(
         market.run_poller(stop_event, on_tick=evaluate_signal)
     )
-    yield
-
-    stop_event.set()
-    if market_task:
-        await market_task
-    await telegram_app.bot.delete_webhook(drop_pending_updates=False)
-    await telegram_app.stop()
-    await telegram_app.shutdown()
-    market_task = None
-    telegram_app = None
+    try:
+        yield
+    finally:
+        stop_event.set()
+        if market_task:
+            try:
+                await asyncio.wait_for(market_task, timeout=20)
+            except asyncio.TimeoutError:
+                log.warning('market poller did not stop cleanly; cancelling')
+                market_task.cancel()
+                await asyncio.gather(market_task, return_exceptions=True)
+        if telegram_app is not None:
+            await telegram_app.bot.delete_webhook(drop_pending_updates=False)
+            await telegram_app.stop()
+            await telegram_app.shutdown()
+        market_task = None
+        telegram_app = None
 
 
 app = FastAPI(title='Neural Gold', version='2.0.0', lifespan=lifespan)
@@ -160,7 +165,7 @@ async def health():
         await asyncio.to_thread(database.db_ping)
         checks['database'] = True
     except Exception:
-        logging.getLogger('app').exception('health database check failed')
+        log.exception('health database check failed')
 
     try:
         sample = await asyncio.to_thread(database.latest_sample)
@@ -171,14 +176,14 @@ async def health():
             age = (datetime.now(timezone.utc) - ts).total_seconds()
             checks['market'] = 0 <= age <= max(180, MARKET_POLL_SECONDS * 3)
     except Exception:
-        logging.getLogger('app').exception('health market check failed')
+        log.exception('health market check failed')
 
     if telegram_app is not None:
         try:
             await telegram_app.bot.get_me()
             checks['telegram'] = True
         except Exception:
-            logging.getLogger('app').exception('health telegram check failed')
+            log.exception('health telegram check failed')
 
     return {'ok': all(checks.values()), 'service': 'neural-gold', 'checks': checks}
 
@@ -201,11 +206,7 @@ async def whop_oauth_callback(
     try:
         telegram_id, whop_user_id = await whop.exchange_code(code, state)
         await asyncio.to_thread(database.ensure_user, telegram_id)
-        await asyncio.to_thread(
-            database.link_whop_user,
-            telegram_id,
-            whop_user_id,
-        )
+        await asyncio.to_thread(database.link_whop_user, telegram_id, whop_user_id)
         if telegram_app is not None:
             await telegram_app.bot.send_message(
                 telegram_id,
@@ -224,7 +225,7 @@ async def whop_oauth_callback(
             status_code=400,
         )
     except Exception:
-        logging.getLogger('app').exception('whop oauth callback failed')
+        log.exception('whop oauth callback failed')
         return HTMLResponse(
             '<h2>Whop linking failed.</h2>'
             '<p>Please return to Telegram and try again.</p>',
@@ -251,7 +252,7 @@ async def telegram_webhook(
     try:
         await telegram_app.process_update(update)
     except Exception as exc:
-        logging.getLogger('app').exception('telegram update processing failed')
+        log.exception('telegram update processing failed')
         raise HTTPException(500, 'update_processing_failed') from exc
 
     return {'ok': True}
