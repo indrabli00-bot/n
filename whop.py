@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -21,29 +22,42 @@ from config import (
 )
 
 OAUTH_BASE = 'https://api.whop.com/oauth'
+WEBHOOK_TOLERANCE_SECONDS = 300
+OAUTH_STATE_TTL_SECONDS = 600
+
+
+def _decode_webhook_secret() -> bytes:
+    if not WHOP_WEBHOOK_SECRET.startswith('whsec_'):
+        raise ValueError('invalid_webhook_secret')
+    encoded = WHOP_WEBHOOK_SECRET[6:]
+    try:
+        return base64.b64decode(
+            encoded + '=' * ((4 - len(encoded) % 4) % 4),
+            validate=True,
+        )
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError('invalid_webhook_secret') from exc
 
 
 def verify_webhook(payload: bytes, headers) -> dict:
-    normalized = {str(k).lower(): str(v) for k, v in headers.items()}
+    normalized = {str(key).lower(): str(value) for key, value in headers.items()}
     webhook_id = normalized.get('webhook-id', '')
     timestamp = normalized.get('webhook-timestamp', '')
     signature = normalized.get('webhook-signature', '')
 
     if not webhook_id or not timestamp or not signature:
         raise ValueError('missing_webhook_headers')
-    if abs(time.time() - int(timestamp)) > 300:
+    try:
+        timestamp_value = int(timestamp)
+    except ValueError as exc:
+        raise ValueError('invalid_webhook_timestamp') from exc
+    if abs(time.time() - timestamp_value) > WEBHOOK_TOLERANCE_SECONDS:
         raise ValueError('webhook_timestamp_expired')
 
-    secret = WHOP_WEBHOOK_SECRET
-    key = secret[6:] if secret.startswith('whsec_') else secret
-    try:
-        key = base64.b64decode(key + '=' * ((4 - len(key) % 4) % 4))
-    except Exception:
-        key = key.encode()
-
+    secret = _decode_webhook_secret()
     signed = f'{webhook_id}.{timestamp}.'.encode() + payload
     digest = base64.b64encode(
-        hmac.new(key, signed, hashlib.sha256).digest()
+        hmac.new(secret, signed, hashlib.sha256).digest()
     ).decode()
     valid = any(
         item.startswith('v1,')
@@ -53,7 +67,12 @@ def verify_webhook(payload: bytes, headers) -> dict:
     if not valid:
         raise ValueError('invalid_webhook_signature')
 
-    data = json.loads(payload)
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise ValueError('invalid_webhook_json') from exc
+    if not isinstance(data, dict):
+        raise ValueError('invalid_webhook_payload')
     data['_webhook_id'] = webhook_id
     return data
 
@@ -80,12 +99,17 @@ def _signed_state(telegram_id: int, nonce: str) -> str:
     ).rstrip(b'=').decode()
 
 
+def _decode_state(state: str) -> tuple[int, str, int, str]:
+    raw = base64.urlsafe_b64decode(
+        state + '=' * ((4 - len(state) % 4) % 4)
+    ).decode()
+    user_id, nonce, issued, signature = raw.split(':', 3)
+    return int(user_id), nonce, int(issued), signature
+
+
 def _valid_state(state: str, telegram_id: int) -> bool:
     try:
-        raw = base64.urlsafe_b64decode(
-            state + '=' * ((4 - len(state) % 4) % 4)
-        ).decode()
-        user_id, nonce, issued, signature = raw.split(':', 3)
+        user_id, nonce, issued, signature = _decode_state(state)
         body = f'{user_id}:{nonce}:{issued}'
         expected = hmac.new(
             WHOP_OAUTH_STATE_SECRET.encode(),
@@ -93,11 +117,11 @@ def _valid_state(state: str, telegram_id: int) -> bool:
             hashlib.sha256,
         ).hexdigest()
         return (
-            int(user_id) == telegram_id
-            and abs(time.time() - int(issued)) <= 600
+            user_id == telegram_id
+            and abs(time.time() - issued) <= OAUTH_STATE_TTL_SECONDS
             and hmac.compare_digest(signature, expected)
         )
-    except Exception:
+    except (ValueError, UnicodeDecodeError, binascii.Error):
         return False
 
 
@@ -125,11 +149,16 @@ async def create_link_url(telegram_id: int) -> str:
 
 
 async def exchange_code(code: str, state: str) -> tuple[int, str]:
-    row = database.consume_oauth_state(state)
-    if not row:
-        raise ValueError('oauth_state_invalid_or_expired')
-    if not _valid_state(state, row.telegram_id):
+    try:
+        telegram_id, _, _, _ = _decode_state(state)
+    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        raise ValueError('oauth_state_invalid') from exc
+    if not _valid_state(state, telegram_id):
         raise ValueError('oauth_state_invalid')
+
+    row = database.consume_oauth_state(state)
+    if not row or row.telegram_id != telegram_id:
+        raise ValueError('oauth_state_invalid_or_expired')
 
     payload = {
         'grant_type': 'authorization_code',
