@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 import aiohttp
 import database
 from config import (
-    WHOP_COMPANY_ID, WHOP_OAUTH_CLIENT_ID,
+    WHOP_OAUTH_CLIENT_ID,
     WHOP_OAUTH_CLIENT_SECRET, WHOP_OAUTH_REDIRECT_URI,
     WHOP_OAUTH_STATE_SECRET, WHOP_PRODUCT_URL, WHOP_WEBHOOK_SECRET,
 )
