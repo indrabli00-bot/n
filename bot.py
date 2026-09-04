@@ -18,7 +18,6 @@ DISCLAIMER = (
     'Trading involves risk; you are responsible for your decisions.'
 )
 
-
 HELP_TEXT = (
     '<b>CARA KERJA NEURAL GOLD</b>\n\n'
     '1. Data XAU/USD dikumpulkan otomatis.\n'
@@ -36,26 +35,27 @@ HELP_TEXT = (
     f'<i>{DISCLAIMER}</i>'
 )
 
+ACTIVATION_TEXT = (
+    '<b>AKTIVASI NEURAL GOLD</b>\n\n'
+    'Pembayaran dan entitlement dikelola oleh Whop. Bot tidak memproses pembayaran.\n\n'
+    '<b>Aktivasi / penghubungan akun:</b>\n'
+    '1. Selesaikan langganan Neural Gold di Whop.\n'
+    '2. Tekan <b>Hubungkan Akun Whop</b> dan selesaikan sign-in Whop satu kali.\n'
+    '3. Pastikan membership Whop ACTIVE dan Anda sudah menjadi member channel premium.\n'
+    '4. Sistem memeriksa kedua status tersebut untuk akses premium.\n\n'
+    'Setelah akun terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.'
+)
 
-def activation_text() -> str:
-    return (
-        '<b>AKTIVASI NEURAL GOLD</b>\n\n'
-        'Pembayaran dan entitlement dikelola oleh Whop. Bot tidak memproses pembayaran.\n\n'
-        '<b>Aktivasi / penghubungan akun:</b>\n'
-        '1. Selesaikan langganan Neural Gold di Whop.\n'
-        '2. Tekan <b>Hubungkan Akun Whop</b> dan selesaikan sign-in Whop satu kali.\n'
-        '3. Pastikan membership Whop ACTIVE dan Anda sudah menjadi member channel premium.\n'
-        '4. Sistem memeriksa kedua status tersebut untuk akses premium.\n\n'
-        'Setelah akun terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.'
-    )
+ACCESS_INACTIVE_TEXT = (
+    '<b>ACCESS: INACTIVE</b>\n\n'
+    'Pastikan membership Whop ACTIVE, akun Whop sudah terhubung, dan Anda '
+    'menjadi member channel premium.'
+)
 
-
-def access_inactive_text() -> str:
-    return (
-        '<b>ACCESS: INACTIVE</b>\n\n'
-        'Pastikan membership Whop ACTIVE, akun Whop sudah terhubung, dan Anda '
-        'menjadi member channel premium.'
-    )
+PREMIUM_REQUIRED_TEXT = (
+    'Premium access diperlukan. Hubungkan akun Whop dan pastikan membership '
+    'serta channel premium aktif.'
+)
 
 
 def access_active_text(expiry: str) -> str:
@@ -67,32 +67,29 @@ def access_active_text(expiry: str) -> str:
     )
 
 
-def premium_required_text() -> str:
-    return (
-        'Premium access diperlukan. Hubungkan akun Whop dan pastikan membership '
-        'serta channel premium aktif.'
+async def activation_menu(telegram_id: int) -> InlineKeyboardMarkup:
+    link_url = await whop.create_link_url(telegram_id)
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=link_url)],
+            [InlineKeyboardButton('⬅️ Menu', callback_data='home')],
+        ]
     )
 
 
-async def activation_menu(telegram_id: int) -> InlineKeyboardMarkup:
-    link_url = await whop.create_link_url(telegram_id)
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=link_url)],
-        [InlineKeyboardButton('⬅️ Menu', callback_data='home')],
-    ])
-
-
 def main_menu() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton('📡 Sinyal Terbaru', callback_data='signal'),
-            InlineKeyboardButton('📊 Status Akses', callback_data='status'),
-        ],
-        [
-            InlineKeyboardButton('🔗 Hubungkan Akun Whop', callback_data='premium'),
-            InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help'),
-        ],
-    ])
+            [
+                InlineKeyboardButton('📡 Sinyal Terbaru', callback_data='signal'),
+                InlineKeyboardButton('📊 Status Akses', callback_data='status'),
+            ],
+            [
+                InlineKeyboardButton('🔗 Hubungkan Akun Whop', callback_data='premium'),
+                InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help'),
+            ],
+        ]
+    )
 
 
 def main_menu_text() -> str:
@@ -126,13 +123,15 @@ def _format_signal(result: dict) -> str:
     if result.get('risk_reward'):
         lines.append(f'<b>R:R:</b> {result["risk_reward"]}')
 
-    lines.extend([
-        f'<b>CONDITION:</b> {result.get("reason", "UNKNOWN")}',
-        f'<b>DATA:</b> {result.get("samples", 0)} samples',
-        '',
-        '<i>Setup strength bukan probabilitas kemenangan.</i>',
-        f'<i>{DISCLAIMER}</i>',
-    ])
+    lines.extend(
+        [
+            f'<b>CONDITION:</b> {result.get("reason", "UNKNOWN")}',
+            f'<b>DATA:</b> {result.get("samples", 0)} samples',
+            '',
+            '<i>Setup strength bukan probabilitas kemenangan.</i>',
+            f'<i>{DISCLAIMER}</i>',
+        ]
+    )
     return '\n'.join(lines)
 
 
@@ -149,13 +148,21 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _send_activation(target, telegram_id: int, *, edit: bool = False) -> None:
+    markup = await activation_menu(telegram_id)
+    if edit:
+        await target.edit_message_text(
+            ACTIVATION_TEXT, parse_mode='HTML', reply_markup=markup
+        )
+    else:
+        await target.reply_text(
+            ACTIVATION_TEXT, parse_mode='HTML', reply_markup=markup
+        )
+
+
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text(
-            activation_text(),
-            parse_mode='HTML',
-            reply_markup=await activation_menu(update.effective_user.id),
-        )
+        await _send_activation(update.message, update.effective_user.id)
     except Exception:
         log.exception('activation menu failed')
         await update.message.reply_text(
@@ -165,7 +172,7 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _status_text(uid: int, bot) -> tuple[str, InlineKeyboardMarkup]:
     if not await access.has_access(bot, uid):
-        return access_inactive_text(), await activation_menu(uid)
+        return ACCESS_INACTIVE_TEXT, await activation_menu(uid)
 
     membership = await asyncio.to_thread(database.get_membership_for_telegram, uid)
     expiry = (
@@ -188,12 +195,18 @@ async def signal_text() -> str:
 
 async def _send_signal(target, uid: int, bot) -> None:
     if not await access.has_access(bot, uid):
-        await target.edit_message_text(
-            premium_required_text(), reply_markup=await activation_menu(uid)
-        ) if hasattr(target, 'edit_message_text') else await target.reply_text(
-            premium_required_text(), reply_markup=await activation_menu(uid)
-        )
+        if hasattr(target, 'edit_message_text'):
+            await target.edit_message_text(
+                PREMIUM_REQUIRED_TEXT,
+                reply_markup=await activation_menu(uid),
+            )
+        else:
+            await target.reply_text(
+                PREMIUM_REQUIRED_TEXT,
+                reply_markup=await activation_menu(uid),
+            )
         return
+
     text = await signal_text()
     if hasattr(target, 'edit_message_text'):
         await target.edit_message_text(text, parse_mode='HTML', reply_markup=main_menu())
@@ -206,11 +219,13 @@ async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        activation_text(),
-        parse_mode='HTML',
-        reply_markup=await activation_menu(update.effective_user.id),
-    )
+    try:
+        await _send_activation(update.message, update.effective_user.id)
+    except Exception:
+        log.exception('activation link failed')
+        await update.message.reply_text(
+            'Menu aktivasi belum tersedia. Silakan coba lagi beberapa saat lagi.'
+        )
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -228,11 +243,14 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     if query.data == 'premium':
-        await query.edit_message_text(
-            activation_text(),
-            parse_mode='HTML',
-            reply_markup=await activation_menu(query.from_user.id),
-        )
+        try:
+            await _send_activation(query, query.from_user.id, edit=True)
+        except Exception:
+            log.exception('callback activation failed')
+            await query.edit_message_text(
+                'Menu aktivasi belum tersedia. Silakan coba lagi beberapa saat lagi.',
+                reply_markup=main_menu(),
+            )
         return
     if query.data == 'status':
         text, markup = await _status_text(query.from_user.id, context.bot)
