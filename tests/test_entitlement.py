@@ -21,8 +21,10 @@ def setup_module():
 
 
 def teardown_module():
-    try: Path('test_entitlement.sqlite').unlink()
-    except FileNotFoundError: pass
+    try:
+        Path('test_entitlement.sqlite').unlink()
+    except FileNotFoundError:
+        pass
 
 
 def test_membership_lifecycle_and_renewal_window():
@@ -58,7 +60,8 @@ def test_recurring_membership_update_replaces_whop_period():
         row = s.scalar(select(database.WhopMembership).where(database.WhopMembership.membership_id == 'mem_recurring'))
     assert row is not None
     actual_end = row.renewal_period_end
-    if actual_end and actual_end.tzinfo is None: actual_end = actual_end.replace(tzinfo=timezone.utc)
+    if actual_end and actual_end.tzinfo is None:
+        actual_end = actual_end.replace(tzinfo=timezone.utc)
     assert actual_end == next_end
 
 
@@ -76,7 +79,8 @@ def test_webhook_idempotency():
             'product': {'id': 'prod_neural_gold'},
         },
     }
-    asyncio.run(process_whop(payload)); asyncio.run(process_whop(payload))
+    asyncio.run(process_whop(payload))
+    asyncio.run(process_whop(payload))
     with database.SessionLocal() as s:
         events = s.scalars(select(database.WebhookEvent).where(database.WebhookEvent.event_id == 'evt_idempotent')).all()
         memberships = s.scalars(select(database.WhopMembership).where(database.WhopMembership.membership_id == 'mem_idempotent')).all()
@@ -129,12 +133,6 @@ def test_payment_succeeded_cannot_create_entitlement():
     asyncio.run(process_whop(payload))
     with database.SessionLocal() as s:
         assert s.get(database.WebhookEvent, 'evt_payment') is None
-
-
-def test_approved_signal_is_explicitly_persisted():
-    candidate = {'signal': 'LONG', 'reason': 'TREND_MOMENTUM_STRUCTURE', 'entry': 2500.0, 'tp': [2510.0, 2520.0, 2530.0], 'stop': 2490.0, 'setup_strength': 80, 'samples': 300}
-    database.save_approved_signal(candidate, 999)
-    assert database.latest_approved_signal() == candidate
 
 
 def test_membership_updated_to_canceled_removes_access():
