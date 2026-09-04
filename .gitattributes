@@ -1,5 +1,0 @@
-# Normalize line endings (audit P4): stop CRLF/LF churn warnings on Windows.
-*.py text eol=lf
-*.md text eol=lf
-*.yml text eol=lf
-*.txt text eol=lf
