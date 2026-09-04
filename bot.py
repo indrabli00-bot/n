@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
@@ -12,86 +13,172 @@ import whop
 from config import TELEGRAM_BOT_TOKEN
 
 log = logging.getLogger('bot')
-DISCLAIMER = 'Market information & education only. Not personal financial advice. Trading involves risk; you are responsible for your decisions.'
+DISCLAIMER = (
+    'Market information & education only. Not personal financial advice. '
+    'Trading involves risk; you are responsible for your decisions.'
+)
+
+
+HELP_TEXT = (
+    '<b>CARA KERJA NEURAL GOLD</b>\n\n'
+    '1. Data XAU/USD dikumpulkan otomatis.\n'
+    '2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n'
+    '3. Engine menghasilkan signal.\n'
+    '4. Signal LONG/SHORT yang memenuhi rule dipublikasikan otomatis ke Premium Channel.\n'
+    '5. Bot Telegram menyediakan signal secara mandiri setelah akses premium aktif.\n\n'
+    '<b>Arti status</b>\n'
+    '🟢 LONG — signal bullish\n'
+    '🔴 SHORT — signal bearish\n'
+    '🟡 HOLD — kondisi belum mendukung setup\n'
+    '⚪ DATA GAP — data belum mencukupi\n\n'
+    '<b>Catatan</b>\n'
+    'Setup strength bukan probabilitas kemenangan dan tidak menjamin hasil trading.\n\n'
+    f'<i>{DISCLAIMER}</i>'
+)
 
 
 def activation_text() -> str:
-    return ('<b>AKTIVASI NEURAL GOLD</b>\n\n'
-            'Pembayaran dan entitlement dikelola oleh Whop. Bot tidak memproses pembayaran.\n\n'
-            '<b>Aktivasi / penghubungan akun:</b>\n'
-            '1. Selesaikan langganan Neural Gold di Whop.\n'
-            '2. Tekan <b>Hubungkan Akun Whop</b> dan selesaikan sign-in Whop satu kali.\n'
-            '3. Pastikan membership Whop ACTIVE dan Anda sudah menjadi member channel premium.\n'
-            '4. Sistem memeriksa kedua status tersebut untuk akses premium.\n\n'
-            'Setelah akun terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.')
+    return (
+        '<b>AKTIVASI NEURAL GOLD</b>\n\n'
+        'Pembayaran dan entitlement dikelola oleh Whop. Bot tidak memproses pembayaran.\n\n'
+        '<b>Aktivasi / penghubungan akun:</b>\n'
+        '1. Selesaikan langganan Neural Gold di Whop.\n'
+        '2. Tekan <b>Hubungkan Akun Whop</b> dan selesaikan sign-in Whop satu kali.\n'
+        '3. Pastikan membership Whop ACTIVE dan Anda sudah menjadi member channel premium.\n'
+        '4. Sistem memeriksa kedua status tersebut untuk akses premium.\n\n'
+        'Setelah akun terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.'
+    )
 
 
 def access_inactive_text() -> str:
-    return '<b>ACCESS: INACTIVE</b>\n\nPastikan membership Whop ACTIVE, akun Whop sudah terhubung, dan Anda menjadi member channel premium.'
+    return (
+        '<b>ACCESS: INACTIVE</b>\n\n'
+        'Pastikan membership Whop ACTIVE, akun Whop sudah terhubung, dan Anda '
+        'menjadi member channel premium.'
+    )
 
 
 def access_active_text(expiry: str) -> str:
-    return f'<b>ACCESS: ACTIVE</b>\nWHOP MEMBERSHIP: ACTIVE\nRENEWAL PERIOD END: {expiry}\n\nAkses bot premium aktif.'
+    return (
+        '<b>ACCESS: ACTIVE</b>\n'
+        '<b>WHOP MEMBERSHIP:</b> ACTIVE\n'
+        f'<b>RENEWAL PERIOD END:</b> {expiry}\n\n'
+        'Akses bot premium aktif.'
+    )
 
 
 def premium_required_text() -> str:
-    return 'Premium access diperlukan. Hubungkan akun Whop dan pastikan membership serta channel premium aktif.'
+    return (
+        'Premium access diperlukan. Hubungkan akun Whop dan pastikan membership '
+        'serta channel premium aktif.'
+    )
 
 
 async def activation_menu(telegram_id: int) -> InlineKeyboardMarkup:
     link_url = await whop.create_link_url(telegram_id)
-    return InlineKeyboardMarkup([[InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=link_url)], [InlineKeyboardButton('⬅️ Menu', callback_data='home')]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=link_url)],
+        [InlineKeyboardButton('⬅️ Menu', callback_data='home')],
+    ])
 
 
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('📡 Sinyal Terbaru', callback_data='signal'), InlineKeyboardButton('📊 Status Akses', callback_data='status')],
-        [InlineKeyboardButton('🔗 Hubungkan Akun Whop', callback_data='premium'), InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help')],
+        [
+            InlineKeyboardButton('📡 Sinyal Terbaru', callback_data='signal'),
+            InlineKeyboardButton('📊 Status Akses', callback_data='status'),
+        ],
+        [
+            InlineKeyboardButton('🔗 Hubungkan Akun Whop', callback_data='premium'),
+            InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help'),
+        ],
     ])
 
 
 def main_menu_text() -> str:
-    return '<b>NEURAL GOLD</b>\n\nPremium XAU/USD market intelligence.\n\n<b>$49/bulan</b> • recurring melalui Whop.\n\nPilih layanan:'
+    return (
+        '<b>NEURAL GOLD</b>\n\n'
+        'Premium XAU/USD market intelligence.\n\n'
+        '<b>$49/bulan</b> • recurring melalui Whop.\n\n'
+        'Pilih layanan:'
+    )
 
 
-def _format_signal(r: dict) -> str:
-    signal = r['signal']; icon = {'LONG':'🟢', 'SHORT':'🔴', 'HOLD':'🟡'}.get(signal, '⚪')
-    lines = [f'<b>{icon} NEURAL STRIKES</b>', f'<b>SIGNAL:</b> {signal}', f'<b>SETUP STRENGTH:</b> {r["setup_strength"]}/100', f'<b>TREND:</b> {r["trend"]}']
-    if r.get('rsi') is not None: lines.append(f'<b>RSI:</b> {r["rsi"]}')
-    if r.get('entry') is not None: lines.append(f'<b>REFERENCE / ENTRY:</b> {r["entry"]}')
-    if r.get('tp'): lines += [f'<b>TP1:</b> {r["tp"][0]}', f'<b>TP2:</b> {r["tp"][1]}', f'<b>TP3:</b> {r["tp"][2]}']
-    if r.get('stop') is not None: lines.append(f'<b>STOP LOSS:</b> {r["stop"]}')
-    if r.get('risk_reward'): lines.append(f'<b>R:R:</b> {r["risk_reward"]}')
-    lines += [f'<b>CONDITION:</b> {r["reason"]}', f'<b>DATA:</b> {r["samples"]} samples', '', '<i>Setup strength bukan probabilitas kemenangan.</i>', '<i>' + DISCLAIMER + '</i>']
+def _format_signal(result: dict) -> str:
+    signal = result.get('signal', 'HOLD')
+    icon = {'LONG': '🟢', 'SHORT': '🔴', 'HOLD': '🟡'}.get(signal, '⚪')
+    lines = [
+        f'<b>{icon} NEURAL STRIKES</b>',
+        f'<b>SIGNAL:</b> {signal}',
+        f'<b>SETUP STRENGTH:</b> {result.get("setup_strength", 0)}/100',
+        f'<b>TREND:</b> {result.get("trend", "NEUTRAL")}',
+    ]
+    if result.get('rsi') is not None:
+        lines.append(f'<b>RSI:</b> {result["rsi"]}')
+    if result.get('entry') is not None:
+        lines.append(f'<b>REFERENCE / ENTRY:</b> {result["entry"]}')
+
+    targets = result.get('tp') or []
+    for index, target in enumerate(targets[:3], start=1):
+        lines.append(f'<b>TP{index}:</b> {target}')
+    if result.get('stop') is not None:
+        lines.append(f'<b>STOP LOSS:</b> {result["stop"]}')
+    if result.get('risk_reward'):
+        lines.append(f'<b>R:R:</b> {result["risk_reward"]}')
+
+    lines.extend([
+        f'<b>CONDITION:</b> {result.get("reason", "UNKNOWN")}',
+        f'<b>DATA:</b> {result.get("samples", 0)} samples',
+        '',
+        '<i>Setup strength bukan probabilitas kemenangan.</i>',
+        f'<i>{DISCLAIMER}</i>',
+    ])
     return '\n'.join(lines)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await asyncio.to_thread(database.ensure_user, update.effective_user.id)
-    await update.message.reply_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu())
+    await update.message.reply_text(
+        main_menu_text(), parse_mode='HTML', reply_markup=main_menu()
+    )
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = ('<b>CARA KERJA NEURAL GOLD</b>\n\n1. Data XAU/USD dikumpulkan otomatis.\n2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n3. Engine menghasilkan signal.\n4. Signal LONG/SHORT yang memenuhi rule dipublikasikan otomatis ke Premium Channel.\n5. Bot Telegram menyediakan signal secara mandiri setelah akses premium aktif.\n\n<b>Arti status</b>\n🟢 LONG — signal bullish\n🔴 SHORT — signal bearish\n🟡 HOLD — kondisi belum mendukung setup\n⚪ DATA GAP — data belum mencukupi\n\n<b>Catatan</b>\nSetup strength bukan probabilitas kemenangan dan tidak menjamin hasil trading.\n\n<i>' + DISCLAIMER + '</i>')
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
+    await update.message.reply_text(
+        HELP_TEXT, parse_mode='HTML', reply_markup=main_menu()
+    )
 
 
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text(activation_text(), parse_mode='HTML', reply_markup=await activation_menu(update.effective_user.id))
+        await update.message.reply_text(
+            activation_text(),
+            parse_mode='HTML',
+            reply_markup=await activation_menu(update.effective_user.id),
+        )
     except Exception:
         log.exception('activation menu failed')
-        await update.message.reply_text('Menu aktivasi belum tersedia. Silakan coba lagi beberapa saat lagi.')
+        await update.message.reply_text(
+            'Menu aktivasi belum tersedia. Silakan coba lagi beberapa saat lagi.'
+        )
+
+
+async def _status_text(uid: int, bot) -> tuple[str, InlineKeyboardMarkup]:
+    if not await access.has_access(bot, uid):
+        return access_inactive_text(), await activation_menu(uid)
+
+    membership = await asyncio.to_thread(database.get_membership_for_telegram, uid)
+    expiry = (
+        membership.renewal_period_end.isoformat()
+        if membership and membership.renewal_period_end
+        else '-'
+    )
+    return access_active_text(expiry), main_menu()
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if not await access.has_access(context.bot, uid):
-        await update.message.reply_text(access_inactive_text(), parse_mode='HTML', reply_markup=await activation_menu(uid))
-        return
-    m = await asyncio.to_thread(database.get_membership_for_telegram, uid)
-    expiry = m.renewal_period_end.isoformat() if m and m.renewal_period_end else '-'
-    await update.message.reply_text(access_active_text(expiry), parse_mode='HTML', reply_markup=main_menu())
+    text, markup = await _status_text(update.effective_user.id, context.bot)
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
 
 
 async def signal_text() -> str:
@@ -99,50 +186,73 @@ async def signal_text() -> str:
     return _format_signal(signal_engine.analyze(samples))
 
 
-async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if not await access.has_access(context.bot, uid):
-        await update.message.reply_text(premium_required_text(), reply_markup=await activation_menu(uid))
+async def _send_signal(target, uid: int, bot) -> None:
+    if not await access.has_access(bot, uid):
+        await target.edit_message_text(
+            premium_required_text(), reply_markup=await activation_menu(uid)
+        ) if hasattr(target, 'edit_message_text') else await target.reply_text(
+            premium_required_text(), reply_markup=await activation_menu(uid)
+        )
         return
-    await update.message.reply_text(await signal_text(), parse_mode='HTML', reply_markup=main_menu())
+    text = await signal_text()
+    if hasattr(target, 'edit_message_text'):
+        await target.edit_message_text(text, parse_mode='HTML', reply_markup=main_menu())
+    else:
+        await target.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
+
+
+async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _send_signal(update.message, update.effective_user.id, context.bot)
 
 
 async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('<b>AKTIVASI NEURAL GOLD</b>\n\nHubungkan akun Whop ke Telegram satu kali. Membership Whop tetap menjadi sumber entitlement.', parse_mode='HTML', reply_markup=await activation_menu(update.effective_user.id))
+    await update.message.reply_text(
+        activation_text(),
+        parse_mode='HTML',
+        reply_markup=await activation_menu(update.effective_user.id),
+    )
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
-    await q.answer()
-    if q.data == 'home':
-        await q.edit_message_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu())
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == 'home':
+        await query.edit_message_text(
+            main_menu_text(), parse_mode='HTML', reply_markup=main_menu()
+        )
         return
-    if q.data == 'help':
-        await q.edit_message_text('<b>CARA KERJA</b>\n\nData XAU/USD → signal engine.\n\n<b>Premium Channel:</b> LONG/SHORT yang memenuhi rule → <b>publikasi otomatis</b>.\n<b>Bot:</b> signal tersedia secara mandiri setelah akses premium aktif.\n\n<i>Setup strength bukan probabilitas kemenangan.</i>\n\n<i>' + DISCLAIMER + '</i>', parse_mode='HTML', reply_markup=main_menu())
+    if query.data == 'help':
+        await query.edit_message_text(
+            HELP_TEXT, parse_mode='HTML', reply_markup=main_menu()
+        )
         return
-    if q.data == 'premium':
-        await q.edit_message_text(activation_text(), parse_mode='HTML', reply_markup=await activation_menu(q.from_user.id))
+    if query.data == 'premium':
+        await query.edit_message_text(
+            activation_text(),
+            parse_mode='HTML',
+            reply_markup=await activation_menu(query.from_user.id),
+        )
         return
-    if q.data == 'status':
-        uid = q.from_user.id
-        if await access.has_access(context.bot, uid):
-            m = await asyncio.to_thread(database.get_membership_for_telegram, uid)
-            expiry = m.renewal_period_end.isoformat() if m and m.renewal_period_end else '-'
-            await q.edit_message_text(access_active_text(expiry), parse_mode='HTML', reply_markup=main_menu())
-        else:
-            await q.edit_message_text(access_inactive_text(), parse_mode='HTML', reply_markup=await activation_menu(uid))
+    if query.data == 'status':
+        text, markup = await _status_text(query.from_user.id, context.bot)
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
         return
-    if q.data == 'signal':
-        uid = q.from_user.id
-        if not await access.has_access(context.bot, uid):
-            await q.edit_message_text(premium_required_text(), reply_markup=await activation_menu(uid))
-            return
-        await q.edit_message_text(await signal_text(), parse_mode='HTML', reply_markup=main_menu())
+    if query.data == 'signal':
+        await _send_signal(query, query.from_user.id, context.bot)
 
 
 def build_application() -> Application:
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    for command, handler in [('start', start), ('premium', premium), ('link', link_cmd), ('status', status), ('signal', signal_cmd), ('help', help_cmd)]:
+    handlers = {
+        'start': start,
+        'premium': premium,
+        'link': link_cmd,
+        'status': status,
+        'signal': signal_cmd,
+        'help': help_cmd,
+    }
+    for command, handler in handlers.items():
         app.add_handler(CommandHandler(command, handler))
     app.add_handler(CallbackQueryHandler(callbacks))
     return app
