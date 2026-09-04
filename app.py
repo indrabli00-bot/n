@@ -27,14 +27,25 @@ def _dt(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 async def process_whop(data: dict) -> None:
-    event = str(data.get('type') or data.get('event') or '').strip()
+    raw_event = str(data.get('type') or data.get('event') or '').strip().lower()
     event_id = str(data.get('_webhook_id') or data.get('id') or '').strip()
     if not event_id: raise ValueError('webhook_identity_missing')
     payload = data.get('data') or data.get('payload') or {}
     company_id = str(data.get('company_id') or payload.get('company', {}).get('id') or '').strip()
     if company_id and company_id != WHOP_COMPANY_ID: raise ValueError('whop_company_mismatch')
 
-    if event not in {'membership.activated', 'membership.deactivated'}:
+    deactivation_aliases = {'membership.deactivated', 'membership.canceled', 'membership.cancelled'}
+    if raw_event == 'membership.activated':
+        event = 'membership.activated'
+        status = 'active'
+    elif raw_event in deactivation_aliases:
+        event = 'membership.deactivated'
+        status = 'inactive'
+    elif raw_event == 'membership.updated':
+        event = 'membership.updated'
+        status = str(payload.get('status') or '').strip().lower()
+        if not status: raise ValueError('membership_status_missing')
+    else:
         return
 
     membership_id = str(payload.get('id') or payload.get('membership_id') or '').strip()
@@ -45,13 +56,6 @@ async def process_whop(data: dict) -> None:
         raise ValueError('membership_identity_missing')
     if product_id != WHOP_PRODUCT_ID:
         return
-
-    if event == 'membership.activated':
-        status = 'active'
-    else:
-        status = str(payload.get('status') or 'inactive').lower()
-        if status == 'active':
-            status = 'inactive'
 
     await asyncio.to_thread(
         database.apply_membership_event,
