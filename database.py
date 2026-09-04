@@ -34,6 +34,7 @@ class WhopMembership(Base):
     renewal_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     renewal_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     product_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
@@ -76,6 +77,9 @@ def init_db() -> None:
     if 'product_id' not in membership_columns:
         with engine.begin() as conn:
             conn.execute(text('ALTER TABLE whop_memberships ADD COLUMN product_id VARCHAR(120)'))
+    if 'source_updated_at' not in membership_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE whop_memberships ADD COLUMN source_updated_at TIMESTAMP'))
 
 
 def db_ping() -> bool:
@@ -135,19 +139,23 @@ def consume_oauth_state(state: str) -> OAuthState | None:
         if not row:
             return None
         s.commit()
-        return OAuthState(
-            state=row.state,
-            telegram_id=row.telegram_id,
-            code_verifier=row.code_verifier,
-            expires_at=row.expires_at,
-        )
+        return OAuthState(state=row.state, telegram_id=row.telegram_id, code_verifier=row.code_verifier, expires_at=row.expires_at)
 
 
-def apply_membership_event(event_id: str, event_type: str, membership_id: str, whop_user_id: str, status: str, renewal_start: datetime | None, renewal_end: datetime | None, product_id: str) -> bool:
+def apply_membership_event(event_id: str, event_type: str, membership_id: str, whop_user_id: str, status: str, renewal_start: datetime | None, renewal_end: datetime | None, product_id: str, source_updated_at: datetime | None = None) -> bool:
     with SessionLocal() as s:
         if s.get(WebhookEvent, event_id):
             return False
         membership = s.scalar(select(WhopMembership).where(WhopMembership.membership_id == membership_id))
+        if membership and source_updated_at and membership.source_updated_at:
+            existing_at = membership.source_updated_at
+            if existing_at.tzinfo is None:
+                existing_at = existing_at.replace(tzinfo=timezone.utc)
+            incoming_at = source_updated_at if source_updated_at.tzinfo else source_updated_at.replace(tzinfo=timezone.utc)
+            if incoming_at < existing_at:
+                s.add(WebhookEvent(event_id=event_id, event_type=event_type))
+                s.commit()
+                return False
         if not membership:
             membership = WhopMembership(membership_id=membership_id, whop_user_id=whop_user_id, status=status)
         membership.whop_user_id = whop_user_id
@@ -155,6 +163,7 @@ def apply_membership_event(event_id: str, event_type: str, membership_id: str, w
         membership.renewal_period_start = renewal_start
         membership.renewal_period_end = renewal_end
         membership.product_id = product_id
+        membership.source_updated_at = source_updated_at
         membership.updated_at = datetime.now(timezone.utc)
         s.add(membership)
         s.add(WebhookEvent(event_id=event_id, event_type=event_type))
@@ -173,15 +182,7 @@ def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
         u = s.scalar(select(User).where(User.telegram_id == telegram_id))
         if not u or not u.whop_user_id:
             return None
-        return s.scalar(
-            select(WhopMembership)
-            .where(
-                WhopMembership.whop_user_id == u.whop_user_id,
-                WhopMembership.product_id == WHOP_PRODUCT_ID,
-            )
-            .order_by(WhopMembership.updated_at.desc())
-            .limit(1)
-        )
+        return s.scalar(select(WhopMembership).where(WhopMembership.whop_user_id == u.whop_user_id, WhopMembership.product_id == WHOP_PRODUCT_ID).order_by(WhopMembership.updated_at.desc()).limit(1))
 
 
 def membership_active(telegram_id: int) -> bool:
