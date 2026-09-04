@@ -97,7 +97,8 @@ async def whop_oauth_callback(code: str | None = None, state: str | None = None,
         await asyncio.to_thread(database.ensure_user, telegram_id); await asyncio.to_thread(database.link_whop_user, telegram_id, whop_user_id)
         if telegram_app is not None: await telegram_app.bot.send_message(telegram_id, '✅ Akun Whop berhasil terhubung. Jika membership Anda ACTIVE dan Anda sudah menjadi member channel premium, akses Neural Gold akan tersedia otomatis.')
         return HTMLResponse('<h2>Whop account linked.</h2><p>You can return to Telegram and check Status Akses.</p>')
-    except ValueError as exc: return HTMLResponse(f'<h2>Whop linking failed.</h2><p>{str(exc)}</p>', status_code=400)
+    except ValueError:
+        return HTMLResponse('<h2>Whop linking failed.</h2><p>Invalid or expired authorization state.</p>', status_code=400)
     except Exception:
         logging.getLogger('app').exception('whop oauth callback failed'); return HTMLResponse('<h2>Whop linking failed.</h2><p>Please return to Telegram and try again.</p>', status_code=500)
 
@@ -106,8 +107,16 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
     if x_telegram_bot_api_secret_token != TELEGRAM_WEBHOOK_SECRET: raise HTTPException(403, 'invalid_secret')
     if telegram_app is None: raise HTTPException(503, 'telegram_not_ready')
     try:
-        update = Update.de_json(await request.json(), telegram_app.bot); await telegram_app.process_update(update); return {'ok': True}
-    except Exception as exc: raise HTTPException(400, 'invalid_update') from exc
+        body = await request.json()
+        update = Update.de_json(body, telegram_app.bot)
+    except Exception as exc:
+        raise HTTPException(400, 'invalid_update') from exc
+    try:
+        await telegram_app.process_update(update)
+    except Exception as exc:
+        logging.getLogger('app').exception('telegram update processing failed')
+        raise HTTPException(500, 'update_processing_failed') from exc
+    return {'ok': True}
 
 @app.post('/webhooks/whop')
 async def whop_webhook(request: Request):
