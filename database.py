@@ -257,18 +257,24 @@ def claim_telegram_update(update_id: int, stale_after_seconds: int = 300) -> boo
         except IntegrityError:
             s.rollback()
 
-        row = s.get(TelegramUpdate, update_id)
-        if row is None:
-            return False
-        row_updated = _normalise_dt(row.updated_at)
-        if row.status == 'processed':
-            return False
-        if row_updated is not None and row_updated.timestamp() <= cutoff:
-            row.status = 'processing'
-            row.updated_at = now
-            s.commit()
-            return True
-        return False
+        result = s.execute(
+            text(
+                'UPDATE telegram_updates '
+                'SET status = :processing, updated_at = :now '
+                'WHERE update_id = :update_id '
+                'AND status != :processed '
+                'AND updated_at <= :cutoff'
+            ),
+            {
+                'processing': 'processing',
+                'processed': 'processed',
+                'now': now,
+                'update_id': update_id,
+                'cutoff': datetime.fromtimestamp(cutoff, timezone.utc),
+            },
+        )
+        s.commit()
+        return result.rowcount == 1
 
 
 def complete_telegram_update(update_id: int) -> None:
