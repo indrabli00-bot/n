@@ -10,7 +10,6 @@ def env(name: str, default: str = '') -> str:
     return os.getenv(name, default).strip()
 
 TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN')
-ADMIN_TELEGRAM_ID = int(env('ADMIN_TELEGRAM_ID', '0') or 0)
 TELEGRAM_PREMIUM_CHAT_ID = int(env('TELEGRAM_PREMIUM_CHAT_ID', '0') or 0)
 TELEGRAM_WEBHOOK_SECRET = env('TELEGRAM_WEBHOOK_SECRET')
 BELMO_PUBLIC_URL = env('BELMO_PUBLIC_URL').rstrip('/')
@@ -30,7 +29,6 @@ MIN_MARKET_SAMPLES = int(env('MIN_MARKET_SAMPLES', '300') or 300)
 def validate() -> None:
     required = {
         'TELEGRAM_BOT_TOKEN': TELEGRAM_BOT_TOKEN,
-        'ADMIN_TELEGRAM_ID': str(ADMIN_TELEGRAM_ID),
         'TELEGRAM_PREMIUM_CHAT_ID': str(TELEGRAM_PREMIUM_CHAT_ID),
         'TELEGRAM_WEBHOOK_SECRET': TELEGRAM_WEBHOOK_SECRET,
         'BELMO_PUBLIC_URL': BELMO_PUBLIC_URL,
