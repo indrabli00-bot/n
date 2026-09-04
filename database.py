@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, DateTime, Float, Integer, String, create_engine, select, text
+from sqlalchemy import BigInteger, DateTime, Float, Integer, String, create_engine, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import DATABASE_URL
 
@@ -50,17 +50,16 @@ class MarketSample(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    inspector = inspect(engine)
+    users_columns = {column['name'] for column in inspector.get_columns('users')}
     with engine.begin() as conn:
-        conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_user_id VARCHAR(120)'))
-        conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_users_whop_user_id ON users (whop_user_id)'))
-        conn.execute(text('CREATE TABLE IF NOT EXISTS whop_memberships (id SERIAL PRIMARY KEY, membership_id VARCHAR(120) UNIQUE NOT NULL, whop_user_id VARCHAR(120) NOT NULL, status VARCHAR(50) NOT NULL, renewal_period_start TIMESTAMPTZ NULL, renewal_period_end TIMESTAMPTZ NULL, product_id VARCHAR(120) NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'))
-        conn.execute(text('CREATE INDEX IF NOT EXISTS ix_whop_memberships_membership_id ON whop_memberships (membership_id)'))
-        conn.execute(text('CREATE INDEX IF NOT EXISTS ix_whop_memberships_whop_user_id ON whop_memberships (whop_user_id)'))
-        conn.execute(text('CREATE INDEX IF NOT EXISTS ix_whop_memberships_status ON whop_memberships (status)'))
-        conn.execute(text('CREATE TABLE IF NOT EXISTS webhook_events (event_id VARCHAR(160) PRIMARY KEY, event_type VARCHAR(100) NOT NULL, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'))
-        conn.execute(text('CREATE TABLE IF NOT EXISTS oauth_states (state VARCHAR(160) PRIMARY KEY, telegram_id BIGINT NOT NULL, code_verifier VARCHAR(200) NOT NULL, expires_at TIMESTAMPTZ NOT NULL)'))
-        conn.execute(text('CREATE INDEX IF NOT EXISTS ix_oauth_states_telegram_id ON oauth_states (telegram_id)'))
-        conn.execute(text('CREATE INDEX IF NOT EXISTS ix_oauth_states_expires_at ON oauth_states (expires_at)'))
+        if 'whop_user_id' not in users_columns:
+            conn.execute(text('ALTER TABLE users ADD COLUMN whop_user_id VARCHAR(120)'))
+    inspector = inspect(engine)
+    user_indexes = {index['name'] for index in inspector.get_indexes('users')}
+    if 'ix_users_whop_user_id' not in user_indexes:
+        with engine.begin() as conn:
+            conn.execute(text('CREATE UNIQUE INDEX ix_users_whop_user_id ON users (whop_user_id)'))
 
 def db_ping() -> bool:
     with engine.connect() as conn: conn.execute(text('SELECT 1'))
@@ -103,6 +102,23 @@ def consume_oauth_state(state: str) -> OAuthState | None:
             s.delete(row); s.commit(); return None
         s.delete(row); s.commit(); return row
 
+def apply_membership_event(event_id: str, event_type: str, membership_id: str, whop_user_id: str, status: str, renewal_start: datetime | None, renewal_end: datetime | None, product_id: str) -> bool:
+    with SessionLocal() as s:
+        if s.get(WebhookEvent, event_id): return False
+        membership = s.scalar(select(WhopMembership).where(WhopMembership.membership_id == membership_id))
+        if not membership:
+            membership = WhopMembership(membership_id=membership_id, whop_user_id=whop_user_id, status=status)
+        membership.whop_user_id = whop_user_id
+        membership.status = status
+        membership.renewal_period_start = renewal_start
+        membership.renewal_period_end = renewal_end
+        membership.product_id = product_id
+        membership.updated_at = datetime.now(timezone.utc)
+        s.add(membership)
+        s.add(WebhookEvent(event_id=event_id, event_type=event_type))
+        s.commit()
+        return True
+
 def record_webhook_event(event_id: str, event_type: str) -> bool:
     with SessionLocal() as s:
         if s.get(WebhookEvent, event_id): return False
@@ -114,11 +130,6 @@ def sync_membership(membership_id: str, whop_user_id: str, status: str, renewal_
         if not m: m = WhopMembership(membership_id=membership_id, whop_user_id=whop_user_id, status=status)
         m.whop_user_id = whop_user_id; m.status = status; m.renewal_period_start = renewal_start; m.renewal_period_end = renewal_end; m.product_id = product_id; m.updated_at = datetime.now(timezone.utc)
         s.add(m); s.commit()
-
-def deactivate_membership(membership_id: str, status: str = 'refunded') -> None:
-    with SessionLocal() as s:
-        m = s.scalar(select(WhopMembership).where(WhopMembership.membership_id == membership_id))
-        if m: m.status = status; m.updated_at = datetime.now(timezone.utc); s.commit()
 
 def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
     with SessionLocal() as s:
