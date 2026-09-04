@@ -25,6 +25,9 @@ async def premium_menu(telegram_id: int) -> InlineKeyboardMarkup:
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton('📡 Sinyal Terbaru', callback_data='signal'), InlineKeyboardButton('📊 Status Akses', callback_data='status')], [InlineKeyboardButton('💳 Premium $49/bulan', callback_data='premium'), InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help')]])
 
+def main_menu_text() -> str:
+    return '<b>NEURAL GOLD</b>\n\nPremium XAU/USD market intelligence.\n\n<b>$49/bulan</b> • recurring melalui Whop.\n\nPilih layanan:'
+
 def _format_signal(r: dict) -> str:
     signal = r['signal']; icon = {'LONG':'🟢', 'SHORT':'🔴', 'HOLD':'🟡'}.get(signal, '⚪')
     lines = [f'<b>{icon} NEURAL STRIKES</b>', f'<b>SIGNAL:</b> {signal}', f'<b>SETUP STRENGTH:</b> {r["setup_strength"]}/100', f'<b>TREND:</b> {r["trend"]}']
@@ -38,10 +41,7 @@ def _format_signal(r: dict) -> str:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await asyncio.to_thread(database.ensure_user, update.effective_user.id)
-    text = ('<b>NEURAL GOLD</b>\n\nPremium XAU/USD market intelligence untuk membantu Anda membaca kondisi pasar dengan lebih terstruktur.\n\n'
-            '<b>Yang tersedia</b>\n• Sinyal LONG / SHORT / HOLD\n• Entry, target & stop saat setup valid\n• Setup strength berbasis konfirmasi teknikal\n• Status akses premium\n• Private Telegram channel\n\n'
-            '<b>Premium:</b> $49/bulan, recurring melalui Whop.\n\n<i>' + DISCLAIMER + '</i>')
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
+    await update.message.reply_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu())
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = ('<b>CARA KERJA NEURAL GOLD</b>\n\n1. Data XAU/USD dikumpulkan secara berkala.\n2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n3. Engine menghasilkan kandidat setup.\n4. <b>Human approval</b> menjadi gate sebelum sinyal dipublikasikan ke premium.\n5. Jika konfirmasi belum memadai, sistem memilih <b>HOLD</b>.\n\n'
@@ -90,7 +90,7 @@ async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query; await q.answer()
-    if q.data == 'home': await q.edit_message_text('<b>NEURAL GOLD</b>\n\nPilih layanan:', parse_mode='HTML', reply_markup=main_menu()); return
+    if q.data == 'home': await q.edit_message_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu()); return
     if q.data == 'help': await q.edit_message_text('<b>CARA KERJA</b>\n\nData XAU/USD → trend → momentum → volatilitas → struktur → kandidat setup → human approval → premium.\n\n<i>Setup strength bukan probabilitas kemenangan.</i>\n\n<i>'+DISCLAIMER+'</i>', parse_mode='HTML', reply_markup=main_menu()); return
     if q.data == 'premium':
         await q.edit_message_text('<b>NEURAL GOLD PREMIUM</b>\n\nHarga: <b>$49/bulan</b>\nPembayaran dan entitlement dikelola oleh Whop.\n\nHubungkan akun Whop terlebih dahulu, lalu selesaikan langganan.', parse_mode='HTML', reply_markup=await premium_menu(q.from_user.id)); return
