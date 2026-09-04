@@ -234,16 +234,16 @@ def test_stale_membership_event_cannot_reactivate_access():
     assert row.status == 'canceled'
 
 
-def test_missing_source_timestamp_cannot_erase_ordering_guard():
+def test_missing_source_timestamp_preserves_ordering_guard():
     newer = datetime(2026, 9, 5, 14, tzinfo=timezone.utc)
     older = datetime(2026, 9, 5, 13, tzinfo=timezone.utc)
     database.apply_membership_event(
         'evt_timestamp_new', 'membership.updated', 'mem_timestamp', 'user_timestamp',
-        'canceled', None, None, 'prod_neural_gold', newer,
+        'active', None, newer + timedelta(days=30), 'prod_neural_gold', newer,
     )
     database.apply_membership_event(
         'evt_timestamp_missing', 'membership.updated', 'mem_timestamp', 'user_timestamp',
-        'active', None, newer + timedelta(days=30), 'prod_neural_gold', None,
+        'inactive', None, None, 'prod_neural_gold', None,
     )
     with database.SessionLocal() as s:
         row = s.scalar(select(database.WhopMembership).where(
@@ -251,6 +251,8 @@ def test_missing_source_timestamp_cannot_erase_ordering_guard():
         ))
     assert row is not None
     assert row.source_updated_at is not None
+    assert row.status == 'inactive'
+
     database.apply_membership_event(
         'evt_timestamp_old', 'membership.updated', 'mem_timestamp', 'user_timestamp',
         'active', None, newer + timedelta(days=30), 'prod_neural_gold', older,
@@ -260,4 +262,4 @@ def test_missing_source_timestamp_cannot_erase_ordering_guard():
             database.WhopMembership.membership_id == 'mem_timestamp'
         ))
     assert row is not None
-    assert row.status == 'active'
+    assert row.status == 'inactive'
