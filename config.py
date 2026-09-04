@@ -1,0 +1,47 @@
+from __future__ import annotations
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / '.env')
+
+def env(name: str, default: str = '') -> str:
+    return os.getenv(name, default).strip()
+
+TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN')
+ADMIN_TELEGRAM_ID = int(env('ADMIN_TELEGRAM_ID', '0') or 0)
+TELEGRAM_PREMIUM_CHAT_ID = int(env('TELEGRAM_PREMIUM_CHAT_ID', '0') or 0)
+TELEGRAM_WEBHOOK_SECRET = env('TELEGRAM_WEBHOOK_SECRET')
+BELMO_PUBLIC_URL = env('BELMO_PUBLIC_URL').rstrip('/')
+DATABASE_URL = env('DATABASE_URL')
+GOLDAPI_API_KEY = env('GOLDAPI_API_KEY')
+WHOP_API_KEY = env('WHOP_API_KEY')
+WHOP_COMPANY_ID = env('WHOP_COMPANY_ID')
+WHOP_WEBHOOK_SECRET = env('WHOP_WEBHOOK_SECRET')
+LOG_LEVEL = env('LOG_LEVEL', 'INFO').upper()
+MARKET_POLL_SECONDS = int(env('MARKET_POLL_SECONDS', '60') or 60)
+MIN_MARKET_SAMPLES = int(env('MIN_MARKET_SAMPLES', '300') or 300)
+
+PLAN_IDS = {
+    7: env('WHOP_PLAN_7D', 'plan_ksl11weFJ0z41'),
+    14: env('WHOP_PLAN_14D', 'plan_Yc1JnCIP8jgII'),
+    30: env('WHOP_PLAN_30D', 'plan_JDgh0geRuoSFX'),
+}
+
+def validate() -> None:
+    required = {
+        'TELEGRAM_BOT_TOKEN': TELEGRAM_BOT_TOKEN,
+        'ADMIN_TELEGRAM_ID': str(ADMIN_TELEGRAM_ID),
+        'TELEGRAM_PREMIUM_CHAT_ID': str(TELEGRAM_PREMIUM_CHAT_ID),
+        'TELEGRAM_WEBHOOK_SECRET': TELEGRAM_WEBHOOK_SECRET,
+        'BELMO_PUBLIC_URL': BELMO_PUBLIC_URL,
+        'DATABASE_URL': DATABASE_URL,
+        'GOLDAPI_API_KEY': GOLDAPI_API_KEY,
+        'WHOP_API_KEY': WHOP_API_KEY,
+        'WHOP_COMPANY_ID': WHOP_COMPANY_ID,
+        'WHOP_WEBHOOK_SECRET': WHOP_WEBHOOK_SECRET,
+    }
+    missing = [k for k, v in required.items() if not v]
+    if missing:
+        raise RuntimeError('Missing required environment variables: ' + ', '.join(missing))
