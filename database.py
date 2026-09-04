@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, DateTime, Float, Integer, String, create_engine, inspect, select, text
+import json
+from sqlalchemy import BigInteger, DateTime, Float, Integer, String, Text, create_engine, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import DATABASE_URL
@@ -49,18 +50,25 @@ class MarketSample(Base):
     price: Mapped[float] = mapped_column(Float)
     change_pct: Mapped[float] = mapped_column(Float, default=0.0)
 
+class ApprovedSignal(Base):
+    __tablename__ = 'approved_signals'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payload: Mapped[str] = mapped_column(Text)
+    approved_by: Mapped[int] = mapped_column(BigInteger, index=True)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     inspector = inspect(engine)
     users_columns = {column['name'] for column in inspector.get_columns('users')}
-    with engine.begin() as conn:
-        if 'whop_user_id' not in users_columns:
-            conn.execute(text('ALTER TABLE users ADD COLUMN whop_user_id VARCHAR(120)'))
-    inspector = inspect(engine)
-    user_indexes = {index['name'] for index in inspector.get_indexes('users')}
-    if 'ix_users_whop_user_id' not in user_indexes:
+    if 'whop_user_id' not in users_columns:
         with engine.begin() as conn:
-            conn.execute(text('CREATE UNIQUE INDEX ix_users_whop_user_id ON users (whop_user_id)'))
+            conn.execute(text('ALTER TABLE users ADD COLUMN whop_user_id VARCHAR(120)'))
+        inspector = inspect(engine)
+        user_indexes = {index['name'] for index in inspector.get_indexes('users')}
+        if 'ix_users_whop_user_id' not in user_indexes:
+            with engine.begin() as conn:
+                conn.execute(text('CREATE UNIQUE INDEX ix_users_whop_user_id ON users (whop_user_id)'))
 
 def db_ping() -> bool:
     with engine.connect() as conn: conn.execute(text('SELECT 1'))
@@ -134,6 +142,15 @@ def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
 def membership_active(telegram_id: int) -> bool:
     m = get_membership_for_telegram(telegram_id)
     return bool(m and m.status == 'active')
+
+def save_approved_signal(payload: dict, approved_by: int) -> None:
+    with SessionLocal() as s:
+        s.add(ApprovedSignal(payload=json.dumps(payload, separators=(',', ':'), sort_keys=True), approved_by=approved_by)); s.commit()
+
+def latest_approved_signal() -> dict | None:
+    with SessionLocal() as s:
+        row = s.scalar(select(ApprovedSignal).order_by(ApprovedSignal.approved_at.desc(), ApprovedSignal.id.desc()).limit(1))
+        return json.loads(row.payload) if row else None
 
 def save_sample(price: float, change_pct: float, ts: datetime | None = None) -> None:
     ts = ts or datetime.now(timezone.utc)
