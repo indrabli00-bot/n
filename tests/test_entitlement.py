@@ -9,6 +9,7 @@ os.environ['WHOP_COMPANY_ID'] = 'biz_neural_gold'
 os.environ['WHOP_WEBHOOK_SECRET'] = 'whsec_test'
 os.environ['WHOP_OAUTH_STATE_SECRET'] = 'state_test'
 
+from sqlalchemy import select
 import database
 from app import process_whop
 
@@ -37,7 +38,8 @@ def test_recurring_membership_update_replaces_whop_period():
     next_end = datetime(2026, 11, 1, tzinfo=timezone.utc)
     database.sync_membership('mem_recurring', 'user_recurring', 'active', start, first_end, 'prod_neural_gold')
     database.sync_membership('mem_recurring', 'user_recurring', 'active', first_end, next_end, 'prod_neural_gold')
-    row = database.SessionLocal().get(database.WhopMembership, 2)
+    with database.SessionLocal() as s:
+        row = s.scalar(select(database.WhopMembership).where(database.WhopMembership.membership_id == 'mem_recurring'))
     assert row is not None and row.renewal_period_end == next_end
 
 
