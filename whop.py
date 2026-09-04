@@ -51,7 +51,8 @@ def _valid_state(state: str, telegram_id: int) -> bool:
 
 async def create_link_url(telegram_id: int) -> str:
     verifier = _pkce_verifier()
-    state = _signed_state(telegram_id, secrets.token_urlsafe(18))
+    nonce = secrets.token_urlsafe(18)
+    state = _signed_state(telegram_id, nonce)
     database.save_oauth_state(state, telegram_id, verifier, datetime.now(timezone.utc) + timedelta(minutes=10))
     params = {
         'client_id': WHOP_OAUTH_CLIENT_ID,
@@ -59,6 +60,7 @@ async def create_link_url(telegram_id: int) -> str:
         'response_type': 'code',
         'scope': 'openid profile',
         'state': state,
+        'nonce': nonce,
         'code_challenge': _pkce_challenge(verifier),
         'code_challenge_method': 'S256',
     }
