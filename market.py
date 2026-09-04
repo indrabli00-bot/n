@@ -39,7 +39,6 @@ async def poll_once(session: aiohttp.ClientSession | None = None) -> dict:
         session = aiohttp.ClientSession(timeout=timeout)
     try:
         tick = await fetch_spot(session)
-        # SQLAlchemy is synchronous; never run it on the asyncio event loop.
         await asyncio.to_thread(database.save_sample, tick['price'], tick['change_pct'], tick['ts'])
         return tick
     finally:
@@ -47,7 +46,7 @@ async def poll_once(session: aiohttp.ClientSession | None = None) -> dict:
             await session.close()
 
 
-async def run_poller(stop_event) -> None:
+async def run_poller(stop_event, on_tick=None) -> None:
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
     backoff = max(1, MARKET_POLL_SECONDS)
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -55,6 +54,11 @@ async def run_poller(stop_event) -> None:
             try:
                 await poll_once(session)
                 backoff = max(1, MARKET_POLL_SECONDS)
+                if on_tick is not None:
+                    try:
+                        await on_tick()
+                    except Exception:
+                        log.exception('automatic signal evaluation failed')
             except Exception:
                 log.exception('market poll failed')
                 backoff = min(max(MARKET_POLL_SECONDS, backoff * 2), MAX_BACKOFF_SECONDS)
