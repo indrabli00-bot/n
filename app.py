@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from telegram import Update
 
 import database
@@ -199,14 +199,16 @@ async def health():
 @app.get('/ready')
 async def ready():
     checks = await _service_checks(require_market=True)
-    ok = all(checks.values())
-    if not ok:
-        return {
-            'ok': False,
-            'service': 'neural-gold',
-            'checks': checks,
-            'detail': 'service_not_ready',
-        }
+    if not all(checks.values()):
+        return JSONResponse(
+            status_code=503,
+            content={
+                'ok': False,
+                'service': 'neural-gold',
+                'checks': checks,
+                'detail': 'service_not_ready',
+            },
+        )
     return {'ok': True, 'service': 'neural-gold', 'checks': checks}
 
 
@@ -283,7 +285,12 @@ async def telegram_webhook(
         log.exception('telegram update processing failed')
         raise HTTPException(500, 'update_processing_failed') from exc
 
-    await asyncio.to_thread(database.complete_telegram_update, update_id)
+    try:
+        await asyncio.to_thread(database.complete_telegram_update, update_id)
+    except Exception as exc:
+        log.exception('telegram update completion persistence failed')
+        raise HTTPException(500, 'update_completion_failed') from exc
+
     return {'ok': True, 'duplicate': False}
 
 
