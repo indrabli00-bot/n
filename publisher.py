@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 log = logging.getLogger('publisher')
 STATE_TABLE = 'signal_publication_state'
+_publish_lock = asyncio.Lock()
 
 
 def init_state() -> None:
@@ -45,14 +46,15 @@ def mark_published(candidate: dict) -> None:
 
 
 async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
-    samples = await asyncio.to_thread(database.recent_samples)
-    candidate = signal_engine.analyze(samples)
-    if not should_publish(candidate):
-        return {'candidate': candidate, 'published': False}
-    try:
-        await bot.send_message(chat_id, '<b>📡 NEURAL STRIKES</b>\n\n' + formatter(candidate), parse_mode='HTML')
-        await asyncio.to_thread(mark_published, candidate)
-        return {'candidate': candidate, 'published': True}
-    except Exception:
-        log.exception('automatic signal channel publication failed; will retry on next market tick')
-        return {'candidate': candidate, 'published': False}
+    async with _publish_lock:
+        samples = await asyncio.to_thread(database.recent_samples)
+        candidate = signal_engine.analyze(samples)
+        if not should_publish(candidate):
+            return {'candidate': candidate, 'published': False}
+        try:
+            await bot.send_message(chat_id, '<b>📡 NEURAL STRIKES</b>\n\n' + formatter(candidate), parse_mode='HTML')
+            await asyncio.to_thread(mark_published, candidate)
+            return {'candidate': candidate, 'published': True}
+        except Exception:
+            log.exception('automatic signal channel publication failed; will retry on next market tick')
+            return {'candidate': candidate, 'published': False}
