@@ -125,7 +125,12 @@ def fulfill(payment_id: str, order_id: str) -> bool:
         o = s.get(Order, order_id)
         if not o: raise RuntimeError('order_not_found')
         if o.payment_id and o.payment_id != payment_id: raise RuntimeError('order_payment_mismatch')
-        if o.status in {'refunded', 'refund.created', 'refund.updated', 'membership.deactivated'}: raise RuntimeError('order_not_active')
+        blocked = {
+            'refunded', 'refund.created', 'refund.updated', 'refund.completed',
+            'payment.refunded', 'membership.deactivated',
+            'membership.cancelled', 'membership.canceled',
+        }
+        if o.status in blocked: raise RuntimeError('order_not_active')
         u = s.scalar(select(User).where(User.telegram_id == o.telegram_id)) or User(telegram_id=o.telegram_id)
         now = datetime.now(timezone.utc)
         base = u.subscription_expiry if u.subscription_expiry and u.subscription_expiry > now else now
