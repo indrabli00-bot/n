@@ -5,11 +5,11 @@ Production service for premium XAU/USD market information distributed through Te
 ## Core
 - FastAPI HTTP service
 - Telegram webhook with secret validation
-- Whop webhook verification and idempotent payment fulfillment
+- Whop webhook verification with atomic, idempotent membership entitlement sync
 - GoldAPI spot polling every 60 seconds
 - PostgreSQL persistence
 - Conservative signal engine with explicit HOLD/DATA_GAP states
-- Premium access requires active subscription and Telegram channel membership
+- Premium access requires an ACTIVE Whop membership and Telegram channel membership
 
 ## Start
 `uvicorn app:app --host 0.0.0.0 --port $PORT`
