@@ -35,3 +35,27 @@ def test_unsorted_timestamps_are_normalized():
     samples[100], samples[101] = samples[101], samples[100]
     result = signal_engine.analyze(samples)
     assert result['reason'] != 'DATA_GAP'
+
+
+def test_mixed_valid_and_missing_timestamps_force_data_gap():
+    samples = _samples(300)
+    samples[150]['ts'] = None
+    result = signal_engine.analyze(samples)
+    assert result['signal'] == 'HOLD'
+    assert result['reason'] == 'DATA_GAP'
+
+
+def test_invalid_timestamp_forces_data_gap():
+    samples = _samples(300)
+    samples[150]['ts'] = 'not-a-timestamp'
+    result = signal_engine.analyze(samples)
+    assert result['signal'] == 'HOLD'
+    assert result['reason'] == 'DATA_GAP'
+
+
+def test_non_finite_timestamp_forces_data_gap():
+    samples = _samples(300)
+    samples[150]['ts'] = float('nan')
+    result = signal_engine.analyze(samples)
+    assert result['signal'] == 'HOLD'
+    assert result['reason'] == 'DATA_GAP'
