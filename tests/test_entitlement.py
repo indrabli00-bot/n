@@ -163,3 +163,14 @@ def test_membership_webhook_requires_product_id():
         assert str(exc) == 'membership_product_missing'
     else:
         raise AssertionError('missing product_id must be rejected')
+
+
+def test_stale_membership_event_cannot_reactivate_access():
+    newer = datetime(2026, 9, 5, 12, tzinfo=timezone.utc)
+    older = datetime(2026, 9, 5, 11, tzinfo=timezone.utc)
+    database.apply_membership_event('evt_newer', 'membership.updated', 'mem_ordered', 'user_ordered', 'canceled', None, None, 'prod_neural_gold', newer)
+    database.apply_membership_event('evt_older', 'membership.updated', 'mem_ordered', 'user_ordered', 'active', None, newer + timedelta(days=30), 'prod_neural_gold', older)
+    with database.SessionLocal() as s:
+        row = s.scalar(select(database.WhopMembership).where(database.WhopMembership.membership_id == 'mem_ordered'))
+    assert row is not None
+    assert row.status == 'canceled'
