@@ -95,6 +95,16 @@ class MarketSample(Base):
     change_pct: Mapped[float] = mapped_column(Float, default=0.0)
 
 
+class TelegramUpdate(Base):
+    __tablename__ = 'telegram_updates'
+
+    update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    status: Mapped[str] = mapped_column(String(20), default='processing', index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     inspector = inspect(engine)
@@ -234,6 +244,47 @@ def consume_oauth_state(state: str) -> OAuthState | None:
             code_verifier=row.code_verifier,
             expires_at=row.expires_at,
         )
+
+
+def claim_telegram_update(update_id: int, stale_after_seconds: int = 300) -> bool:
+    now = datetime.now(timezone.utc)
+    cutoff = now.timestamp() - stale_after_seconds
+    with SessionLocal() as s:
+        try:
+            s.add(TelegramUpdate(update_id=update_id, status='processing', updated_at=now))
+            s.commit()
+            return True
+        except IntegrityError:
+            s.rollback()
+
+        row = s.get(TelegramUpdate, update_id)
+        if row is None:
+            return False
+        row_updated = _normalise_dt(row.updated_at)
+        if row.status == 'processed':
+            return False
+        if row_updated is not None and row_updated.timestamp() <= cutoff:
+            row.status = 'processing'
+            row.updated_at = now
+            s.commit()
+            return True
+        return False
+
+
+def complete_telegram_update(update_id: int) -> None:
+    with SessionLocal() as s:
+        row = s.get(TelegramUpdate, update_id)
+        if row is None:
+            return
+        row.status = 'processed'
+        row.updated_at = datetime.now(timezone.utc)
+        s.commit()
+
+
+def release_telegram_update(update_id: int) -> None:
+    with SessionLocal() as s:
+        s.execute(delete(TelegramUpdate).where(TelegramUpdate.update_id == update_id))
+        s.commit()
 
 
 def _normalise_dt(value: datetime | None) -> datetime | None:
