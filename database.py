@@ -72,6 +72,14 @@ def deactivate_subscription(telegram_id: int) -> None:
         u = s.scalar(select(User).where(User.telegram_id == telegram_id))
         if u: u.is_active = False; s.commit()
 
+def revoke_subscription(telegram_id: int) -> None:
+    with SessionLocal() as s:
+        u = s.scalar(select(User).where(User.telegram_id == telegram_id))
+        if u:
+            u.is_active = False
+            u.subscription_expiry = datetime.now(timezone.utc)
+            s.commit()
+
 def save_sample(price: float, change_pct: float, ts: datetime | None = None) -> None:
     ts = ts or datetime.now(timezone.utc)
     with SessionLocal() as s:
