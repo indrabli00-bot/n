@@ -17,6 +17,7 @@ from app import process_whop
 
 def setup_module():
     database.Base.metadata.create_all(database.engine)
+    database.init_db()
 
 
 def teardown_module():
@@ -31,6 +32,20 @@ def test_membership_lifecycle_and_renewal_window():
     assert database.membership_active(123) is True
     database.apply_membership_event('evt_2', 'membership.deactivated', 'mem_1', 'user_1', 'inactive', None, None, 'prod_neural_gold')
     assert database.membership_active(123) is False
+
+
+def test_expired_active_membership_has_no_access():
+    database.ensure_user(125)
+    database.link_whop_user(125, 'user_expired')
+    database.apply_membership_event('evt_expired', 'membership.activated', 'mem_expired', 'user_expired', 'active', None, datetime.now(timezone.utc) - timedelta(seconds=1), 'prod_neural_gold')
+    assert database.membership_active(125) is False
+
+
+def test_other_product_cannot_grant_access():
+    database.ensure_user(126)
+    database.link_whop_user(126, 'user_other_product')
+    database.apply_membership_event('evt_other_product', 'membership.activated', 'mem_other_product', 'user_other_product', 'active', None, datetime.now(timezone.utc) + timedelta(days=30), 'prod_other')
+    assert database.membership_active(126) is False
 
 
 def test_recurring_membership_update_replaces_whop_period():
@@ -135,3 +150,18 @@ def test_membership_updated_to_canceled_removes_access():
     }
     asyncio.run(process_whop(payload))
     assert database.membership_active(124) is False
+
+
+def test_membership_webhook_requires_product_id():
+    payload = {
+        '_webhook_id': 'evt_missing_product',
+        'type': 'membership.activated',
+        'company_id': 'biz_neural_gold',
+        'data': {'id': 'mem_missing_product', 'user': {'id': 'user_missing_product'}, 'status': 'active'},
+    }
+    try:
+        asyncio.run(process_whop(payload))
+    except ValueError as exc:
+        assert str(exc) == 'membership_product_missing'
+    else:
+        raise AssertionError('missing product_id must be rejected')
