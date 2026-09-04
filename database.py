@@ -4,7 +4,7 @@ import json
 from sqlalchemy import BigInteger, DateTime, Float, Integer, String, Text, create_engine, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
-from config import DATABASE_URL
+from config import DATABASE_URL, WHOP_PRODUCT_ID
 
 url = DATABASE_URL.replace('postgres://', 'postgresql+psycopg://', 1).replace('postgresql://', 'postgresql+psycopg://', 1)
 engine = create_engine(url, pool_pre_ping=True, pool_recycle=300)
@@ -137,7 +137,15 @@ def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
     with SessionLocal() as s:
         u = s.scalar(select(User).where(User.telegram_id == telegram_id))
         if not u or not u.whop_user_id: return None
-        return s.scalar(select(WhopMembership).where(WhopMembership.whop_user_id == u.whop_user_id).order_by(WhopMembership.updated_at.desc()).limit(1))
+        return s.scalar(
+            select(WhopMembership)
+            .where(
+                WhopMembership.whop_user_id == u.whop_user_id,
+                WhopMembership.product_id == WHOP_PRODUCT_ID,
+            )
+            .order_by(WhopMembership.updated_at.desc())
+            .limit(1)
+        )
 
 def membership_active(telegram_id: int) -> bool:
     m = get_membership_for_telegram(telegram_id)
