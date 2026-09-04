@@ -154,18 +154,22 @@ def get_user(telegram_id: int) -> User | None:
 def ensure_user(telegram_id: int) -> User:
     with SessionLocal() as s:
         user = s.scalar(select(User).where(User.telegram_id == telegram_id))
-        if not user:
-            user = User(telegram_id=telegram_id)
-            s.add(user)
-            try:
-                s.commit()
-            except IntegrityError:
-                s.rollback()
-                user = s.scalar(select(User).where(User.telegram_id == telegram_id))
-                if user is None:
-                    raise
-            else:
-                s.refresh(user)
+        if user:
+            return user
+
+        s.add(User(telegram_id=telegram_id))
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+            user = s.scalar(select(User).where(User.telegram_id == telegram_id))
+            if user is None:
+                raise
+            return user
+
+        user = s.scalar(select(User).where(User.telegram_id == telegram_id))
+        if user is None:
+            raise RuntimeError('user_insert_failed')
         return user
 
 
@@ -232,6 +236,12 @@ def consume_oauth_state(state: str) -> OAuthState | None:
         )
 
 
+def _normalise_dt(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
 def apply_membership_event(
     event_id: str,
     event_type: str,
@@ -243,6 +253,7 @@ def apply_membership_event(
     product_id: str,
     source_updated_at: datetime | None = None,
 ) -> bool:
+    incoming_at = _normalise_dt(source_updated_at)
     with SessionLocal() as s:
         if s.get(WebhookEvent, event_id):
             return False
@@ -252,17 +263,11 @@ def apply_membership_event(
                 WhopMembership.membership_id == membership_id
             )
         )
-        if membership and source_updated_at and membership.source_updated_at:
-            existing_at = membership.source_updated_at
-            if existing_at.tzinfo is None:
-                existing_at = existing_at.replace(tzinfo=timezone.utc)
-            incoming_at = source_updated_at
-            if incoming_at.tzinfo is None:
-                incoming_at = incoming_at.replace(tzinfo=timezone.utc)
-            if incoming_at < existing_at:
-                s.add(WebhookEvent(event_id=event_id, event_type=event_type))
-                s.commit()
-                return False
+        existing_at = _normalise_dt(membership.source_updated_at) if membership else None
+        if membership and incoming_at and existing_at and incoming_at < existing_at:
+            s.add(WebhookEvent(event_id=event_id, event_type=event_type))
+            s.commit()
+            return False
 
         if membership is None:
             membership = WhopMembership(
@@ -276,7 +281,10 @@ def apply_membership_event(
         membership.renewal_period_start = renewal_start
         membership.renewal_period_end = renewal_end
         membership.product_id = product_id
-        membership.source_updated_at = source_updated_at
+        if incoming_at is not None:
+            membership.source_updated_at = incoming_at
+        elif membership.source_updated_at is None:
+            membership.source_updated_at = None
         membership.updated_at = datetime.now(timezone.utc)
         s.add(membership)
         s.add(WebhookEvent(event_id=event_id, event_type=event_type))
