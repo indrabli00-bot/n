@@ -126,12 +126,21 @@ def save_oauth_state(state: str, telegram_id: int, code_verifier: str, expires_a
 def consume_oauth_state(state: str) -> OAuthState | None:
     now = datetime.now(timezone.utc)
     with SessionLocal() as s:
-        row = s.scalar(select(OAuthState).where(OAuthState.state == state, OAuthState.expires_at > now).with_for_update())
+        stmt = (
+            delete(OAuthState)
+            .where(OAuthState.state == state, OAuthState.expires_at > now)
+            .returning(OAuthState.state, OAuthState.telegram_id, OAuthState.code_verifier, OAuthState.expires_at)
+        )
+        row = s.execute(stmt).first()
         if not row:
             return None
-        s.delete(row)
         s.commit()
-        return row
+        return OAuthState(
+            state=row.state,
+            telegram_id=row.telegram_id,
+            code_verifier=row.code_verifier,
+            expires_at=row.expires_at,
+        )
 
 
 def apply_membership_event(event_id: str, event_type: str, membership_id: str, whop_user_id: str, status: str, renewal_start: datetime | None, renewal_end: datetime | None, product_id: str) -> bool:
