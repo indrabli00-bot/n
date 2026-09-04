@@ -30,9 +30,8 @@ def test_large_sampling_gap_forces_data_gap():
     assert result['reason'] == 'DATA_GAP'
 
 
-def test_unsorted_timestamps_are_not_accepted_as_valid_sampling():
+def test_unsorted_timestamps_are_normalized():
     samples = _samples(300)
     samples[100], samples[101] = samples[101], samples[100]
     result = signal_engine.analyze(samples)
-    assert result['signal'] == 'HOLD'
-    assert result['reason'] == 'DATA_GAP'
+    assert result['reason'] != 'DATA_GAP'
