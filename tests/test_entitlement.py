@@ -32,25 +32,15 @@ def test_membership_lifecycle_and_renewal_window():
     database.ensure_user(123)
     database.link_whop_user(123, 'user_1')
     database.apply_membership_event(
-        'evt_1',
-        'membership.activated',
-        'mem_1',
-        'user_1',
-        'active',
+        'evt_1', 'membership.activated', 'mem_1', 'user_1', 'active',
         datetime.now(timezone.utc),
         datetime.now(timezone.utc) + timedelta(days=30),
         'prod_neural_gold',
     )
     assert database.membership_active(123) is True
     database.apply_membership_event(
-        'evt_2',
-        'membership.deactivated',
-        'mem_1',
-        'user_1',
-        'inactive',
-        None,
-        None,
-        'prod_neural_gold',
+        'evt_2', 'membership.deactivated', 'mem_1', 'user_1', 'inactive',
+        None, None, 'prod_neural_gold',
     )
     assert database.membership_active(123) is False
 
@@ -59,14 +49,8 @@ def test_expired_active_membership_has_no_access():
     database.ensure_user(125)
     database.link_whop_user(125, 'user_expired')
     database.apply_membership_event(
-        'evt_expired',
-        'membership.activated',
-        'mem_expired',
-        'user_expired',
-        'active',
-        None,
-        datetime.now(timezone.utc) - timedelta(seconds=1),
-        'prod_neural_gold',
+        'evt_expired', 'membership.activated', 'mem_expired', 'user_expired', 'active',
+        None, datetime.now(timezone.utc) - timedelta(seconds=1), 'prod_neural_gold',
     )
     assert database.membership_active(125) is False
 
@@ -75,14 +59,9 @@ def test_other_product_cannot_grant_access():
     database.ensure_user(126)
     database.link_whop_user(126, 'user_other_product')
     database.apply_membership_event(
-        'evt_other_product',
-        'membership.activated',
-        'mem_other_product',
-        'user_other_product',
-        'active',
-        None,
-        datetime.now(timezone.utc) + timedelta(days=30),
-        'prod_other',
+        'evt_other_product', 'membership.activated', 'mem_other_product',
+        'user_other_product', 'active', None,
+        datetime.now(timezone.utc) + timedelta(days=30), 'prod_other',
     )
     assert database.membership_active(126) is False
 
@@ -92,31 +71,17 @@ def test_recurring_membership_update_replaces_whop_period():
     first_end = datetime(2026, 10, 1, tzinfo=timezone.utc)
     next_end = datetime(2026, 11, 1, tzinfo=timezone.utc)
     database.apply_membership_event(
-        'evt_recurring_1',
-        'membership.activated',
-        'mem_recurring',
-        'user_recurring',
-        'active',
-        start,
-        first_end,
-        'prod_neural_gold',
+        'evt_recurring_1', 'membership.activated', 'mem_recurring', 'user_recurring',
+        'active', start, first_end, 'prod_neural_gold',
     )
     database.apply_membership_event(
-        'evt_recurring_2',
-        'membership.activated',
-        'mem_recurring',
-        'user_recurring',
-        'active',
-        first_end,
-        next_end,
-        'prod_neural_gold',
+        'evt_recurring_2', 'membership.activated', 'mem_recurring', 'user_recurring',
+        'active', first_end, next_end, 'prod_neural_gold',
     )
     with database.SessionLocal() as s:
-        row = s.scalar(
-            select(database.WhopMembership).where(
-                database.WhopMembership.membership_id == 'mem_recurring'
-            )
-        )
+        row = s.scalar(select(database.WhopMembership).where(
+            database.WhopMembership.membership_id == 'mem_recurring'
+        ))
     assert row is not None
     actual_end = row.renewal_period_end
     if actual_end and actual_end.tzinfo is None:
@@ -126,14 +91,11 @@ def test_recurring_membership_update_replaces_whop_period():
 
 def test_webhook_idempotency():
     payload = {
-        '_webhook_id': 'evt_idempotent',
-        'type': 'membership.activated',
+        '_webhook_id': 'evt_idempotent', 'type': 'membership.activated',
         'company_id': 'biz_neural_gold',
         'data': {
-            'id': 'mem_idempotent',
-            'user': {'id': 'user_idempotent'},
-            'status': 'active',
-            'renewal_period_start': '2026-09-01T00:00:00Z',
+            'id': 'mem_idempotent', 'user': {'id': 'user_idempotent'},
+            'status': 'active', 'renewal_period_start': '2026-09-01T00:00:00Z',
             'renewal_period_end': '2026-10-01T00:00:00Z',
             'product': {'id': 'prod_neural_gold'},
         },
@@ -141,30 +103,23 @@ def test_webhook_idempotency():
     asyncio.run(process_whop(payload))
     asyncio.run(process_whop(payload))
     with database.SessionLocal() as s:
-        events = s.scalars(
-            select(database.WebhookEvent).where(
-                database.WebhookEvent.event_id == 'evt_idempotent'
-            )
-        ).all()
-        memberships = s.scalars(
-            select(database.WhopMembership).where(
-                database.WhopMembership.membership_id == 'mem_idempotent'
-            )
-        ).all()
+        events = s.scalars(select(database.WebhookEvent).where(
+            database.WebhookEvent.event_id == 'evt_idempotent'
+        )).all()
+        memberships = s.scalars(select(database.WhopMembership).where(
+            database.WhopMembership.membership_id == 'mem_idempotent'
+        )).all()
     assert len(events) == 1
     assert len(memberships) == 1
 
 
 def test_failed_membership_write_is_retryable():
     payload = {
-        '_webhook_id': 'evt_retryable',
-        'type': 'membership.activated',
+        '_webhook_id': 'evt_retryable', 'type': 'membership.activated',
         'company_id': 'biz_neural_gold',
         'data': {
-            'id': 'mem_retryable',
-            'user': {'id': 'user_retryable'},
-            'status': 'active',
-            'renewal_period_start': '2026-09-01T00:00:00Z',
+            'id': 'mem_retryable', 'user': {'id': 'user_retryable'},
+            'status': 'active', 'renewal_period_start': '2026-09-01T00:00:00Z',
             'renewal_period_end': '2026-10-01T00:00:00Z',
             'product': {'id': 'prod_neural_gold'},
         },
@@ -190,21 +145,17 @@ def test_failed_membership_write_is_retryable():
 
     with database.SessionLocal() as s:
         event = s.get(database.WebhookEvent, 'evt_retryable')
-        membership = s.scalar(
-            select(database.WhopMembership).where(
-                database.WhopMembership.membership_id == 'mem_retryable'
-            )
-        )
+        membership = s.scalar(select(database.WhopMembership).where(
+            database.WhopMembership.membership_id == 'mem_retryable'
+        ))
     assert event is not None
     assert membership is not None
 
 
 def test_payment_succeeded_cannot_create_entitlement():
     payload = {
-        '_webhook_id': 'evt_payment',
-        'type': 'payment.succeeded',
-        'company_id': 'biz_neural_gold',
-        'data': {'id': 'pay_1'},
+        '_webhook_id': 'evt_payment', 'type': 'payment.succeeded',
+        'company_id': 'biz_neural_gold', 'data': {'id': 'pay_1'},
     }
     asyncio.run(process_whop(payload))
     with database.SessionLocal() as s:
@@ -215,24 +166,15 @@ def test_membership_updated_to_canceled_removes_access():
     database.ensure_user(124)
     database.link_whop_user(124, 'user_cancel')
     database.apply_membership_event(
-        'evt_cancel_active',
-        'membership.activated',
-        'mem_cancel',
-        'user_cancel',
-        'active',
-        None,
-        None,
-        'prod_neural_gold',
+        'evt_cancel_active', 'membership.activated', 'mem_cancel', 'user_cancel',
+        'active', None, None, 'prod_neural_gold',
     )
     assert database.membership_active(124) is True
     payload = {
-        '_webhook_id': 'evt_cancel_update',
-        'type': 'membership.updated',
+        '_webhook_id': 'evt_cancel_update', 'type': 'membership.updated',
         'company_id': 'biz_neural_gold',
         'data': {
-            'id': 'mem_cancel',
-            'user': {'id': 'user_cancel'},
-            'status': 'canceled',
+            'id': 'mem_cancel', 'user': {'id': 'user_cancel'}, 'status': 'canceled',
             'product': {'id': 'prod_neural_gold'},
         },
     }
@@ -242,12 +184,10 @@ def test_membership_updated_to_canceled_removes_access():
 
 def test_membership_webhook_requires_product_id():
     payload = {
-        '_webhook_id': 'evt_missing_product',
-        'type': 'membership.activated',
+        '_webhook_id': 'evt_missing_product', 'type': 'membership.activated',
         'company_id': 'biz_neural_gold',
         'data': {
-            'id': 'mem_missing_product',
-            'user': {'id': 'user_missing_product'},
+            'id': 'mem_missing_product', 'user': {'id': 'user_missing_product'},
             'status': 'active',
         },
     }
@@ -261,13 +201,10 @@ def test_membership_webhook_requires_product_id():
 
 def test_membership_webhook_requires_company_id():
     payload = {
-        '_webhook_id': 'evt_missing_company',
-        'type': 'membership.activated',
+        '_webhook_id': 'evt_missing_company', 'type': 'membership.activated',
         'data': {
-            'id': 'mem_missing_company',
-            'user': {'id': 'user_missing_company'},
-            'status': 'active',
-            'product': {'id': 'prod_neural_gold'},
+            'id': 'mem_missing_company', 'user': {'id': 'user_missing_company'},
+            'status': 'active', 'product': {'id': 'prod_neural_gold'},
         },
     }
     try:
@@ -282,32 +219,45 @@ def test_stale_membership_event_cannot_reactivate_access():
     newer = datetime(2026, 9, 5, 12, tzinfo=timezone.utc)
     older = datetime(2026, 9, 5, 11, tzinfo=timezone.utc)
     database.apply_membership_event(
-        'evt_newer',
-        'membership.updated',
-        'mem_ordered',
-        'user_ordered',
-        'canceled',
-        None,
-        None,
-        'prod_neural_gold',
-        newer,
+        'evt_newer', 'membership.updated', 'mem_ordered', 'user_ordered',
+        'canceled', None, None, 'prod_neural_gold', newer,
     )
     database.apply_membership_event(
-        'evt_older',
-        'membership.updated',
-        'mem_ordered',
-        'user_ordered',
-        'active',
-        None,
-        newer + timedelta(days=30),
-        'prod_neural_gold',
-        older,
+        'evt_older', 'membership.updated', 'mem_ordered', 'user_ordered',
+        'active', None, newer + timedelta(days=30), 'prod_neural_gold', older,
     )
     with database.SessionLocal() as s:
-        row = s.scalar(
-            select(database.WhopMembership).where(
-                database.WhopMembership.membership_id == 'mem_ordered'
-            )
-        )
+        row = s.scalar(select(database.WhopMembership).where(
+            database.WhopMembership.membership_id == 'mem_ordered'
+        ))
     assert row is not None
     assert row.status == 'canceled'
+
+
+def test_missing_source_timestamp_cannot_erase_ordering_guard():
+    newer = datetime(2026, 9, 5, 14, tzinfo=timezone.utc)
+    older = datetime(2026, 9, 5, 13, tzinfo=timezone.utc)
+    database.apply_membership_event(
+        'evt_timestamp_new', 'membership.updated', 'mem_timestamp', 'user_timestamp',
+        'canceled', None, None, 'prod_neural_gold', newer,
+    )
+    database.apply_membership_event(
+        'evt_timestamp_missing', 'membership.updated', 'mem_timestamp', 'user_timestamp',
+        'active', None, newer + timedelta(days=30), 'prod_neural_gold', None,
+    )
+    with database.SessionLocal() as s:
+        row = s.scalar(select(database.WhopMembership).where(
+            database.WhopMembership.membership_id == 'mem_timestamp'
+        ))
+    assert row is not None
+    assert row.source_updated_at is not None
+    database.apply_membership_event(
+        'evt_timestamp_old', 'membership.updated', 'mem_timestamp', 'user_timestamp',
+        'active', None, newer + timedelta(days=30), 'prod_neural_gold', older,
+    )
+    with database.SessionLocal() as s:
+        row = s.scalar(select(database.WhopMembership).where(
+            database.WhopMembership.membership_id == 'mem_timestamp'
+        ))
+    assert row is not None
+    assert row.status == 'active'
