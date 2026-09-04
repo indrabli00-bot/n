@@ -283,8 +283,6 @@ def apply_membership_event(
         membership.product_id = product_id
         if incoming_at is not None:
             membership.source_updated_at = incoming_at
-        elif membership.source_updated_at is None:
-            membership.source_updated_at = None
         membership.updated_at = datetime.now(timezone.utc)
         s.add(membership)
         s.add(WebhookEvent(event_id=event_id, event_type=event_type))
