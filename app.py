@@ -23,37 +23,52 @@ market_task = None
 
 
 def _dt(value: str | None) -> datetime | None:
-    if not value: return None
+    if not value:
+        return None
     parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
 
 async def process_whop(data: dict) -> None:
     raw_event = str(data.get('type') or data.get('event') or '').strip().lower()
     event_id = str(data.get('_webhook_id') or data.get('id') or '').strip()
-    if not event_id: raise ValueError('webhook_identity_missing')
+    if not event_id:
+        raise ValueError('webhook_identity_missing')
     payload = data.get('data') or data.get('payload') or {}
     company_id = str(data.get('company_id') or payload.get('company', {}).get('id') or '').strip()
-    if company_id and company_id != WHOP_COMPANY_ID: raise ValueError('whop_company_mismatch')
+    if company_id and company_id != WHOP_COMPANY_ID:
+        raise ValueError('whop_company_mismatch')
     deactivation_aliases = {'membership.deactivated', 'membership.canceled', 'membership.cancelled'}
-    if raw_event == 'membership.activated': event, status = 'membership.activated', 'active'
-    elif raw_event in deactivation_aliases: event, status = 'membership.deactivated', 'inactive'
+    if raw_event == 'membership.activated':
+        event, status = 'membership.activated', 'active'
+    elif raw_event in deactivation_aliases:
+        event, status = 'membership.deactivated', 'inactive'
     elif raw_event == 'membership.updated':
         event, status = 'membership.updated', str(payload.get('status') or '').strip().lower()
-        if not status: raise ValueError('membership_status_missing')
-    else: return
+        if not status:
+            raise ValueError('membership_status_missing')
+    else:
+        return
     membership_id = str(payload.get('id') or payload.get('membership_id') or '').strip()
     user = payload.get('user') or {}
     whop_user_id = str(user.get('id') or payload.get('user_id') or '').strip()
     product = payload.get('product') or {}
     product_id = str(product.get('id') or '').strip()
-    if not membership_id or not whop_user_id: raise ValueError('membership_identity_missing')
-    if not product_id: raise ValueError('membership_product_missing')
-    if product_id != WHOP_PRODUCT_ID: return
-    await asyncio.to_thread(database.apply_membership_event, event_id, event, membership_id, whop_user_id, status, _dt(payload.get('renewal_period_start')), _dt(payload.get('renewal_period_end')), product_id)
+    if not membership_id or not whop_user_id:
+        raise ValueError('membership_identity_missing')
+    if not product_id:
+        raise ValueError('membership_product_missing')
+    if product_id != WHOP_PRODUCT_ID:
+        return
+    source_updated_at = _dt(payload.get('updated_at') or payload.get('created_at'))
+    await asyncio.to_thread(database.apply_membership_event, event_id, event, membership_id, whop_user_id, status, _dt(payload.get('renewal_period_start')), _dt(payload.get('renewal_period_end')), product_id, source_updated_at)
+
 
 async def evaluate_signal() -> None:
-    if telegram_app is None: return
+    if telegram_app is None:
+        return
     await publisher.evaluate_and_publish(telegram_app.bot, TELEGRAM_PREMIUM_CHAT_ID, _format_signal)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -109,8 +124,7 @@ async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: st
     try:
         body = await request.json()
         update = Update.de_json(body, telegram_app.bot)
-    except Exception as exc:
-        raise HTTPException(400, 'invalid_update') from exc
+    except Exception as exc: raise HTTPException(400, 'invalid_update') from exc
     try:
         await telegram_app.process_update(update)
     except Exception as exc:
