@@ -120,3 +120,18 @@ def test_approved_signal_is_explicitly_persisted():
     candidate = {'signal': 'LONG', 'reason': 'TREND_MOMENTUM_STRUCTURE', 'entry': 2500.0, 'tp': [2510.0, 2520.0, 2530.0], 'stop': 2490.0, 'setup_strength': 80, 'samples': 300}
     database.save_approved_signal(candidate, 999)
     assert database.latest_approved_signal() == candidate
+
+
+def test_membership_updated_to_canceled_removes_access():
+    database.ensure_user(124)
+    database.link_whop_user(124, 'user_cancel')
+    database.apply_membership_event('evt_cancel_active', 'membership.activated', 'mem_cancel', 'user_cancel', 'active', None, None, 'prod_neural_gold')
+    assert database.membership_active(124) is True
+    payload = {
+        '_webhook_id': 'evt_cancel_update',
+        'type': 'membership.updated',
+        'company_id': 'biz_neural_gold',
+        'data': {'id': 'mem_cancel', 'user': {'id': 'user_cancel'}, 'status': 'canceled', 'product': {'id': 'prod_neural_gold'}},
+    }
+    asyncio.run(process_whop(payload))
+    assert database.membership_active(124) is False
