@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 import database
 import signal_engine
@@ -30,6 +30,15 @@ def init_state() -> None:
                 'claim_token VARCHAR(64), claimed_at TIMESTAMP)'
             )
         )
+        columns = {column['name'] for column in inspect(database.engine).get_columns(STATE_TABLE)}
+        migrations = {
+            'claim_direction': 'VARCHAR(20)',
+            'claim_token': 'VARCHAR(64)',
+            'claimed_at': 'TIMESTAMP',
+        }
+        for column, definition in migrations.items():
+            if column not in columns:
+                conn.execute(text(f'ALTER TABLE {STATE_TABLE} ADD COLUMN {column} {definition}'))
         conn.execute(
             text(
                 f'INSERT INTO {STATE_TABLE} '
@@ -89,7 +98,11 @@ def _claim_publication(direction: str) -> str | None:
                 'AND (last_direction IS NULL OR last_direction != :direction) '
                 'AND (claim_token IS NULL OR claimed_at IS NULL OR claimed_at < :cutoff)'
             ),
-            {'direction': direction, 'token': token, 'cutoff': datetime.fromtimestamp(cutoff, timezone.utc)},
+            {
+                'direction': direction,
+                'token': token,
+                'cutoff': datetime.fromtimestamp(cutoff, timezone.utc),
+            },
         )
     return token if result.rowcount == 1 else None
 
