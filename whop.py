@@ -7,7 +7,7 @@ import database
 from config import (
     WHOP_OAUTH_CLIENT_ID,
     WHOP_OAUTH_CLIENT_SECRET, WHOP_OAUTH_REDIRECT_URI,
-    WHOP_OAUTH_STATE_SECRET, WHOP_PRODUCT_URL, WHOP_WEBHOOK_SECRET,
+    WHOP_OAUTH_STATE_SECRET, WHOP_WEBHOOK_SECRET,
 )
 
 OAUTH_BASE = 'https://api.whop.com/oauth'
@@ -91,6 +91,3 @@ async def exchange_code(code: str, state: str) -> tuple[int, str]:
     whop_user_id = str(userinfo.get('sub') or '')
     if not whop_user_id: raise RuntimeError('whop_oauth_missing_user_id')
     return row.telegram_id, whop_user_id
-
-def product_url() -> str:
-    return WHOP_PRODUCT_URL
