@@ -36,4 +36,4 @@ def test_structure_map_uses_real_ema_macd_and_atr():
     assert indicators["ema"] is not None
     assert indicators["atr"] > 0
     assert indicators["macd_hist"] > 0
-    assert indicators["ema_trend"] == "Bullish Alignment"
+    assert indicators["ema_trend"] == "Bullish"
