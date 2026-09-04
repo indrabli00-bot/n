@@ -31,9 +31,7 @@ async def notify_customer(telegram_id: int, days: int) -> None:
             member_limit=1,
             creates_join_request=True,
         )
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton('🔐 Ajukan Akses Premium', url=invite.invite_link)],
-        ])
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton('🔐 Ajukan Akses Premium', url=invite.invite_link)]])
         text = ('<b>✅ PEMBAYARAN TERVERIFIKASI</b>\n\n'
                 f'Akses Neural Gold selama <b>{days} hari</b> telah aktif.\n'
                 f'EXPIRES: {expiry}\n\n'
@@ -44,15 +42,18 @@ async def notify_customer(telegram_id: int, days: int) -> None:
         await telegram_app.bot.send_message(telegram_id, text, parse_mode='HTML', reply_markup=keyboard)
     except Exception:
         logging.getLogger('app').exception('customer onboarding notification failed')
-        # Payment remains fulfilled. The customer can still contact support/admin for recovery.
 
 
 async def process_whop(data: dict) -> None:
     event = str(data.get('event') or data.get('type') or '')
     payload = data.get('data') or data.get('payload') or {}
+    md = payload.get('metadata') or {}
+    order_id = str(md.get('neural_order_id') or '')
+    if not order_id and payload.get('id'):
+        order = database.get_order_by_payment(str(payload['id']))
+        order_id = order.id if order else ''
+
     if event == 'payment.succeeded':
-        md = payload.get('metadata') or {}
-        order_id = str(md.get('neural_order_id') or '')
         payment_id = str(payload.get('id') or '')
         if not order_id or not payment_id:
             raise ValueError('payment_identity_missing')
@@ -68,17 +69,23 @@ async def process_whop(data: dict) -> None:
             await notify_customer(order.telegram_id, order.duration_days)
         return
 
-    md = payload.get('metadata') or {}
-    order_id = str(md.get('neural_order_id') or '')
-    if not order_id and payload.get('id'):
-        order = database.get_order_by_payment(str(payload['id']))
-        order_id = order.id if order else ''
-    if event == 'membership.deactivated' and order_id:
-        order = database.get_order(order_id)
-        if order:
-            database.deactivate_subscription(order.telegram_id)
+    if not order_id:
+        return
+    order = database.get_order(order_id)
+    if not order:
+        return
+
+    if event in {'payment.failed', 'payment.canceled', 'payment.cancelled'}:
         database.update_order(order_id, status=event)
-    elif event in {'refund.created', 'refund.updated'} and order_id:
+        return
+
+    if event in {'membership.deactivated', 'membership.cancelled', 'membership.canceled'}:
+        database.deactivate_subscription(order.telegram_id)
+        database.update_order(order_id, status=event)
+        return
+
+    if event in {'refund.created', 'refund.updated', 'refund.completed', 'payment.refunded'}:
+        database.revoke_subscription(order.telegram_id)
         database.update_order(order_id, status=event)
 
 
@@ -105,7 +112,7 @@ async def lifespan(app: FastAPI):
     await telegram_app.shutdown()
 
 
-app = FastAPI(title='Neural Gold', version='1.2.0', lifespan=lifespan)
+app = FastAPI(title='Neural Gold', version='1.3.0', lifespan=lifespan)
 
 
 @app.get('/health')
