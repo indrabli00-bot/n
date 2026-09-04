@@ -133,11 +133,7 @@ def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
 
 def membership_active(telegram_id: int) -> bool:
     m = get_membership_for_telegram(telegram_id)
-    if not m or m.status != 'active': return False
-    if m.renewal_period_end:
-        end = m.renewal_period_end if m.renewal_period_end.tzinfo else m.renewal_period_end.replace(tzinfo=timezone.utc)
-        if end <= datetime.now(timezone.utc): return False
-    return True
+    return bool(m and m.status == 'active')
 
 def save_sample(price: float, change_pct: float, ts: datetime | None = None) -> None:
     ts = ts or datetime.now(timezone.utc)
