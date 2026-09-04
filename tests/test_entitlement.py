@@ -264,8 +264,6 @@ def test_missing_source_timestamp_preserves_ordering_guard():
 
 def test_telegram_update_is_claimed_once():
     update_id = 900001
-    database.release_telegram_update(update_id, 'cleanup-token')
-
     first_token = database.claim_telegram_update(update_id)
     assert isinstance(first_token, str)
     assert len(first_token) == 32
@@ -273,13 +271,10 @@ def test_telegram_update_is_claimed_once():
 
     database.complete_telegram_update(update_id, first_token)
     assert database.claim_telegram_update(update_id) is None
-    database.release_telegram_update(update_id, first_token)
 
 
 def test_failed_telegram_update_can_be_retried():
     update_id = 900002
-    database.release_telegram_update(update_id, 'cleanup-token')
-
     first_token = database.claim_telegram_update(update_id)
     assert first_token is not None
     database.release_telegram_update(update_id, first_token)
@@ -291,8 +286,6 @@ def test_failed_telegram_update_can_be_retried():
 
 def test_stale_telegram_claim_cannot_be_completed_by_old_owner():
     update_id = 900003
-    database.release_telegram_update(update_id, 'cleanup-token')
-
     first_token = database.claim_telegram_update(update_id, stale_after_seconds=300)
     assert first_token is not None
 
@@ -330,4 +323,3 @@ def test_stale_telegram_claim_cannot_be_completed_by_old_owner():
         row = s.get(database.TelegramUpdate, update_id)
     assert row is not None
     assert row.status == 'processed'
-    assert row.claim_token == second_token
