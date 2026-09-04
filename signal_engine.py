@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from statistics import mean
+
 from config import MIN_MARKET_SAMPLES
 
 
@@ -88,6 +89,10 @@ def analyze(samples: list[dict]) -> dict:
         return _base('HOLD', 'DATA_GAP', count)
 
     candles = _candles(samples)
+    # The last bucket is normally still forming when the poller evaluates a tick.
+    # Exclude it so a signal cannot be confirmed by an incomplete M5 candle.
+    if all(x.get('ts') is not None for x in samples) and len(candles) > 1:
+        candles = candles[:-1]
     prices = [c['close'] for c in candles]
     if len(prices) < 50:
         return _base('HOLD', 'DATA_GAP', count)
@@ -124,8 +129,6 @@ def analyze(samples: list[dict]) -> dict:
     slope_score = min(25, abs(slope_norm) * 80)
     strength = int(round(min(95, max(55, 55 + trend_score + slope_score + 40 - 55))))
 
-    # Risk is derived from actual structure plus volatility; targets come from the
-    # observed structure range. R:R is then calculated from the resulting prices.
     if direction == 'LONG':
         stop = min(prior_low, last - a * 0.8)
         risk = last - stop
