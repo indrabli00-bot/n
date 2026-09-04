@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import time
 import logging
 from telegram import Bot
@@ -7,7 +8,7 @@ from database import membership_active
 
 log = logging.getLogger('access')
 _cache: dict[int, tuple[float, bool]] = {}
-TTL = 60
+TTL = 10
 
 async def channel_member(bot: Bot, telegram_id: int) -> bool:
     cached = _cache.get(telegram_id)
@@ -21,5 +22,8 @@ async def channel_member(bot: Bot, telegram_id: int) -> bool:
     return ok
 
 async def has_access(bot: Bot, telegram_id: int) -> bool:
-    if not membership_active(telegram_id): return False
+    active = await asyncio.to_thread(membership_active, telegram_id)
+    if not active:
+        _cache.pop(telegram_id, None)
+        return False
     return await channel_member(bot, telegram_id)
