@@ -275,20 +275,24 @@ async def telegram_webhook(
     except Exception as exc:
         raise HTTPException(400, 'invalid_update') from exc
 
-    claimed = await asyncio.to_thread(database.claim_telegram_update, update_id)
-    if not claimed:
+    claim_token = await asyncio.to_thread(database.claim_telegram_update, update_id)
+    if claim_token is None:
         return {'ok': True, 'duplicate': True}
 
     try:
         await telegram_app.process_update(update)
     except Exception as exc:
-        await asyncio.to_thread(database.release_telegram_update, update_id)
+        await asyncio.to_thread(database.release_telegram_update, update_id, claim_token)
         log.exception('telegram update processing failed')
         raise HTTPException(500, 'update_processing_failed') from exc
 
     for attempt in range(1, TELEGRAM_COMPLETION_RETRIES + 1):
         try:
-            await asyncio.to_thread(database.complete_telegram_update, update_id)
+            await asyncio.to_thread(
+                database.complete_telegram_update,
+                update_id,
+                claim_token,
+            )
             return {'ok': True, 'duplicate': False}
         except Exception:
             if attempt == TELEGRAM_COMPLETION_RETRIES:
