@@ -51,18 +51,18 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('<b>PILIH AKSES PREMIUM</b>\n\nPilih durasi yang sesuai kebutuhan Anda:', parse_mode='HTML', reply_markup=plans_menu())
 
-async def make_buy_message(target, days: int):
+async def make_buy_message(message, telegram_id: int, days: int):
     try:
-        url, _ = await whop.create_checkout(target.effective_user.id, days)
+        url, _ = await whop.create_checkout(telegram_id, days)
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(f'💳 Bayar {days} Hari', url=url)], [InlineKeyboardButton('⬅️ Paket', callback_data='plans')]])
-        await target.message.reply_text(f'<b>Checkout {days} hari siap.</b>\n\nSelesaikan pembayaran melalui halaman Whop. Setelah pembayaran terverifikasi, akses premium akan diaktifkan.', parse_mode='HTML', reply_markup=keyboard)
+        await message.reply_text(f'<b>Checkout {days} hari siap.</b>\n\nSelesaikan pembayaran melalui halaman Whop. Setelah pembayaran terverifikasi, akses premium akan diaktifkan.', parse_mode='HTML', reply_markup=keyboard)
     except Exception:
         log.exception('checkout failed')
-        await target.message.reply_text('Checkout belum tersedia. Silakan coba lagi beberapa saat lagi.', reply_markup=plans_menu())
+        await message.reply_text('Checkout belum tersedia. Silakan coba lagi beberapa saat lagi.', reply_markup=plans_menu())
 
-async def buy7(update: Update, context: ContextTypes.DEFAULT_TYPE): await make_buy_message(update, 7)
-async def buy14(update: Update, context: ContextTypes.DEFAULT_TYPE): await make_buy_message(update, 14)
-async def buy30(update: Update, context: ContextTypes.DEFAULT_TYPE): await make_buy_message(update, 30)
+async def buy7(update: Update, context: ContextTypes.DEFAULT_TYPE): await make_buy_message(update.message, update.effective_user.id, 7)
+async def buy14(update: Update, context: ContextTypes.DEFAULT_TYPE): await make_buy_message(update.message, update.effective_user.id, 14)
+async def buy30(update: Update, context: ContextTypes.DEFAULT_TYPE): await make_buy_message(update.message, update.effective_user.id, 30)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -73,7 +73,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     expiry = user.subscription_expiry.isoformat() if user else '-'
     await update.message.reply_text(f'<b>ACCESS: ACTIVE</b>\nEXPIRES: {expiry}\n\nAnda memiliki akses premium aktif.', parse_mode='HTML', reply_markup=main_menu())
 
-async def signal_text(context: ContextTypes.DEFAULT_TYPE, uid: int) -> str:
+async def signal_text(uid: int) -> str:
     r = signal_engine.analyze(database.recent_samples())
     signal = r['signal']
     icon = {'LONG':'🟢', 'SHORT':'🔴', 'HOLD':'🟡'}.get(signal, '⚪')
@@ -90,7 +90,7 @@ async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await access.has_access(context.bot, uid):
         await update.message.reply_text('Premium access diperlukan. Pilih paket untuk melanjutkan.', reply_markup=plans_menu())
         return
-    await update.message.reply_text(await signal_text(context, uid), parse_mode='HTML', reply_markup=main_menu())
+    await update.message.reply_text(await signal_text(uid), parse_mode='HTML', reply_markup=main_menu())
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -112,10 +112,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if q.data == 'signal':
         if not await access.has_access(context.bot, q.from_user.id):
             await q.edit_message_text('Premium access diperlukan. Pilih paket untuk melanjutkan.', reply_markup=plans_menu()); return
-        await q.edit_message_text(await signal_text(context, q.from_user.id), parse_mode='HTML', reply_markup=main_menu()); return
+        await q.edit_message_text(await signal_text(q.from_user.id), parse_mode='HTML', reply_markup=main_menu()); return
     if q.data.startswith('buy:'):
         days = int(q.data.split(':', 1)[1])
-        await make_buy_message(q, days)
+        await make_buy_message(q.message, q.from_user.id, days)
 
 def build_application() -> Application:
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
