@@ -31,6 +31,16 @@ def test_membership_lifecycle_and_renewal_window():
     assert database.membership_active(123) is False
 
 
+def test_recurring_membership_update_replaces_whop_period():
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    first_end = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    next_end = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    database.sync_membership('mem_recurring', 'user_recurring', 'active', start, first_end, 'prod_neural_gold')
+    database.sync_membership('mem_recurring', 'user_recurring', 'active', first_end, next_end, 'prod_neural_gold')
+    row = database.SessionLocal().get(database.WhopMembership, 2)
+    assert row is not None and row.renewal_period_end == next_end
+
+
 def test_webhook_idempotency(monkeypatch):
     seen = set(); sync_calls = []
     def record(event_id, event_type):
