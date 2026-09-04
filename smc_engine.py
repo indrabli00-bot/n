@@ -39,6 +39,65 @@ def _atr(candles: list[dict[str, Any]], period: int = 14) -> float:
     return sum(window) / len(window) if window else 0.0
 
 
+def get_technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
+    """Calculate the candle-based Structure Map indicators used by API/tests."""
+    if len(candles) < 50:
+        return {
+            "rsi": calculate_rsi(candles),
+            "macd_hist": None,
+            "macd_signal": None,
+            "ema_trend": "Data Unavailable",
+            "ema": None,
+            "atr": 0.0,
+            "bb_position": "Data Unavailable",
+            "stoch_k": None,
+        }
+
+    closes = [float(c["close"]) for c in candles]
+    ema_fast = _ema(closes, 12)
+    ema_slow = _ema(closes, 26)
+    macd = ema_fast - ema_slow
+    macd_series = []
+    for i in range(26, len(closes) + 1):
+        part = closes[:i]
+        macd_series.append(_ema(part, 12) - _ema(part, 26))
+    macd_signal = _ema(macd_series, 9) if macd_series else 0.0
+    macd_hist = macd - macd_signal
+    ema = _ema(closes, 20)
+    atr = _atr(candles, 14)
+    window = closes[-20:]
+    mean = sum(window) / len(window)
+    variance = sum((x - mean) ** 2 for x in window) / len(window)
+    std = variance ** 0.5
+    upper = mean + 2 * std
+    lower = mean - 2 * std
+    price = closes[-1]
+    if upper == lower:
+        bb_position = "Middle Band"
+    elif price >= upper:
+        bb_position = "Upper Band"
+    elif price >= mean:
+        bb_position = "Upper Half"
+    elif price <= lower:
+        bb_position = "Lower Band"
+    else:
+        bb_position = "Lower Half"
+    recent = candles[-14:]
+    highest = max(float(c["high"]) for c in recent)
+    lowest = min(float(c["low"]) for c in recent)
+    stoch_k = round(((price - lowest) / (highest - lowest)) * 100, 2) if highest > lowest else 50.0
+    return {
+        "rsi": calculate_rsi(candles),
+        "macd_hist": macd_hist,
+        "macd_signal": macd_signal,
+        "ema_trend": "Bullish" if price >= ema else "Bearish",
+        "ema": ema,
+        "atr": atr,
+        "bb_position": bb_position,
+        "stoch_k": stoch_k,
+    }
+
+
 def analyze_structure_bos(candles: list[dict[str, Any]]):
     if len(candles) < 20:
         return "NEUTRAL", None, False
@@ -170,7 +229,6 @@ def _build_trade_levels(candles_5m, direction: str, reference_price: float) -> t
     structural = swings[-1][1] if swings else None
     buffer = max(atr * 0.20, 0.20)
     min_risk = max(atr * 0.80, 1.00)
-
     if direction == "BUY":
         candidates = [x for x in (ol, structural) if x is not None and x < reference_price]
         stop_base = min(candidates) if candidates else reference_price - min_risk
@@ -195,7 +253,6 @@ def _build_trade_levels(candles_5m, direction: str, reference_price: float) -> t
         entry_low, entry_high = reference_price - entry_half, reference_price + entry_half
         tp1, tp2, tp3 = reference_price - risk, reference_price - 2 * risk, reference_price - 3 * risk
         basis = "STRUCTURE/ATR" if candidates else "ATR"
-
     return tuple(round(x, 2) for x in (entry_low, entry_high, tp1, tp2, tp3, sl)) + (basis,)
 
 
