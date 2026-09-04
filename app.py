@@ -157,35 +157,57 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title='Neural Gold', version='2.0.0', lifespan=lifespan)
 
 
-@app.get('/health')
-async def health():
-    checks = {'database': False, 'market': False, 'telegram': False}
+async def _service_checks(require_market: bool) -> dict[str, bool]:
+    checks = {'database': False, 'telegram': False}
+    if require_market:
+        checks['market'] = False
 
     try:
         await asyncio.to_thread(database.db_ping)
         checks['database'] = True
     except Exception:
-        log.exception('health database check failed')
-
-    try:
-        sample = await asyncio.to_thread(database.latest_sample)
-        if sample:
-            ts = sample['ts']
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            age = (datetime.now(timezone.utc) - ts).total_seconds()
-            checks['market'] = 0 <= age <= max(180, MARKET_POLL_SECONDS * 3)
-    except Exception:
-        log.exception('health market check failed')
+        log.exception('database readiness check failed')
 
     if telegram_app is not None:
         try:
             await telegram_app.bot.get_me()
             checks['telegram'] = True
         except Exception:
-            log.exception('health telegram check failed')
+            log.exception('telegram readiness check failed')
 
+    if require_market:
+        try:
+            sample = await asyncio.to_thread(database.latest_sample)
+            if sample:
+                ts = sample['ts']
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - ts).total_seconds()
+                checks['market'] = 0 <= age <= max(180, MARKET_POLL_SECONDS * 3)
+        except Exception:
+            log.exception('market readiness check failed')
+
+    return checks
+
+
+@app.get('/health')
+async def health():
+    checks = await _service_checks(require_market=False)
     return {'ok': all(checks.values()), 'service': 'neural-gold', 'checks': checks}
+
+
+@app.get('/ready')
+async def ready():
+    checks = await _service_checks(require_market=True)
+    ok = all(checks.values())
+    if not ok:
+        return {
+            'ok': False,
+            'service': 'neural-gold',
+            'checks': checks,
+            'detail': 'service_not_ready',
+        }
+    return {'ok': True, 'service': 'neural-gold', 'checks': checks}
 
 
 @app.get('/auth/whop/callback', response_class=HTMLResponse)
@@ -246,16 +268,23 @@ async def telegram_webhook(
     try:
         body = await request.json()
         update = Update.de_json(body, telegram_app.bot)
+        update_id = int(body.get('update_id'))
     except Exception as exc:
         raise HTTPException(400, 'invalid_update') from exc
+
+    claimed = await asyncio.to_thread(database.claim_telegram_update, update_id)
+    if not claimed:
+        return {'ok': True, 'duplicate': True}
 
     try:
         await telegram_app.process_update(update)
     except Exception as exc:
+        await asyncio.to_thread(database.release_telegram_update, update_id)
         log.exception('telegram update processing failed')
         raise HTTPException(500, 'update_processing_failed') from exc
 
-    return {'ok': True}
+    await asyncio.to_thread(database.complete_telegram_update, update_id)
+    return {'ok': True, 'duplicate': False}
 
 
 @app.post('/webhooks/whop')
