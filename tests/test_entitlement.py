@@ -1,0 +1,67 @@
+import asyncio
+import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+# Use SQLite for isolated entitlement tests before importing database/config modules.
+os.environ['DATABASE_URL'] = 'sqlite:///./test_entitlement.sqlite'
+os.environ['WHOP_PRODUCT_ID'] = 'prod_neural_gold'
+os.environ['WHOP_COMPANY_ID'] = 'biz_neural_gold'
+os.environ['WHOP_WEBHOOK_SECRET'] = 'whsec_test'
+os.environ['WHOP_OAUTH_STATE_SECRET'] = 'state_test'
+
+import database
+from app import process_whop
+
+
+def setup_module():
+    database.Base.metadata.create_all(database.engine)
+
+
+def teardown_module():
+    try:
+        Path('test_entitlement.sqlite').unlink()
+    except FileNotFoundError:
+        pass
+
+
+def test_membership_lifecycle_and_renewal_window():
+    database.ensure_user(123)
+    database.link_whop_user(123, 'user_1')
+    database.sync_membership('mem_1', 'user_1', 'active', datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(days=30), 'prod_neural_gold')
+    assert database.membership_active(123) is True
+    database.deactivate_membership('mem_1', 'canceled')
+    assert database.membership_active(123) is False
+
+
+def test_webhook_idempotency(monkeypatch):
+    calls = []
+    monkeypatch.setattr(database, 'record_webhook_event', lambda event_id, event_type: not calls.append(event_id))
+    monkeypatch.setattr(database, 'sync_membership', lambda *args: calls.append('sync'))
+    payload = {
+        '_webhook_id': 'evt_1',
+        'type': 'membership.activated',
+        'company_id': 'biz_neural_gold',
+        'data': {
+            'id': 'mem_2',
+            'user': {'id': 'user_2'},
+            'status': 'active',
+            'renewal_period_start': '2026-09-01T00:00:00Z',
+            'renewal_period_end': '2026-10-01T00:00:00Z',
+            'product': {'id': 'prod_neural_gold'},
+        },
+    }
+    asyncio.run(process_whop(payload))
+    asyncio.run(process_whop(payload))
+    assert calls.count('sync') == 1
+
+
+def test_payment_succeeded_cannot_create_entitlement(monkeypatch):
+    called = []
+    monkeypatch.setattr(database, 'record_webhook_event', lambda *args: True)
+    monkeypatch.setattr(database, 'sync_membership', lambda *args: called.append(True))
+    payload = {'_webhook_id': 'evt_payment', 'type': 'payment.succeeded', 'company_id': 'biz_neural_gold', 'data': {'id': 'pay_1'}}
+    asyncio.run(process_whop(payload))
+    assert called == []
