@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import (
     BigInteger,
@@ -103,6 +104,7 @@ class TelegramUpdate(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
 
 def init_db() -> None:
@@ -139,6 +141,13 @@ def init_db() -> None:
                     'ALTER TABLE whop_memberships '
                     'ADD COLUMN source_updated_at TIMESTAMP'
                 )
+            )
+
+    telegram_columns = {column['name'] for column in inspector.get_columns('telegram_updates')}
+    if 'claim_token' not in telegram_columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text('ALTER TABLE telegram_updates ADD COLUMN claim_token VARCHAR(64)')
             )
 
 
@@ -246,21 +255,29 @@ def consume_oauth_state(state: str) -> OAuthState | None:
         )
 
 
-def claim_telegram_update(update_id: int, stale_after_seconds: int = 300) -> bool:
+def claim_telegram_update(update_id: int, stale_after_seconds: int = 300) -> str | None:
     now = datetime.now(timezone.utc)
     cutoff = now.timestamp() - stale_after_seconds
+    claim_token = uuid4().hex
     with SessionLocal() as s:
         try:
-            s.add(TelegramUpdate(update_id=update_id, status='processing', updated_at=now))
+            s.add(
+                TelegramUpdate(
+                    update_id=update_id,
+                    status='processing',
+                    updated_at=now,
+                    claim_token=claim_token,
+                )
+            )
             s.commit()
-            return True
+            return claim_token
         except IntegrityError:
             s.rollback()
 
         result = s.execute(
             text(
                 'UPDATE telegram_updates '
-                'SET status = :processing, updated_at = :now '
+                'SET status = :processing, updated_at = :now, claim_token = :claim_token '
                 'WHERE update_id = :update_id '
                 'AND status != :processed '
                 'AND updated_at <= :cutoff'
@@ -271,25 +288,45 @@ def claim_telegram_update(update_id: int, stale_after_seconds: int = 300) -> boo
                 'now': now,
                 'update_id': update_id,
                 'cutoff': datetime.fromtimestamp(cutoff, timezone.utc),
+                'claim_token': claim_token,
             },
         )
         s.commit()
-        return result.rowcount == 1
+        return claim_token if result.rowcount == 1 else None
 
 
-def complete_telegram_update(update_id: int) -> None:
+def complete_telegram_update(update_id: int, claim_token: str) -> None:
     with SessionLocal() as s:
-        row = s.get(TelegramUpdate, update_id)
-        if row is None:
-            return
-        row.status = 'processed'
-        row.updated_at = datetime.now(timezone.utc)
+        result = s.execute(
+            text(
+                'UPDATE telegram_updates '
+                'SET status = :processed, updated_at = :now '
+                'WHERE update_id = :update_id '
+                'AND status = :processing '
+                'AND claim_token = :claim_token'
+            ),
+            {
+                'processed': 'processed',
+                'processing': 'processing',
+                'now': datetime.now(timezone.utc),
+                'update_id': update_id,
+                'claim_token': claim_token,
+            },
+        )
         s.commit()
+        if result.rowcount != 1:
+            raise RuntimeError('telegram_claim_lost')
 
 
-def release_telegram_update(update_id: int) -> None:
+def release_telegram_update(update_id: int, claim_token: str) -> None:
     with SessionLocal() as s:
-        s.execute(delete(TelegramUpdate).where(TelegramUpdate.update_id == update_id))
+        s.execute(
+            delete(TelegramUpdate).where(
+                TelegramUpdate.update_id == update_id,
+                TelegramUpdate.claim_token == claim_token,
+                TelegramUpdate.status == 'processing',
+            )
+        )
         s.commit()
 
 
