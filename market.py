@@ -10,7 +10,7 @@ import database
 from config import GOLDAPI_API_KEY, MARKET_POLL_SECONDS
 
 log = logging.getLogger('market')
-URL = 'https://www.goldapi.io/api/XAU/USD'
+URL = 'https://www.goldapi.io/api/price/XAU/USD'
 MIN_PRICE = 1000.0
 MAX_PRICE = 10000.0
 REQUEST_TIMEOUT_SECONDS = 15
