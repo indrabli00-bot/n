@@ -11,9 +11,10 @@ from telegram import Update
 
 import database
 import market
+import publisher
 import whop
-from bot import build_application
-from config import BELMO_PUBLIC_URL, TELEGRAM_WEBHOOK_SECRET, LOG_LEVEL, MARKET_POLL_SECONDS, WHOP_COMPANY_ID, WHOP_PRODUCT_ID, validate
+from bot import _format_signal, build_application
+from config import BELMO_PUBLIC_URL, LOG_LEVEL, MARKET_POLL_SECONDS, TELEGRAM_PREMIUM_CHAT_ID, TELEGRAM_WEBHOOK_SECRET, WHOP_COMPANY_ID, WHOP_PRODUCT_ID, validate
 
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO), format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 stop_event = asyncio.Event()
@@ -35,39 +36,25 @@ async def process_whop(data: dict) -> None:
     if company_id and company_id != WHOP_COMPANY_ID: raise ValueError('whop_company_mismatch')
 
     deactivation_aliases = {'membership.deactivated', 'membership.canceled', 'membership.cancelled'}
-    if raw_event == 'membership.activated':
-        event = 'membership.activated'
-        status = 'active'
-    elif raw_event in deactivation_aliases:
-        event = 'membership.deactivated'
-        status = 'inactive'
+    if raw_event == 'membership.activated': event, status = 'membership.activated', 'active'
+    elif raw_event in deactivation_aliases: event, status = 'membership.deactivated', 'inactive'
     elif raw_event == 'membership.updated':
-        event = 'membership.updated'
-        status = str(payload.get('status') or '').strip().lower()
+        event, status = 'membership.updated', str(payload.get('status') or '').strip().lower()
         if not status: raise ValueError('membership_status_missing')
-    else:
-        return
+    else: return
 
     membership_id = str(payload.get('id') or payload.get('membership_id') or '').strip()
     user = payload.get('user') or {}
     whop_user_id = str(user.get('id') or payload.get('user_id') or '').strip()
     product_id = str((payload.get('product') or {}).get('id') or '').strip() or WHOP_PRODUCT_ID
-    if not membership_id or not whop_user_id:
-        raise ValueError('membership_identity_missing')
-    if product_id != WHOP_PRODUCT_ID:
-        return
+    if not membership_id or not whop_user_id: raise ValueError('membership_identity_missing')
+    if product_id != WHOP_PRODUCT_ID: return
 
-    await asyncio.to_thread(
-        database.apply_membership_event,
-        event_id,
-        event,
-        membership_id,
-        whop_user_id,
-        status,
-        _dt(payload.get('renewal_period_start')),
-        _dt(payload.get('renewal_period_end')),
-        product_id,
-    )
+    await asyncio.to_thread(database.apply_membership_event, event_id, event, membership_id, whop_user_id, status, _dt(payload.get('renewal_period_start')), _dt(payload.get('renewal_period_end')), product_id)
+
+async def evaluate_signal() -> None:
+    if telegram_app is None: return
+    await publisher.evaluate_and_publish(telegram_app.bot, TELEGRAM_PREMIUM_CHAT_ID, _format_signal)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -77,7 +64,7 @@ async def lifespan(app: FastAPI):
     telegram_app = build_application()
     await telegram_app.initialize(); await telegram_app.start()
     await telegram_app.bot.set_webhook(url=f'{BELMO_PUBLIC_URL}/telegram/webhook', secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=False)
-    market_task = asyncio.create_task(market.run_poller(stop_event))
+    market_task = asyncio.create_task(market.run_poller(stop_event, on_tick=evaluate_signal))
     yield
     stop_event.set()
     if market_task: await market_task
@@ -107,15 +94,12 @@ async def whop_oauth_callback(code: str | None = None, state: str | None = None,
     if not code or not state: return HTMLResponse('<h2>Invalid Whop callback.</h2>', status_code=400)
     try:
         telegram_id, whop_user_id = await whop.exchange_code(code, state)
-        await asyncio.to_thread(database.ensure_user, telegram_id)
-        await asyncio.to_thread(database.link_whop_user, telegram_id, whop_user_id)
-        if telegram_app is not None:
-            await telegram_app.bot.send_message(telegram_id, '✅ Akun Whop berhasil terhubung. Jika membership Anda ACTIVE dan Anda sudah menjadi member channel premium, akses Neural Gold akan tersedia otomatis.')
+        await asyncio.to_thread(database.ensure_user, telegram_id); await asyncio.to_thread(database.link_whop_user, telegram_id, whop_user_id)
+        if telegram_app is not None: await telegram_app.bot.send_message(telegram_id, '✅ Akun Whop berhasil terhubung. Jika membership Anda ACTIVE dan Anda sudah menjadi member channel premium, akses Neural Gold akan tersedia otomatis.')
         return HTMLResponse('<h2>Whop account linked.</h2><p>You can return to Telegram and check Status Akses.</p>')
     except ValueError as exc: return HTMLResponse(f'<h2>Whop linking failed.</h2><p>{str(exc)}</p>', status_code=400)
     except Exception:
-        logging.getLogger('app').exception('whop oauth callback failed')
-        return HTMLResponse('<h2>Whop linking failed.</h2><p>Please return to Telegram and try again.</p>', status_code=500)
+        logging.getLogger('app').exception('whop oauth callback failed'); return HTMLResponse('<h2>Whop linking failed.</h2><p>Please return to Telegram and try again.</p>', status_code=500)
 
 @app.post('/telegram/webhook')
 async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
