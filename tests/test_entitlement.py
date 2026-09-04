@@ -8,6 +8,7 @@ os.environ['WHOP_PRODUCT_ID'] = 'prod_neural_gold'
 os.environ['WHOP_COMPANY_ID'] = 'biz_neural_gold'
 os.environ['WHOP_WEBHOOK_SECRET'] = 'whsec_test'
 os.environ['WHOP_OAUTH_STATE_SECRET'] = 'state_test'
+os.environ['ADMIN_TELEGRAM_ID'] = '999'
 
 from sqlalchemy import select
 import database
@@ -113,3 +114,9 @@ def test_payment_succeeded_cannot_create_entitlement():
     asyncio.run(process_whop(payload))
     with database.SessionLocal() as s:
         assert s.get(database.WebhookEvent, 'evt_payment') is None
+
+
+def test_approved_signal_is_explicitly_persisted():
+    candidate = {'signal': 'LONG', 'reason': 'TREND_MOMENTUM_STRUCTURE', 'entry': 2500.0, 'tp': [2510.0, 2520.0, 2530.0], 'stop': 2490.0, 'setup_strength': 80, 'samples': 300}
+    database.save_approved_signal(candidate, 999)
+    assert database.latest_approved_signal() == candidate
