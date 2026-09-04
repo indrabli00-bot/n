@@ -3,7 +3,7 @@ import time
 import logging
 from telegram import Bot
 from config import ADMIN_TELEGRAM_ID, TELEGRAM_PREMIUM_CHAT_ID
-from database import get_user
+from database import membership_active
 
 log = logging.getLogger('access')
 _cache: dict[int, tuple[float, bool]] = {}
@@ -23,10 +23,5 @@ async def channel_member(bot: Bot, telegram_id: int) -> bool:
 
 async def has_access(bot: Bot, telegram_id: int) -> bool:
     if telegram_id == ADMIN_TELEGRAM_ID: return True
-    u = get_user(telegram_id)
-    if not u or not u.is_active or not u.subscription_expiry: return False
-    from datetime import datetime, timezone
-    expiry = u.subscription_expiry
-    if expiry.tzinfo is None: expiry = expiry.replace(tzinfo=timezone.utc)
-    if expiry <= datetime.now(timezone.utc): return False
+    if not membership_active(telegram_id): return False
     return await channel_member(bot, telegram_id)
