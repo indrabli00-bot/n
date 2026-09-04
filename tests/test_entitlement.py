@@ -40,7 +40,9 @@ def test_recurring_membership_update_replaces_whop_period():
     database.sync_membership('mem_recurring', 'user_recurring', 'active', first_end, next_end, 'prod_neural_gold')
     with database.SessionLocal() as s:
         row = s.scalar(select(database.WhopMembership).where(database.WhopMembership.membership_id == 'mem_recurring'))
-    assert row is not None and row.renewal_period_end == next_end
+    actual_end = row.renewal_period_end
+    if actual_end and actual_end.tzinfo is None: actual_end = actual_end.replace(tzinfo=timezone.utc)
+    assert row is not None and actual_end == next_end
 
 
 def test_webhook_idempotency(monkeypatch):
