@@ -106,6 +106,11 @@ def get_latest_smc_signal() -> dict[str, Any] | None:
     return _latest_smc_signal
 
 
+def _technical_indicators(candles: list[dict[str, Any]]) -> dict[str, Any]:
+    """Backward-compatible indicator helper retained for the existing test contract."""
+    return smc_engine.get_technical_indicators(candles)
+
+
 def get_technical_indicators(price: float, change_pct: float) -> dict[str, Any]:
     """Return Structure Map indicators from the same persisted live candle engine."""
     candles_5m = market_candles.get_candles("5min", 60) or []
