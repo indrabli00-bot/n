@@ -52,7 +52,9 @@ async def process_whop(data: dict) -> None:
     company_id = str(
         data.get('company_id') or payload.get('company', {}).get('id') or ''
     ).strip()
-    if company_id and company_id != WHOP_COMPANY_ID:
+    if not company_id:
+        raise ValueError('whop_company_missing')
+    if company_id != WHOP_COMPANY_ID:
         raise ValueError('whop_company_mismatch')
 
     deactivation_aliases = {
@@ -121,9 +123,6 @@ async def lifespan(app: FastAPI):
     validate()
     await asyncio.to_thread(database.init_db)
     await asyncio.to_thread(publisher.init_state)
-
-    # A FastAPI lifespan can be entered more than once in a long-lived process.
-    # Always create a fresh stop signal for the new market-poller task.
     stop_event = asyncio.Event()
 
     telegram_app = build_application()
