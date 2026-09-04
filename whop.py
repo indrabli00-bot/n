@@ -5,12 +5,11 @@ from urllib.parse import urlencode
 import aiohttp
 import database
 from config import (
-    WHOP_API_KEY, WHOP_COMPANY_ID, WHOP_OAUTH_CLIENT_ID,
+    WHOP_COMPANY_ID, WHOP_OAUTH_CLIENT_ID,
     WHOP_OAUTH_CLIENT_SECRET, WHOP_OAUTH_REDIRECT_URI,
     WHOP_OAUTH_STATE_SECRET, WHOP_PRODUCT_URL, WHOP_WEBHOOK_SECRET,
 )
 
-BASE = 'https://api.whop.com/api/v1'
 OAUTH_BASE = 'https://api.whop.com/oauth'
 
 def verify_webhook(payload: bytes, headers) -> dict:
