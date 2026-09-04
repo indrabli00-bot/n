@@ -44,13 +44,10 @@ def _slope(values: list[float]) -> float:
 
 
 def _candles(samples: list[dict], bucket_seconds: int = 300) -> list[dict]:
-    """Aggregate timestamped spot samples into deterministic 5-minute OHLC candles.
-
-    If timestamps are absent (e.g. unit tests), preserve the supplied sequence as
-    one-sample candles. Production samples are timestamped by the market collector.
-    """
+    """Aggregate timestamped spot samples into deterministic 5-minute OHLC candles."""
     if not samples or not all(x.get('ts') is not None for x in samples):
-        return [{'open': float(x['price']), 'high': float(x['price']), 'low': float(x['price']), 'close': float(x['price'])} for x in samples if x.get('price') is not None]
+        return [{'open': float(x['price']), 'high': float(x['price']), 'low': float(x['price']), 'close': float(x['price'])}
+                for x in samples if x.get('price') is not None]
 
     candles: list[dict] = []
     current_key = None
@@ -79,20 +76,9 @@ def _candles(samples: list[dict], bucket_seconds: int = 300) -> list[dict]:
 
 
 def _base(signal: str, reason: str, samples: int) -> dict:
-    return {
-        'signal': signal,
-        'reason': reason,
-        'entry': None,
-        'tp': [],
-        'stop': None,
-        'confidence': 0,
-        'setup_strength': 0,
-        'samples': samples,
-        'rsi': None,
-        'trend': 'NEUTRAL',
-        'risk_reward': None,
-        'timeframe': 'M5',
-    }
+    return {'signal': signal, 'reason': reason, 'entry': None, 'tp': [], 'stop': None,
+            'confidence': 0, 'setup_strength': 0, 'samples': samples, 'rsi': None,
+            'trend': 'NEUTRAL', 'risk_reward': None, 'timeframe': 'M5'}
 
 
 def analyze(samples: list[dict]) -> dict:
@@ -116,6 +102,7 @@ def analyze(samples: list[dict]) -> dict:
     prior_candles = candles[-40:-20]
     prior_high = max(c['high'] for c in prior_candles) if prior_candles else last
     prior_low = min(c['low'] for c in prior_candles) if prior_candles else last
+    structure_range = max(prior_high - prior_low, a)
     slope_norm = _slope(recent) / a
 
     long_trend = e20 > e50 and last > e20 and slope_norm > 0.05
@@ -135,28 +122,34 @@ def analyze(samples: list[dict]) -> dict:
     trend = 'BULLISH' if direction == 'LONG' else 'BEARISH'
     trend_score = min(35, abs(e20 - e50) / a * 20)
     slope_score = min(25, abs(slope_norm) * 80)
-    momentum_score = 20
-    structure_score = 20
-    strength = int(round(min(95, max(55, 55 + trend_score + slope_score + momentum_score + structure_score - 55))))
+    strength = int(round(min(95, max(55, 55 + trend_score + slope_score + 40 - 55))))
 
-    risk = a * 1.2
-    reward_multipliers = (1.5, 2.5, 3.5)
-    stop = last - risk if direction == 'LONG' else last + risk
-    targets = [last + a * m if direction == 'LONG' else last - a * m for m in reward_multipliers]
-    rr = [m / 1.2 for m in reward_multipliers]
-    rr_text = ' / '.join(f'1:{x:.2f}' for x in rr)
+    # Risk is derived from actual structure plus volatility; targets come from the
+    # observed structure range. R:R is then calculated from the resulting prices.
+    if direction == 'LONG':
+        stop = min(prior_low, last - a * 0.8)
+        risk = last - stop
+        targets = [
+            last + max(a, structure_range * 0.5),
+            last + max(a * 1.5, structure_range),
+            last + max(a * 2.0, structure_range * 1.5),
+        ]
+    else:
+        stop = max(prior_high, last + a * 0.8)
+        risk = stop - last
+        targets = [
+            last - max(a, structure_range * 0.5),
+            last - max(a * 1.5, structure_range),
+            last - max(a * 2.0, structure_range * 1.5),
+        ]
 
-    return {
-        'signal': direction,
-        'reason': 'TREND_MOMENTUM_STRUCTURE',
-        'entry': round(last, 2),
-        'tp': [round(x, 2) for x in targets],
-        'stop': round(stop, 2),
-        'confidence': strength,
-        'setup_strength': strength,
-        'samples': count,
-        'rsi': round(rs, 1),
-        'trend': trend,
-        'risk_reward': rr_text,
-        'timeframe': 'M5',
-    }
+    if risk <= 0:
+        return _base('HOLD', 'INVALID_RISK_MODEL', count)
+
+    rr_values = [abs(target - last) / risk for target in targets]
+    rr_text = ' / '.join(f'1:{value:.2f}' for value in rr_values)
+
+    return {'signal': direction, 'reason': 'TREND_MOMENTUM_STRUCTURE', 'entry': round(last, 2),
+            'tp': [round(x, 2) for x in targets], 'stop': round(stop, 2), 'confidence': strength,
+            'setup_strength': strength, 'samples': count, 'rsi': round(rs, 1), 'trend': trend,
+            'risk_reward': rr_text, 'timeframe': 'M5'}
