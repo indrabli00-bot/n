@@ -17,8 +17,9 @@ MARK_RETRY_DELAY_SECONDS = 0.5
 _publish_lock = asyncio.Lock()
 
 # If Telegram confirms delivery but the DB is temporarily unavailable, keep the
-# fingerprint suppressed for this process so the next market tick cannot send
-# the same signal again. A process restart still requires persistent recovery.
+# most recently delivered fingerprint suppressed for this process so the next
+# market tick cannot send the same signal again. A process restart still
+# requires persistent recovery.
 _recently_sent: set[str] = set()
 
 
@@ -114,6 +115,7 @@ async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
             return {'candidate': candidate, 'published': False}
 
         signal_fingerprint = fingerprint(candidate)
+        _recently_sent.clear()
         _recently_sent.add(signal_fingerprint)
         persisted = await _mark_published_with_retry(candidate)
         if not persisted:
