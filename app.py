@@ -116,11 +116,15 @@ async def evaluate_signal() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global telegram_app, market_task
+    global market_task, stop_event, telegram_app
 
     validate()
     await asyncio.to_thread(database.init_db)
     await asyncio.to_thread(publisher.init_state)
+
+    # A FastAPI lifespan can be entered more than once in a long-lived process.
+    # Always create a fresh stop signal for the new market-poller task.
+    stop_event = asyncio.Event()
 
     telegram_app = build_application()
     await telegram_app.initialize()
@@ -142,6 +146,8 @@ async def lifespan(app: FastAPI):
     await telegram_app.bot.delete_webhook(drop_pending_updates=False)
     await telegram_app.stop()
     await telegram_app.shutdown()
+    market_task = None
+    telegram_app = None
 
 
 app = FastAPI(title='Neural Gold', version='2.0.0', lifespan=lifespan)
