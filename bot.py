@@ -16,12 +16,12 @@ DISCLAIMER = 'Market information & education only. Not personal financial advice
 
 async def activation_menu(telegram_id: int) -> InlineKeyboardMarkup:
     link_url = await whop.create_link_url(telegram_id)
-    return InlineKeyboardMarkup([[InlineKeyboardButton('⚡ Aktifkan Neural Gold', url=link_url)], [InlineKeyboardButton('⬅️ Menu', callback_data='home')]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=link_url)], [InlineKeyboardButton('⬅️ Menu', callback_data='home')]])
 
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton('📡 Sinyal Terbaru', callback_data='signal'), InlineKeyboardButton('📊 Status Akses', callback_data='status')],
-        [InlineKeyboardButton('⚡ Aktifkan / Hubungkan', callback_data='premium'), InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help')],
+        [InlineKeyboardButton('🔗 Hubungkan Akun Whop', callback_data='premium'), InlineKeyboardButton('ℹ️ Cara Kerja', callback_data='help')],
     ])
 
 def main_menu_text() -> str:
@@ -33,7 +33,7 @@ def _format_signal(r: dict) -> str:
     if r.get('rsi') is not None: lines.append(f'<b>RSI:</b> {r["rsi"]}')
     if r.get('entry') is not None: lines.append(f'<b>REFERENCE / ENTRY:</b> {r["entry"]}')
     if r.get('tp'): lines += [f'<b>TP1:</b> {r["tp"][0]}', f'<b>TP2:</b> {r["tp"][1]}', f'<b>TP3:</b> {r["tp"][2]}']
-    if r.get('stop') is not None: lines.append(f'<b>STOP:</b> {r["stop"]}')
+    if r.get('stop') is not None: lines.append(f'<b>STOP LOSS:</b> {r["stop"]}')
     if r.get('risk_reward'): lines.append(f'<b>R:R:</b> {r["risk_reward"]}')
     lines += [f'<b>CONDITION:</b> {r["reason"]}', f'<b>DATA:</b> {r["samples"]} samples', '', '<i>Setup strength bukan probabilitas kemenangan.</i>', '<i>' + DISCLAIMER + '</i>']
     return '\n'.join(lines)
@@ -48,7 +48,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text('<b>AKTIVASI NEURAL GOLD</b>\n\nPembayaran dan entitlement dikelola oleh Whop. Bot tidak memproses pembayaran.\n\n<b>Aktivasi / penghubungan akun:</b>\n1. Selesaikan langganan Neural Gold di Whop.\n2. Tekan <b>Aktifkan Neural Gold</b> dan selesaikan sign-in Whop satu kali.\n3. Pastikan membership Whop ACTIVE dan Anda sudah menjadi member channel premium.\n4. Sistem memeriksa kedua status tersebut untuk akses premium.\n\nSetelah akun terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.', parse_mode='HTML', reply_markup=await activation_menu(update.effective_user.id))
+        await update.message.reply_text('<b>AKTIVASI NEURAL GOLD</b>\n\nPembayaran dan entitlement dikelola oleh Whop. Bot tidak memproses pembayaran.\n\n<b>Aktivasi / penghubungan akun:</b>\n1. Selesaikan langganan Neural Gold di Whop.\n2. Tekan <b>Hubungkan Akun Whop</b> dan selesaikan sign-in Whop satu kali.\n3. Pastikan membership Whop ACTIVE dan Anda sudah menjadi member channel premium.\n4. Sistem memeriksa kedua status tersebut untuk akses premium.\n\nSetelah akun terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.', parse_mode='HTML', reply_markup=await activation_menu(update.effective_user.id))
     except Exception:
         log.exception('activation menu failed'); await update.message.reply_text('Menu aktivasi belum tersedia. Silakan coba lagi beberapa saat lagi.')
 
