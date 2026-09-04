@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, create_engine, select
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import DATABASE_URL
 
@@ -47,6 +47,15 @@ class Fulfillment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 def init_db() -> None: Base.metadata.create_all(engine)
+
+def db_ping() -> bool:
+    with engine.connect() as conn: conn.execute(text('SELECT 1'))
+    return True
+
+def latest_sample() -> dict | None:
+    with SessionLocal() as s:
+        r = s.scalar(select(MarketSample).order_by(MarketSample.ts.desc()).limit(1))
+        return {'ts': r.ts, 'price': r.price} if r else None
 
 def get_user(telegram_id: int) -> User | None:
     with SessionLocal() as s: return s.scalar(select(User).where(User.telegram_id == telegram_id))
@@ -116,6 +125,7 @@ def fulfill(payment_id: str, order_id: str) -> bool:
         o = s.get(Order, order_id)
         if not o: raise RuntimeError('order_not_found')
         if o.payment_id and o.payment_id != payment_id: raise RuntimeError('order_payment_mismatch')
+        if o.status in {'refunded', 'refund.created', 'refund.updated', 'membership.deactivated'}: raise RuntimeError('order_not_active')
         u = s.scalar(select(User).where(User.telegram_id == o.telegram_id)) or User(telegram_id=o.telegram_id)
         now = datetime.now(timezone.utc)
         base = u.subscription_expiry if u.subscription_expiry and u.subscription_expiry > now else now
