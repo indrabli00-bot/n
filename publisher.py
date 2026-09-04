@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 
@@ -14,13 +16,8 @@ log = logging.getLogger('publisher')
 STATE_TABLE = 'signal_publication_state'
 MARK_RETRIES = 3
 MARK_RETRY_DELAY_SECONDS = 0.5
+PUBLISH_LEASE_SECONDS = 120
 _publish_lock = asyncio.Lock()
-
-# If Telegram confirms delivery but the DB is temporarily unavailable, keep the
-# most recently delivered fingerprint suppressed for this process so the next
-# market tick cannot send the same signal again. A process restart still
-# requires persistent recovery.
-_recently_sent: set[str] = set()
 
 
 def init_state() -> None:
@@ -29,7 +26,16 @@ def init_state() -> None:
             text(
                 f'CREATE TABLE IF NOT EXISTS {STATE_TABLE} '
                 '(id INTEGER PRIMARY KEY, last_direction VARCHAR(20), '
-                'updated_at TIMESTAMP)'
+                'updated_at TIMESTAMP, claim_direction VARCHAR(20), '
+                'claim_token VARCHAR(64), claimed_at TIMESTAMP)'
+            )
+        )
+        conn.execute(
+            text(
+                f'INSERT INTO {STATE_TABLE} '
+                '(id, last_direction, updated_at, claim_direction, claim_token, claimed_at) '
+                'VALUES (1, NULL, NULL, NULL, NULL, NULL) '
+                'ON CONFLICT (id) DO NOTHING'
             )
         )
 
@@ -55,24 +61,64 @@ def should_publish(candidate: dict) -> bool:
     direction = candidate.get('signal')
     if direction not in {'LONG', 'SHORT'}:
         return False
-    signal_fingerprint = fingerprint(candidate)
-    if signal_fingerprint in _recently_sent:
-        return False
-    return signal_fingerprint != last_published_fingerprint()
+    return fingerprint(candidate) != last_published_fingerprint()
 
 
 def mark_published(candidate: dict) -> None:
     direction = candidate['signal']
     with database.engine.begin() as conn:
-        conn.execute(text(f'DELETE FROM {STATE_TABLE} WHERE id = 1'))
         conn.execute(
             text(
-                f'INSERT INTO {STATE_TABLE} '
-                '(id, last_direction, updated_at) '
-                'VALUES (1, :direction, CURRENT_TIMESTAMP)'
+                f'UPDATE {STATE_TABLE} SET last_direction = :direction, '
+                'updated_at = CURRENT_TIMESTAMP, claim_direction = NULL, '
+                'claim_token = NULL, claimed_at = NULL WHERE id = 1'
             ),
             {'direction': direction},
         )
+
+
+def _claim_publication(direction: str) -> str | None:
+    token = uuid.uuid4().hex
+    cutoff = datetime.now(timezone.utc).timestamp() - PUBLISH_LEASE_SECONDS
+    with database.engine.begin() as conn:
+        result = conn.execute(
+            text(
+                f'UPDATE {STATE_TABLE} SET claim_direction = :direction, '
+                'claim_token = :token, claimed_at = CURRENT_TIMESTAMP '
+                'WHERE id = 1 '
+                'AND (last_direction IS NULL OR last_direction != :direction) '
+                'AND (claim_token IS NULL OR claimed_at IS NULL OR claimed_at < :cutoff)'
+            ),
+            {'direction': direction, 'token': token, 'cutoff': datetime.fromtimestamp(cutoff, timezone.utc)},
+        )
+    return token if result.rowcount == 1 else None
+
+
+def _release_publication(token: str) -> None:
+    with database.engine.begin() as conn:
+        conn.execute(
+            text(
+                f'UPDATE {STATE_TABLE} SET claim_direction = NULL, '
+                'claim_token = NULL, claimed_at = NULL '
+                'WHERE id = 1 AND claim_token = :token'
+            ),
+            {'token': token},
+        )
+
+
+def _complete_publication(direction: str, token: str) -> None:
+    with database.engine.begin() as conn:
+        result = conn.execute(
+            text(
+                f'UPDATE {STATE_TABLE} SET last_direction = :direction, '
+                'updated_at = CURRENT_TIMESTAMP, claim_direction = NULL, '
+                'claim_token = NULL, claimed_at = NULL '
+                'WHERE id = 1 AND claim_token = :token AND claim_direction = :direction'
+            ),
+            {'direction': direction, 'token': token},
+        )
+    if result.rowcount != 1:
+        raise RuntimeError('publication_claim_lost')
 
 
 async def _mark_published_with_retry(candidate: dict) -> bool:
@@ -101,8 +147,13 @@ async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
     async with _publish_lock:
         samples = await asyncio.to_thread(database.recent_samples)
         candidate = signal_engine.analyze(samples)
-        if not should_publish(candidate):
+        direction = candidate.get('signal')
+        if direction not in {'LONG', 'SHORT'}:
             return {'candidate': candidate, 'published': False}
+
+        claim_token = await asyncio.to_thread(_claim_publication, direction)
+        if claim_token is None:
+            return {'candidate': candidate, 'published': False, 'claimed': False}
 
         try:
             await bot.send_message(
@@ -111,17 +162,16 @@ async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
                 parse_mode='HTML',
             )
         except Exception:
+            await asyncio.to_thread(_release_publication, claim_token)
             log.exception('automatic signal channel publication failed')
-            return {'candidate': candidate, 'published': False}
+            return {'candidate': candidate, 'published': False, 'claimed': True}
 
-        signal_fingerprint = fingerprint(candidate)
-        _recently_sent.clear()
-        _recently_sent.add(signal_fingerprint)
-        persisted = await _mark_published_with_retry(candidate)
-        if not persisted:
-            log.error(
-                'signal delivered to Telegram but publication state is not persisted; '
-                'suppressing duplicate for the current process'
+        try:
+            await asyncio.to_thread(_complete_publication, direction, claim_token)
+        except Exception:
+            log.exception(
+                'signal delivered to Telegram but publication claim completion failed; '
+                'lease will expire before another worker can reclaim it'
             )
             return {
                 'candidate': candidate,
@@ -129,7 +179,6 @@ async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
                 'state_persisted': False,
             }
 
-        _recently_sent.discard(signal_fingerprint)
         return {
             'candidate': candidate,
             'published': True,
