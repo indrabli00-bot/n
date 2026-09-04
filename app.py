@@ -34,6 +34,7 @@ logging.basicConfig(
 stop_event = asyncio.Event()
 telegram_app = None
 market_task = None
+TELEGRAM_COMPLETION_RETRIES = 3
 SUPPORTED_MEMBERSHIP_EVENTS = {
     'membership.activated',
     'membership.deactivated',
@@ -285,13 +286,26 @@ async def telegram_webhook(
         log.exception('telegram update processing failed')
         raise HTTPException(500, 'update_processing_failed') from exc
 
-    try:
-        await asyncio.to_thread(database.complete_telegram_update, update_id)
-    except Exception as exc:
-        log.exception('telegram update completion persistence failed')
-        raise HTTPException(500, 'update_completion_failed') from exc
+    for attempt in range(1, TELEGRAM_COMPLETION_RETRIES + 1):
+        try:
+            await asyncio.to_thread(database.complete_telegram_update, update_id)
+            return {'ok': True, 'duplicate': False}
+        except Exception:
+            if attempt == TELEGRAM_COMPLETION_RETRIES:
+                log.exception(
+                    'telegram update completion persistence failed after %s attempts',
+                    TELEGRAM_COMPLETION_RETRIES,
+                )
+                raise HTTPException(500, 'update_completion_failed')
+            log.warning(
+                'telegram update completion persistence failed; retrying (%s/%s)',
+                attempt,
+                TELEGRAM_COMPLETION_RETRIES,
+                exc_info=True,
+            )
+            await asyncio.sleep(0.2 * attempt)
 
-    return {'ok': True, 'duplicate': False}
+    raise HTTPException(500, 'update_completion_failed')
 
 
 @app.post('/webhooks/whop')
