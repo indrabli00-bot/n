@@ -33,23 +33,37 @@ async def process_whop(data: dict) -> None:
     payload = data.get('data') or data.get('payload') or {}
     company_id = str(data.get('company_id') or payload.get('company', {}).get('id') or '').strip()
     if company_id and company_id != WHOP_COMPANY_ID: raise ValueError('whop_company_mismatch')
-    supported = {'membership.activated', 'membership.deactivated', 'membership.updated', 'membership.cancelled', 'membership.canceled', 'payment.refunded', 'refund.created', 'refund.completed'}
-    if event not in supported: return
-    if not await asyncio.to_thread(database.record_webhook_event, event_id, event): return
+
+    if event not in {'membership.activated', 'membership.deactivated'}:
+        return
 
     membership_id = str(payload.get('id') or payload.get('membership_id') or '').strip()
     user = payload.get('user') or {}
     whop_user_id = str(user.get('id') or payload.get('user_id') or '').strip()
-    product_id = str((payload.get('product') or {}).get('id') or '').strip()
-    if event.startswith('membership.'):
-        if not membership_id or not whop_user_id: raise ValueError('membership_identity_missing')
-        if product_id and product_id != WHOP_PRODUCT_ID: return
-        status = str(payload.get('status') or ('active' if event == 'membership.activated' else 'canceled')).lower()
-        await asyncio.to_thread(database.sync_membership, membership_id, whop_user_id, status, _dt(payload.get('renewal_period_start')), _dt(payload.get('renewal_period_end')), product_id or WHOP_PRODUCT_ID)
+    product_id = str((payload.get('product') or {}).get('id') or '').strip() or WHOP_PRODUCT_ID
+    if not membership_id or not whop_user_id:
+        raise ValueError('membership_identity_missing')
+    if product_id != WHOP_PRODUCT_ID:
         return
 
-    if membership_id:
-        await asyncio.to_thread(database.deactivate_membership, membership_id, 'refunded')
+    if event == 'membership.activated':
+        status = 'active'
+    else:
+        status = str(payload.get('status') or 'inactive').lower()
+        if status == 'active':
+            status = 'inactive'
+
+    await asyncio.to_thread(
+        database.apply_membership_event,
+        event_id,
+        event,
+        membership_id,
+        whop_user_id,
+        status,
+        _dt(payload.get('renewal_period_start')),
+        _dt(payload.get('renewal_period_end')),
+        product_id,
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
