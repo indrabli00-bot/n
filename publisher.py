@@ -13,13 +13,16 @@ _last_published_fingerprint: str | None = None
 
 
 def fingerprint(candidate: dict) -> str:
-    stable = {k: candidate.get(k) for k in ('signal', 'entry', 'tp', 'stop', 'reason', 'timeframe')}
-    return hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    direction = candidate.get('signal')
+    return hashlib.sha256(json.dumps({'signal': direction}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 def should_publish(candidate: dict) -> bool:
     global _last_published_fingerprint
-    if candidate.get('signal') not in {'LONG', 'SHORT'}:
+    direction = candidate.get('signal')
+    if direction not in {'LONG', 'SHORT'}:
+        if direction == 'HOLD':
+            _last_published_fingerprint = None
         return False
     fp = fingerprint(candidate)
     if fp == _last_published_fingerprint:
