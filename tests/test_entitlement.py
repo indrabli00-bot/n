@@ -10,7 +10,7 @@ os.environ['WHOP_WEBHOOK_SECRET'] = 'whsec_test'
 os.environ['WHOP_OAUTH_STATE_SECRET'] = 'state_test'
 os.environ['ADMIN_TELEGRAM_ID'] = '999'
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 import database
 from app import process_whop
@@ -264,21 +264,70 @@ def test_missing_source_timestamp_preserves_ordering_guard():
 
 def test_telegram_update_is_claimed_once():
     update_id = 900001
-    database.release_telegram_update(update_id)
+    database.release_telegram_update(update_id, 'cleanup-token')
 
-    assert database.claim_telegram_update(update_id) is True
-    assert database.claim_telegram_update(update_id) is False
+    first_token = database.claim_telegram_update(update_id)
+    assert isinstance(first_token, str)
+    assert len(first_token) == 32
+    assert database.claim_telegram_update(update_id) is None
 
-    database.complete_telegram_update(update_id)
-    assert database.claim_telegram_update(update_id) is False
-    database.release_telegram_update(update_id)
+    database.complete_telegram_update(update_id, first_token)
+    assert database.claim_telegram_update(update_id) is None
+    database.release_telegram_update(update_id, first_token)
 
 
 def test_failed_telegram_update_can_be_retried():
     update_id = 900002
-    database.release_telegram_update(update_id)
+    database.release_telegram_update(update_id, 'cleanup-token')
 
-    assert database.claim_telegram_update(update_id) is True
-    database.release_telegram_update(update_id)
-    assert database.claim_telegram_update(update_id) is True
-    database.release_telegram_update(update_id)
+    first_token = database.claim_telegram_update(update_id)
+    assert first_token is not None
+    database.release_telegram_update(update_id, first_token)
+    second_token = database.claim_telegram_update(update_id)
+    assert second_token is not None
+    assert second_token != first_token
+    database.release_telegram_update(update_id, second_token)
+
+
+def test_stale_telegram_claim_cannot_be_completed_by_old_owner():
+    update_id = 900003
+    database.release_telegram_update(update_id, 'cleanup-token')
+
+    first_token = database.claim_telegram_update(update_id, stale_after_seconds=300)
+    assert first_token is not None
+
+    stale_at = datetime.now(timezone.utc) - timedelta(minutes=6)
+    with database.SessionLocal() as s:
+        s.execute(
+            text(
+                'UPDATE telegram_updates SET updated_at = :stale_at '
+                'WHERE update_id = :update_id'
+            ),
+            {'stale_at': stale_at, 'update_id': update_id},
+        )
+        s.commit()
+
+    second_token = database.claim_telegram_update(update_id, stale_after_seconds=300)
+    assert second_token is not None
+    assert second_token != first_token
+
+    try:
+        database.complete_telegram_update(update_id, first_token)
+    except RuntimeError as exc:
+        assert str(exc) == 'telegram_claim_lost'
+    else:
+        raise AssertionError('old owner must not complete a replaced claim')
+
+    database.release_telegram_update(update_id, first_token)
+    with database.SessionLocal() as s:
+        row = s.get(database.TelegramUpdate, update_id)
+    assert row is not None
+    assert row.status == 'processing'
+    assert row.claim_token == second_token
+
+    database.complete_telegram_update(update_id, second_token)
+    with database.SessionLocal() as s:
+        row = s.get(database.TelegramUpdate, update_id)
+    assert row is not None
+    assert row.status == 'processed'
+    assert row.claim_token == second_token
