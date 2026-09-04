@@ -34,7 +34,6 @@ async def process_whop(data: dict) -> None:
     payload = data.get('data') or data.get('payload') or {}
     company_id = str(data.get('company_id') or payload.get('company', {}).get('id') or '').strip()
     if company_id and company_id != WHOP_COMPANY_ID: raise ValueError('whop_company_mismatch')
-
     deactivation_aliases = {'membership.deactivated', 'membership.canceled', 'membership.cancelled'}
     if raw_event == 'membership.activated': event, status = 'membership.activated', 'active'
     elif raw_event in deactivation_aliases: event, status = 'membership.deactivated', 'inactive'
@@ -42,14 +41,12 @@ async def process_whop(data: dict) -> None:
         event, status = 'membership.updated', str(payload.get('status') or '').strip().lower()
         if not status: raise ValueError('membership_status_missing')
     else: return
-
     membership_id = str(payload.get('id') or payload.get('membership_id') or '').strip()
     user = payload.get('user') or {}
     whop_user_id = str(user.get('id') or payload.get('user_id') or '').strip()
     product_id = str((payload.get('product') or {}).get('id') or '').strip() or WHOP_PRODUCT_ID
     if not membership_id or not whop_user_id: raise ValueError('membership_identity_missing')
     if product_id != WHOP_PRODUCT_ID: return
-
     await asyncio.to_thread(database.apply_membership_event, event_id, event, membership_id, whop_user_id, status, _dt(payload.get('renewal_period_start')), _dt(payload.get('renewal_period_end')), product_id)
 
 async def evaluate_signal() -> None:
@@ -61,6 +58,7 @@ async def lifespan(app: FastAPI):
     global telegram_app, market_task
     validate()
     await asyncio.to_thread(database.init_db)
+    await asyncio.to_thread(publisher.init_state)
     telegram_app = build_application()
     await telegram_app.initialize(); await telegram_app.start()
     await telegram_app.bot.set_webhook(url=f'{BELMO_PUBLIC_URL}/telegram/webhook', secret_token=TELEGRAM_WEBHOOK_SECRET, drop_pending_updates=False)
