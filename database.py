@@ -69,6 +69,10 @@ def init_db() -> None:
         if 'ix_users_whop_user_id' not in user_indexes:
             with engine.begin() as conn:
                 conn.execute(text('CREATE UNIQUE INDEX ix_users_whop_user_id ON users (whop_user_id)'))
+    membership_columns = {column['name'] for column in inspector.get_columns('whop_memberships')}
+    if 'product_id' not in membership_columns:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE whop_memberships ADD COLUMN product_id VARCHAR(120)'))
 
 def db_ping() -> bool:
     with engine.connect() as conn: conn.execute(text('SELECT 1'))
@@ -149,7 +153,10 @@ def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
 
 def membership_active(telegram_id: int) -> bool:
     m = get_membership_for_telegram(telegram_id)
-    return bool(m and m.status == 'active')
+    if not m or m.status != 'active': return False
+    if m.renewal_period_end is None: return True
+    expiry = m.renewal_period_end if m.renewal_period_end.tzinfo else m.renewal_period_end.replace(tzinfo=timezone.utc)
+    return expiry > datetime.now(timezone.utc)
 
 def save_approved_signal(payload: dict, approved_by: int) -> None:
     with SessionLocal() as s:
