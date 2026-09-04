@@ -9,6 +9,7 @@ Production service for premium XAU/USD market information distributed through Te
 - GoldAPI spot polling every 60 seconds
 - PostgreSQL persistence
 - Conservative signal engine with explicit HOLD/DATA_GAP states
+- Human approval gate before a generated setup is distributed as a premium signal
 - Premium access requires an ACTIVE Whop membership and Telegram channel membership
 
 ## Start
@@ -18,6 +19,11 @@ Production service for premium XAU/USD market information distributed through Te
 - `GET /health`
 - `POST /telegram/webhook`
 - `POST /webhooks/whop`
+
+## Signal flow
+Market data → signal engine candidate → human approval → premium distribution.
+
+The `/approve` Telegram command is restricted to `ADMIN_TELEGRAM_ID` and stores the approved setup for premium distribution. The bot never distributes a newly generated LONG/SHORT candidate directly to members.
 
 ## Environment
 Copy `.env.example` to `.env` locally or configure the same variables in the hosting service. Never commit real credentials.
