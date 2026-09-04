@@ -4,7 +4,7 @@ Production service for premium XAU/USD market information distributed through Te
 
 ## Core
 - FastAPI HTTP service
-- Telegram webhook with secret validation
+- Telegram webhook with secret validation and update idempotency
 - Whop webhook verification with atomic, idempotent membership entitlement sync
 - GoldAPI spot polling every 60 seconds
 - PostgreSQL persistence
@@ -17,7 +17,8 @@ Production service for premium XAU/USD market information distributed through Te
 `uvicorn app:app --host 0.0.0.0 --port $PORT`
 
 ## Endpoints
-- `GET /health`
+- `GET /health` — liveness/dependency status; does not require a fresh market sample
+- `GET /ready` — readiness; returns HTTP 503 until database, Telegram, and fresh market data are available
 - `POST /telegram/webhook`
 - `POST /webhooks/whop`
 
