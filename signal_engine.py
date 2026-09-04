@@ -22,7 +22,6 @@ def ema(values: list[float], period: int) -> float | None:
 def atr(candles: list[dict], period: int = 14) -> float | None:
     if len(candles) < period + 1:
         return None
-
     true_ranges = []
     for index in range(1, len(candles)):
         current = candles[index]
@@ -81,8 +80,15 @@ def _has_acceptable_sampling(samples: list[dict]) -> bool:
     )
 
 
+def _ordered_samples(samples: list[dict]) -> list[dict]:
+    if not samples or not all(sample.get('ts') is not None for sample in samples):
+        return list(samples)
+    return sorted(samples, key=lambda sample: _timestamp(sample) or 0.0)
+
+
 def _candles(samples: list[dict], bucket_seconds: int = 300) -> list[dict]:
     """Aggregate timestamped spot samples into deterministic 5-minute OHLC candles."""
+    samples = _ordered_samples(samples)
     if not samples or not all(x.get('ts') is not None for x in samples):
         return [
             {
@@ -144,15 +150,16 @@ def _base(signal: str, reason: str, samples: int) -> dict:
 
 
 def analyze(samples: list[dict]) -> dict:
-    raw_prices = [float(sample['price']) for sample in samples if sample.get('price') is not None]
+    ordered = _ordered_samples(samples)
+    raw_prices = [float(sample['price']) for sample in ordered if sample.get('price') is not None]
     count = len(raw_prices)
     if count < MIN_MARKET_SAMPLES:
         return _base('HOLD', 'DATA_GAP', count)
-    if not _has_acceptable_sampling(samples):
+    if not _has_acceptable_sampling(ordered):
         return _base('HOLD', 'DATA_GAP', count)
 
-    candles = _candles(samples)
-    if all(sample.get('ts') is not None for sample in samples) and len(candles) > 1:
+    candles = _candles(ordered)
+    if all(sample.get('ts') is not None for sample in ordered) and len(candles) > 1:
         candles = candles[:-1]
     if len(candles) < MIN_COMPLETED_CANDLES:
         return _base('HOLD', 'DATA_GAP', count)
