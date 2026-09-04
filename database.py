@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, create_engine, select, text
+from sqlalchemy import BigInteger, DateTime, Float, Integer, String, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from config import DATABASE_URL
 
@@ -51,7 +51,6 @@ class MarketSample(Base):
 def init_db() -> None:
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
-        # Additive migration for installations created by the legacy entitlement schema.
         conn.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS whop_user_id VARCHAR(120)'))
         conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS ix_users_whop_user_id ON users (whop_user_id)'))
         conn.execute(text('CREATE TABLE IF NOT EXISTS whop_memberships (id SERIAL PRIMARY KEY, membership_id VARCHAR(120) UNIQUE NOT NULL, whop_user_id VARCHAR(120) NOT NULL, status VARCHAR(50) NOT NULL, renewal_period_start TIMESTAMPTZ NULL, renewal_period_end TIMESTAMPTZ NULL, product_id VARCHAR(120) NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'))
@@ -90,9 +89,6 @@ def link_whop_user(telegram_id: int, whop_user_id: str) -> None:
         u.whop_user_id = whop_user_id
         s.add(u); s.commit()
 
-def get_user_by_whop_user_id(whop_user_id: str) -> User | None:
-    with SessionLocal() as s: return s.scalar(select(User).where(User.whop_user_id == whop_user_id))
-
 def save_oauth_state(state: str, telegram_id: int, code_verifier: str, expires_at: datetime) -> None:
     with SessionLocal() as s:
         s.add(OAuthState(state=state, telegram_id=telegram_id, code_verifier=code_verifier, expires_at=expires_at)); s.commit()
@@ -102,8 +98,8 @@ def consume_oauth_state(state: str) -> OAuthState | None:
     with SessionLocal() as s:
         row = s.get(OAuthState, state)
         if not row: return None
-        if row.expires_at.tzinfo is None: row.expires_at = row.expires_at.replace(tzinfo=timezone.utc)
-        if row.expires_at <= now:
+        expiry = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+        if expiry <= now:
             s.delete(row); s.commit(); return None
         s.delete(row); s.commit(); return row
 
@@ -116,13 +112,13 @@ def sync_membership(membership_id: str, whop_user_id: str, status: str, renewal_
     with SessionLocal() as s:
         m = s.scalar(select(WhopMembership).where(WhopMembership.membership_id == membership_id))
         if not m: m = WhopMembership(membership_id=membership_id, whop_user_id=whop_user_id, status=status)
-        m.whop_user_id = whop_user_id
-        m.status = status
-        m.renewal_period_start = renewal_start
-        m.renewal_period_end = renewal_end
-        m.product_id = product_id
-        m.updated_at = datetime.now(timezone.utc)
+        m.whop_user_id = whop_user_id; m.status = status; m.renewal_period_start = renewal_start; m.renewal_period_end = renewal_end; m.product_id = product_id; m.updated_at = datetime.now(timezone.utc)
         s.add(m); s.commit()
+
+def deactivate_membership(membership_id: str, status: str = 'refunded') -> None:
+    with SessionLocal() as s:
+        m = s.scalar(select(WhopMembership).where(WhopMembership.membership_id == membership_id))
+        if m: m.status = status; m.updated_at = datetime.now(timezone.utc); s.commit()
 
 def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:
     with SessionLocal() as s:
