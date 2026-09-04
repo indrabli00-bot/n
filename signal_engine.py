@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from math import isfinite
 from statistics import mean
 
 from config import MARKET_POLL_SECONDS, MIN_MARKET_SAMPLES
@@ -63,17 +64,26 @@ def _timestamp(sample: dict) -> float | None:
     value = sample.get('ts')
     if value is None:
         return None
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.timestamp()
-    return float(value)
+    try:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            timestamp = value.timestamp()
+        else:
+            timestamp = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
+    return timestamp if isfinite(timestamp) else None
 
 
 def _has_acceptable_sampling(samples: list[dict]) -> bool:
     timestamps = [_timestamp(sample) for sample in samples]
-    if any(value is None for value in timestamps):
+    if not timestamps:
+        return False
+    if all(value is None for value in timestamps):
         return True
+    if any(value is None for value in timestamps):
+        return False
     return all(
         0 < current - previous <= MAX_SAMPLE_GAP_SECONDS
         for previous, current in zip(timestamps, timestamps[1:])
@@ -81,7 +91,7 @@ def _has_acceptable_sampling(samples: list[dict]) -> bool:
 
 
 def _ordered_samples(samples: list[dict]) -> list[dict]:
-    if not samples or not all(sample.get('ts') is not None for sample in samples):
+    if not samples or not all(_timestamp(sample) is not None for sample in samples):
         return list(samples)
     return sorted(samples, key=lambda sample: _timestamp(sample) or 0.0)
 
@@ -89,7 +99,7 @@ def _ordered_samples(samples: list[dict]) -> list[dict]:
 def _candles(samples: list[dict], bucket_seconds: int = 300) -> list[dict]:
     """Aggregate timestamped spot samples into deterministic 5-minute OHLC candles."""
     samples = _ordered_samples(samples)
-    if not samples or not all(x.get('ts') is not None for x in samples):
+    if not samples or not all(_timestamp(x) is not None for x in samples):
         return [
             {
                 'open': float(sample['price']),
@@ -159,7 +169,7 @@ def analyze(samples: list[dict]) -> dict:
         return _base('HOLD', 'DATA_GAP', count)
 
     candles = _candles(ordered)
-    if all(sample.get('ts') is not None for sample in ordered) and len(candles) > 1:
+    if all(_timestamp(sample) is not None for sample in ordered) and len(candles) > 1:
         candles = candles[:-1]
     if len(candles) < MIN_COMPLETED_CANDLES:
         return _base('HOLD', 'DATA_GAP', count)
