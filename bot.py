@@ -17,7 +17,7 @@ DISCLAIMER = 'Market information & education only. Not personal financial advice
 async def premium_menu(telegram_id: int) -> InlineKeyboardMarkup:
     link_url = await whop.create_link_url(telegram_id)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=link_url)],
+        [InlineKeyboardButton('⚡ Aktifkan Neural Gold', url=link_url)],
         [InlineKeyboardButton('💳 Berlangganan $49/bulan', url=whop.product_url())],
         [InlineKeyboardButton('⬅️ Menu', callback_data='home')],
     ])
@@ -44,14 +44,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu())
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = ('<b>CARA KERJA NEURAL GOLD</b>\n\n1. Data XAU/USD dikumpulkan secara berkala.\n2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n3. Engine menghasilkan kandidat setup.\n4. <b>Human approval</b> menjadi gate sebelum sinyal dipublikasikan ke premium.\n5. Jika konfirmasi belum memadai, sistem memilih <b>HOLD</b>.\n\n'
-            '<b>Arti status</b>\n🟢 LONG — kandidat bullish yang telah disetujui\n🔴 SHORT — kandidat bearish yang telah disetujui\n🟡 HOLD — belum ada setup yang disetujui\n⚪ DATA GAP — data belum mencukupi\n\n'
+    text = ('<b>CARA KERJA NEURAL GOLD</b>\n\n1. Data XAU/USD dikumpulkan secara berkala.\n2. Engine mengevaluasi trend, momentum, volatilitas dan struktur harga.\n3. Engine menghasilkan kandidat setup.\n4. Untuk Premium Channel, <b>human approval</b> menjadi gate sebelum sinyal dipublikasikan.\n5. Bot Telegram menyediakan signal secara mandiri setelah akses premium aktif.\n\n'
+            '<b>Arti status</b>\n🟢 LONG — signal bullish\n🔴 SHORT — signal bearish\n🟡 HOLD — kondisi belum mendukung setup\n⚪ DATA GAP — data belum mencukupi\n\n'
             '<b>Catatan</b>\nSetup strength bukan probabilitas kemenangan dan tidak menjamin hasil trading.\n\n<i>' + DISCLAIMER + '</i>')
     await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
 
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text('<b>NEURAL GOLD PREMIUM</b>\n\nHarga: <b>$49/bulan</b>\nPembayaran dan entitlement dikelola oleh Whop.\n\n<b>Langkah:</b>\n1. Hubungkan akun Whop ke Telegram Anda.\n2. Selesaikan langganan $49/bulan di Whop.\n3. Kembali ke Telegram dan buka Status Akses.\n\nSetelah membership Whop ACTIVE dan Anda menjadi member channel premium, akses diberikan otomatis.', parse_mode='HTML', reply_markup=await premium_menu(update.effective_user.id))
+        await update.message.reply_text('<b>NEURAL GOLD PREMIUM</b>\n\nHarga: <b>$49/bulan</b>\nPembayaran dan entitlement dikelola oleh Whop.\n\n<b>Aktivasi satu kali:</b>\n1. Selesaikan langganan $49/bulan di Whop.\n2. Tekan <b>Aktifkan Neural Gold</b> dan selesaikan sign-in Whop satu kali.\n3. Setelah membership Whop ACTIVE dan Anda menjadi member channel premium, akses bot aktif otomatis.\n\nSetelah terhubung, Anda tidak perlu login Whop lagi untuk menggunakan bot.', parse_mode='HTML', reply_markup=await premium_menu(update.effective_user.id))
     except Exception:
         log.exception('premium menu failed')
         await update.message.reply_text('Menu premium belum tersedia. Silakan coba lagi beberapa saat lagi.')
@@ -59,20 +59,20 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if not await access.has_access(context.bot, uid):
-        await update.message.reply_text('<b>ACCESS: INACTIVE</b>\n\nAkun Whop belum terhubung, membership belum ACTIVE, atau Anda belum menjadi member channel premium.', parse_mode='HTML', reply_markup=await premium_menu(uid)); return
+        await update.message.reply_text('<b>ACCESS: INACTIVE</b>\n\nSelesaikan aktivasi Whop satu kali, pastikan membership ACTIVE, dan pastikan Anda menjadi member channel premium.', parse_mode='HTML', reply_markup=await premium_menu(uid)); return
     m = await asyncio.to_thread(database.get_membership_for_telegram, uid)
     expiry = m.renewal_period_end.isoformat() if m and m.renewal_period_end else '-'
-    await update.message.reply_text(f'<b>ACCESS: ACTIVE</b>\nWHOP MEMBERSHIP: ACTIVE\nRENEWAL PERIOD END: {expiry}\n\nAkses premium aktif.', parse_mode='HTML', reply_markup=main_menu())
+    await update.message.reply_text(f'<b>ACCESS: ACTIVE</b>\nWHOP MEMBERSHIP: ACTIVE\nRENEWAL PERIOD END: {expiry}\n\nAkses bot premium aktif.', parse_mode='HTML', reply_markup=main_menu())
 
 async def signal_text(uid: int) -> str:
     approved = await asyncio.to_thread(database.latest_approved_signal)
     if not approved:
-        return '<b>🟡 NEURAL STRIKES</b>\n\n<b>SIGNAL:</b> HOLD\n<b>CONDITION:</b> AWAITING_HUMAN_APPROVAL\n\nBelum ada setup yang disetujui untuk distribusi premium.\n\n<i>' + DISCLAIMER + '</i>'
+        return '<b>🟡 NEURAL STRIKES</b>\n\n<b>SIGNAL:</b> HOLD\n<b>CONDITION:</b> AWAITING_HUMAN_APPROVAL\n\nBelum ada signal channel yang disetujui.\n\n<i>' + DISCLAIMER + '</i>'
     return _format_signal(approved)
 
 async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await access.has_access(context.bot, update.effective_user.id):
-        await update.message.reply_text('Premium access diperlukan. Hubungkan akun Whop dan aktifkan membership premium.', reply_markup=await premium_menu(update.effective_user.id)); return
+        await update.message.reply_text('Premium access diperlukan. Aktifkan Neural Gold dan pastikan membership premium aktif.', reply_markup=await premium_menu(update.effective_user.id)); return
     await update.message.reply_text(await signal_text(update.effective_user.id), parse_mode='HTML', reply_markup=main_menu())
 
 async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -86,23 +86,23 @@ async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = await whop.create_link_url(update.effective_user.id)
-    await update.message.reply_text('<b>HUBUNGKAN AKUN WHOP</b>\n\nBuka tombol di bawah dan selesaikan sign-in Whop. Setelah berhasil, akun Whop akan ditautkan ke Telegram ini.', parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔗 Hubungkan Akun Whop', url=url)], [InlineKeyboardButton('⬅️ Menu', callback_data='home')]]))
+    await update.message.reply_text('<b>AKTIVASI NEURAL GOLD</b>\n\nSelesaikan sign-in Whop satu kali. Setelah akun Whop terhubung, status membership akan menentukan akses bot secara otomatis.', parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⚡ Aktifkan Neural Gold', url=url)], [InlineKeyboardButton('⬅️ Menu', callback_data='home')]]))
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query; await q.answer()
     if q.data == 'home': await q.edit_message_text(main_menu_text(), parse_mode='HTML', reply_markup=main_menu()); return
-    if q.data == 'help': await q.edit_message_text('<b>CARA KERJA</b>\n\nData XAU/USD → trend → momentum → volatilitas → struktur → kandidat setup → human approval → premium.\n\n<i>Setup strength bukan probabilitas kemenangan.</i>\n\n<i>'+DISCLAIMER+'</i>', parse_mode='HTML', reply_markup=main_menu()); return
+    if q.data == 'help': await q.edit_message_text('<b>CARA KERJA</b>\n\nData XAU/USD → trend → momentum → volatilitas → struktur → signal.\n\n<b>Premium Channel:</b> signal harus melalui human approval sebelum dipublikasikan.\n<b>Bot:</b> signal tersedia secara mandiri setelah akses premium aktif.\n\n<i>Setup strength bukan probabilitas kemenangan.</i>\n\n<i>'+DISCLAIMER+'</i>', parse_mode='HTML', reply_markup=main_menu()); return
     if q.data == 'premium':
-        await q.edit_message_text('<b>NEURAL GOLD PREMIUM</b>\n\nHarga: <b>$49/bulan</b>\nPembayaran dan entitlement dikelola oleh Whop.\n\nHubungkan akun Whop terlebih dahulu, lalu selesaikan langganan.', parse_mode='HTML', reply_markup=await premium_menu(q.from_user.id)); return
+        await q.edit_message_text('<b>NEURAL GOLD PREMIUM</b>\n\nHarga: <b>$49/bulan</b>\nPembayaran dan entitlement dikelola oleh Whop.\n\nAktivasi satu kali: selesaikan langganan di Whop, lalu tekan <b>Aktifkan Neural Gold</b>. Setelah membership ACTIVE dan Anda menjadi member channel premium, akses bot aktif otomatis.', parse_mode='HTML', reply_markup=await premium_menu(q.from_user.id)); return
     if q.data == 'status':
         uid = q.from_user.id
         if await access.has_access(context.bot, uid):
             m = await asyncio.to_thread(database.get_membership_for_telegram, uid); expiry = m.renewal_period_end.isoformat() if m and m.renewal_period_end else '-'
-            await q.edit_message_text(f'<b>ACCESS: ACTIVE</b>\nWHOP MEMBERSHIP: ACTIVE\nRENEWAL PERIOD END: {expiry}', parse_mode='HTML', reply_markup=main_menu())
-        else: await q.edit_message_text('<b>ACCESS: INACTIVE</b>\n\nAkun Whop belum terhubung, membership belum ACTIVE, atau Anda belum menjadi member channel premium.', parse_mode='HTML', reply_markup=await premium_menu(uid))
+            await q.edit_message_text(f'<b>ACCESS: ACTIVE</b>\nWHOP MEMBERSHIP: ACTIVE\nRENEWAL PERIOD END: {expiry}\n\nAkses bot premium aktif.', parse_mode='HTML', reply_markup=main_menu())
+        else: await q.edit_message_text('<b>ACCESS: INACTIVE</b>\n\nSelesaikan aktivasi Whop satu kali, pastikan membership ACTIVE, dan pastikan Anda menjadi member channel premium.', parse_mode='HTML', reply_markup=await premium_menu(uid))
         return
     if q.data == 'signal':
-        if not await access.has_access(context.bot, q.from_user.id): await q.edit_message_text('Premium access diperlukan. Hubungkan akun Whop dan aktifkan membership premium.', reply_markup=await premium_menu(q.from_user.id)); return
+        if not await access.has_access(context.bot, q.from_user.id): await q.edit_message_text('Premium access diperlukan. Aktifkan Neural Gold dan pastikan membership premium aktif.', reply_markup=await premium_menu(q.from_user.id)); return
         await q.edit_message_text(await signal_text(q.from_user.id), parse_mode='HTML', reply_markup=main_menu()); return
 
 def build_application() -> Application:
