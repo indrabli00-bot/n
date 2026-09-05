@@ -2,7 +2,7 @@ from market import URL, validate_price
 
 
 def test_goldapi_uses_current_xau_price_endpoint():
-    assert URL == 'https://www.goldapi.io/api/price/XAU/USD'
+    assert URL == 'https://api.gold-api.com/price/XAU/USD'
 
 
 def test_goldapi_price_validation():
