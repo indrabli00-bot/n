@@ -21,12 +21,15 @@ from config import TELEGRAM_BOT_TOKEN
 
 log = logging.getLogger('bot')
 
-TERMINAL_WIDTH = 34
+# Telegram does not expose the user's viewport width to bot messages. Keep a
+# mobile-optimized terminal width that fills the message bubble without
+# forcing horizontal overflow on common phone layouts.
+TERMINAL_WIDTH = 52
 TERMINAL_INNER_WIDTH = TERMINAL_WIDTH - 2
 
 
 def _terminal(lines: list[str]) -> str:
-    """Render every bot panel inside one fixed-width monospace terminal."""
+    """Render every bot panel inside one consistent mobile-width terminal."""
     body: list[str] = []
     for line in lines:
         text = str(line).replace('<', '&lt;').replace('>', '&gt;')
@@ -242,8 +245,8 @@ async def _status_text(uid: int, bot) -> tuple[str, InlineKeyboardMarkup]:
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text, markup = await _status_text(update.effective_user.id, context.bot)
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+    text, _ = await _status_text(update.effective_user.id, context.bot)
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
 
 
 async def signal_text() -> str:
