@@ -9,7 +9,6 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 import access
 import database
 import signal_engine
-import whop
 from config import TELEGRAM_BOT_TOKEN
 
 log = logging.getLogger('bot')
@@ -86,9 +85,11 @@ def _main_menu_text() -> str:
             'XAU/USD MARKET INTELLIGENCE',
             '',
             'STATUS : ONLINE',
-            'ACCESS : CHECK REQUIRED',
+            'BOT    : MEMBER BONUS',
             '',
-            'Select an action below.',
+            'Premium Channel is the primary',
+            'Neural Gold product. This bot is',
+            'a bonus utility for channel members.',
         ]
     )
 
@@ -97,14 +98,15 @@ HELP_TEXT = _terminal(
     [
         '[ NEURAL GOLD / HOW IT WORKS ]',
         '',
-        '01 DATA    : XAU/USD collected',
-        '02 ENGINE  : trend / momentum /',
-        '             volatility / structure',
-        '03 SIGNAL  : LONG / SHORT / HOLD',
-        '04 PUBLISH : qualifying signals',
-        '             go to Premium Channel',
-        '05 ACCESS  : Whop + Telegram',
-        '             membership required',
+        '01 PAYMENT : Neural Gold on Whop',
+        '02 ACCESS  : Premium Channel',
+        '03 CONTENT : Neural Strikes',
+        '04 BONUS   : Telegram bot',
+        '',
+        '[ BOT BONUS ]',
+        'The bot is not the purchase gate.',
+        'Premium Channel membership gives',
+        'the bot its member-only context.',
         '',
         '[ STATUS ]',
         'LONG      : bullish',
@@ -112,77 +114,56 @@ HELP_TEXT = _terminal(
         'HOLD      : setup not confirmed',
         'DATA GAP  : insufficient data',
         '',
-        '[ NOTE ]',
-        'Setup strength is not a win',
-        'probability and is not a guarantee.',
-        '',
         'Education only. Trading involves risk.',
     ]
 )
 
-ACTIVATION_TEXT = _terminal(
+BONUS_TEXT = _terminal(
     [
-        '[ NEURAL GOLD / ACTIVATION ]',
+        '[ NEURAL GOLD / BOT BONUS ]',
         '',
-        'PAYMENT  : WHOP',
-        'BOT      : NO PAYMENT PROCESSING',
+        'PRODUCT : PREMIUM CHANNEL',
+        'BOT     : BONUS',
         '',
-        '01 Subscribe to Neural Gold on Whop.',
-        '02 Connect your Whop account below.',
-        '03 Ensure membership is ACTIVE and',
-        '   you joined the Premium Channel.',
-        '04 Access requires both checks.',
+        'This Telegram bot is a bonus',
+        'for Premium Channel members.',
         '',
-        'After linking, Whop login is not',
-        'required again for normal bot use.',
+        'Join the Premium Channel through',
+        'your active Whop membership first.',
+        '',
+        'Then use this bot for signal lookup,',
+        'access status and market information.',
     ]
 )
 
 ACCESS_INACTIVE_TEXT = _terminal(
     [
-        '[ ACCESS / INACTIVE ]',
+        '[ BOT BONUS / INACTIVE ]',
         '',
-        'WHOP       : CHECK REQUIRED',
-        'TELEGRAM   : CHECK REQUIRED',
+        'CHANNEL : MEMBER ACCESS REQUIRED',
         '',
-        'Activate your Whop membership,',
-        'connect the account, and join the',
-        'Premium Channel.',
+        'The Telegram bot is a bonus for',
+        'members of the Premium Channel.',
+        '',
+        'Complete your Neural Gold purchase',
+        'on Whop and join the Premium Channel',
+        'before using member-only bot features.',
     ]
 )
 
-PREMIUM_REQUIRED_TEXT = _terminal(
+ACCESS_ACTIVE_TEXT = _terminal(
     [
-        '[ PREMIUM ACCESS REQUIRED ]',
+        '[ BOT BONUS / ACTIVE ]',
         '',
-        'Connect your Whop account and',
-        'ensure membership + Premium',
-        'Channel access are ACTIVE.',
+        'CHANNEL : MEMBER',
+        'BOT     : BONUS ACTIVE',
+        '',
+        'Your Premium Channel membership is',
+        'confirmed by Telegram.',
+        '',
+        'Member-only bot features are active.',
     ]
 )
-
-
-def access_active_text(expiry: str) -> str:
-    return _terminal(
-        [
-            '[ ACCESS / ACTIVE ]',
-            '',
-            'WHOP MEMBERSHIP : ACTIVE',
-            f'RENEWAL END     : {expiry}',
-            '',
-            'Premium bot access is active.',
-        ]
-    )
-
-
-async def activation_menu(telegram_id: int) -> InlineKeyboardMarkup:
-    link_url = await whop.create_link_url(telegram_id)
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton('🔗 HUBUNGKAN WHOP', url=link_url)],
-            [InlineKeyboardButton('⬅️ MENU', callback_data='home')],
-        ]
-    )
 
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -193,7 +174,7 @@ def main_menu() -> InlineKeyboardMarkup:
                 InlineKeyboardButton('📊 STATUS AKSES', callback_data='status'),
             ],
             [
-                InlineKeyboardButton('🔗 HUBUNGKAN WHOP', callback_data='premium'),
+                InlineKeyboardButton('🎁 BONUS BOT', callback_data='bonus'),
                 InlineKeyboardButton('ℹ️ CARA KERJA', callback_data='help'),
             ],
         ]
@@ -213,47 +194,16 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def _send_activation(target, telegram_id: int, *, edit: bool = False) -> None:
-    markup = await activation_menu(telegram_id)
-    if edit:
-        await target.edit_message_text(
-            ACTIVATION_TEXT, parse_mode='HTML', reply_markup=markup
-        )
-    else:
-        await target.reply_text(
-            ACTIVATION_TEXT, parse_mode='HTML', reply_markup=markup
-        )
-
-
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await _send_activation(update.message, update.effective_user.id)
-    except Exception:
-        log.exception('activation menu failed')
-        await update.message.reply_text(
-            _terminal(
-                [
-                    '[ ACTIVATION / ERROR ]',
-                    '',
-                    'Activation menu is temporarily',
-                    'unavailable. Please try again.',
-                ]
-            ),
-            parse_mode='HTML',
-        )
+    await update.message.reply_text(
+        BONUS_TEXT, parse_mode='HTML', reply_markup=main_menu()
+    )
 
 
 async def _status_text(uid: int, bot) -> tuple[str, InlineKeyboardMarkup]:
     if not await access.has_access(bot, uid):
-        return ACCESS_INACTIVE_TEXT, await activation_menu(uid)
-
-    membership = await asyncio.to_thread(database.get_membership_for_telegram, uid)
-    expiry = (
-        membership.renewal_period_end.isoformat()
-        if membership and membership.renewal_period_end
-        else '-'
-    )
-    return access_active_text(expiry), main_menu()
+        return ACCESS_INACTIVE_TEXT, main_menu()
+    return ACCESS_ACTIVE_TEXT, main_menu()
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -270,15 +220,15 @@ async def _send_signal(target, uid: int, bot) -> None:
     if not await access.has_access(bot, uid):
         if hasattr(target, 'edit_message_text'):
             await target.edit_message_text(
-                PREMIUM_REQUIRED_TEXT,
+                ACCESS_INACTIVE_TEXT,
                 parse_mode='HTML',
-                reply_markup=await activation_menu(uid),
+                reply_markup=main_menu(),
             )
         else:
             await target.reply_text(
-                PREMIUM_REQUIRED_TEXT,
+                ACCESS_INACTIVE_TEXT,
                 parse_mode='HTML',
-                reply_markup=await activation_menu(uid),
+                reply_markup=main_menu(),
             )
         return
 
@@ -294,21 +244,9 @@ async def signal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await _send_activation(update.message, update.effective_user.id)
-    except Exception:
-        log.exception('activation link failed')
-        await update.message.reply_text(
-            _terminal(
-                [
-                    '[ ACTIVATION / ERROR ]',
-                    '',
-                    'Activation menu is temporarily',
-                    'unavailable. Please try again.',
-                ]
-            ),
-            parse_mode='HTML',
-        )
+    await update.message.reply_text(
+        BONUS_TEXT, parse_mode='HTML', reply_markup=main_menu()
+    )
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -325,23 +263,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             HELP_TEXT, parse_mode='HTML', reply_markup=main_menu()
         )
         return
-    if query.data == 'premium':
-        try:
-            await _send_activation(query, query.from_user.id, edit=True)
-        except Exception:
-            log.exception('callback activation failed')
-            await query.edit_message_text(
-                _terminal(
-                    [
-                        '[ ACTIVATION / ERROR ]',
-                        '',
-                        'Activation menu is temporarily',
-                        'unavailable. Please try again.',
-                    ]
-                ),
-                parse_mode='HTML',
-                reply_markup=main_menu(),
-            )
+    if query.data == 'bonus':
+        await query.edit_message_text(
+            BONUS_TEXT, parse_mode='HTML', reply_markup=main_menu()
+        )
         return
     if query.data == 'status':
         text, markup = await _status_text(query.from_user.id, context.bot)
