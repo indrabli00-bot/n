@@ -22,6 +22,7 @@ from config import TELEGRAM_BOT_TOKEN
 log = logging.getLogger('bot')
 
 TERMINAL_WIDTH = 34
+TERMINAL_INNER_WIDTH = TERMINAL_WIDTH - 2
 
 
 def _terminal(lines: list[str]) -> str:
@@ -29,14 +30,22 @@ def _terminal(lines: list[str]) -> str:
     body: list[str] = []
     for line in lines:
         text = str(line).replace('<', '&lt;').replace('>', '&gt;')
-        if len(text) <= TERMINAL_WIDTH:
+        if len(text) <= TERMINAL_INNER_WIDTH:
             body.append(text)
             continue
         words = text.split()
         current = ''
         for word in words:
+            while len(word) > TERMINAL_INNER_WIDTH:
+                if current:
+                    body.append(current)
+                    current = ''
+                body.append(word[:TERMINAL_INNER_WIDTH])
+                word = word[TERMINAL_INNER_WIDTH:]
+            if not word:
+                continue
             candidate = word if not current else f'{current} {word}'
-            if len(candidate) <= TERMINAL_WIDTH:
+            if len(candidate) <= TERMINAL_INNER_WIDTH:
                 current = candidate
             else:
                 if current:
@@ -44,7 +53,9 @@ def _terminal(lines: list[str]) -> str:
                 current = word
         if current:
             body.append(current)
-    return '<pre>' + '\n'.join(body) + '</pre>'
+    border = '+' + '-' * TERMINAL_INNER_WIDTH + '+'
+    framed = [border] + [f'|{line:<{TERMINAL_INNER_WIDTH}}|' for line in body] + [border]
+    return '<pre>' + '\n'.join(framed) + '</pre>'
 
 
 def _terminal_signal_lines(result: dict) -> list[str]:
@@ -264,9 +275,8 @@ async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Give every unsupported command or text input a useful English fallback."""
-    target = update.message
-    if target is not None:
-        await target.reply_text(UNKNOWN_INPUT_TEXT, parse_mode='HTML', reply_markup=main_menu())
+    if update.message is not None:
+        await update.message.reply_text(UNKNOWN_INPUT_TEXT, parse_mode='HTML', reply_markup=main_menu())
 
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -282,8 +292,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _edit_message(query, BONUS_TEXT)
         return
     if query.data == 'status':
-        text, markup = await _status_text(query.from_user.id, context.bot)
-        await query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
+        text, _ = await _status_text(query.from_user.id, context.bot)
+        await _edit_message(query, text)
         return
     if query.data == 'signal':
         await _send_signal(query, query.from_user.id, context.bot)
