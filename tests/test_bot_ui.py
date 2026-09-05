@@ -1,3 +1,19 @@
+import os
+
+os.environ.setdefault('DATABASE_URL', 'sqlite:///./test_bot_ui.sqlite')
+os.environ.setdefault('TELEGRAM_BOT_TOKEN', 'test:token')
+os.environ.setdefault('TELEGRAM_PREMIUM_CHAT_ID', '-1001234567890')
+os.environ.setdefault('TELEGRAM_WEBHOOK_SECRET', 'telegram_secret')
+os.environ.setdefault('BELMO_PUBLIC_URL', 'https://example.com')
+os.environ.setdefault('GOLDAPI_API_KEY', 'gold_test')
+os.environ.setdefault('WHOP_COMPANY_ID', 'biz_test')
+os.environ.setdefault('WHOP_PRODUCT_ID', 'prod_test')
+os.environ.setdefault('WHOP_WEBHOOK_SECRET', 'whop_secret')
+os.environ.setdefault('WHOP_OAUTH_CLIENT_ID', 'client_test')
+os.environ.setdefault('WHOP_OAUTH_CLIENT_SECRET', 'client_secret')
+os.environ.setdefault('WHOP_OAUTH_REDIRECT_URI', 'https://example.com/auth/whop/callback')
+os.environ.setdefault('WHOP_OAUTH_STATE_SECRET', 'state_secret')
+
 import bot
 
 
