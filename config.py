@@ -1,7 +1,5 @@
-from __future__ import annotations
-
-import os
 from pathlib import Path
+import os
 
 from dotenv import load_dotenv
 
@@ -31,6 +29,9 @@ GOLDAPI_API_KEY = env('GOLDAPI_API_KEY')
 WHOP_COMPANY_ID = env('WHOP_COMPANY_ID')
 WHOP_PRODUCT_ID = env('WHOP_PRODUCT_ID')
 WHOP_WEBHOOK_SECRET = env('WHOP_WEBHOOK_SECRET')
+
+# Legacy OAuth support is retained for migration/recovery only. It is not part
+# of the normal Premium Channel -> bonus bot access flow.
 WHOP_OAUTH_CLIENT_ID = env('WHOP_OAUTH_CLIENT_ID')
 WHOP_OAUTH_CLIENT_SECRET = env('WHOP_OAUTH_CLIENT_SECRET')
 WHOP_OAUTH_REDIRECT_URI = env(
@@ -38,6 +39,7 @@ WHOP_OAUTH_REDIRECT_URI = env(
     f'{BELMO_PUBLIC_URL}/auth/whop/callback',
 )
 WHOP_OAUTH_STATE_SECRET = env('WHOP_OAUTH_STATE_SECRET')
+
 LOG_LEVEL = env('LOG_LEVEL', 'INFO').upper()
 MARKET_POLL_SECONDS = int_env('MARKET_POLL_SECONDS', 60)
 MIN_MARKET_SAMPLES = int_env('MIN_MARKET_SAMPLES', 300)
@@ -54,10 +56,6 @@ def validate() -> None:
         'WHOP_COMPANY_ID': WHOP_COMPANY_ID,
         'WHOP_PRODUCT_ID': WHOP_PRODUCT_ID,
         'WHOP_WEBHOOK_SECRET': WHOP_WEBHOOK_SECRET,
-        'WHOP_OAUTH_CLIENT_ID': WHOP_OAUTH_CLIENT_ID,
-        'WHOP_OAUTH_CLIENT_SECRET': WHOP_OAUTH_CLIENT_SECRET,
-        'WHOP_OAUTH_REDIRECT_URI': WHOP_OAUTH_REDIRECT_URI,
-        'WHOP_OAUTH_STATE_SECRET': WHOP_OAUTH_STATE_SECRET,
     }
     missing = [key for key, value in required.items() if not value]
     if missing:
