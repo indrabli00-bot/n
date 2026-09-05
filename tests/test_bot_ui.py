@@ -22,10 +22,30 @@ def _visible_lines(rendered: str) -> list[str]:
     return rendered[5:-6].splitlines()
 
 
-def test_terminal_layout_uses_fixed_width():
-    lines = _visible_lines(bot._main_menu_text())
+def _assert_fixed_terminal(rendered: str) -> None:
+    lines = _visible_lines(rendered)
     assert lines
-    assert all(len(line) <= bot.TERMINAL_WIDTH for line in lines)
+    assert all(len(line) == bot.TERMINAL_WIDTH for line in lines)
+    assert lines[0] == '+' + '-' * (bot.TERMINAL_WIDTH - 2) + '+'
+    assert lines[-1] == lines[0]
+    assert all(line.startswith('|') and line.endswith('|') for line in lines[1:-1])
+
+
+def test_terminal_layout_uses_exact_fixed_width():
+    _assert_fixed_terminal(bot._main_menu_text())
+
+
+def test_all_bot_panels_share_exact_same_terminal_width():
+    panels = [
+        bot._main_menu_text(),
+        bot.HELP_TEXT,
+        bot.BONUS_TEXT,
+        bot.ACCESS_INACTIVE_TEXT,
+        bot.ACCESS_ACTIVE_TEXT,
+        bot._format_signal({'signal': 'HOLD', 'reason': 'test'}),
+    ]
+    for panel in panels:
+        _assert_fixed_terminal(panel)
 
 
 def test_main_menu_describes_bot_as_bonus_not_purchase_gate():
@@ -59,13 +79,11 @@ def test_message_not_modified_error_is_treated_as_idempotent_noop():
     assert not bot._is_message_not_modified(BadRequest('Bad Request: message not found'))
 
 
-def test_help_layout_uses_fixed_width():
-    lines = _visible_lines(bot.HELP_TEXT)
-    assert lines
-    assert all(len(line) <= bot.TERMINAL_WIDTH for line in lines)
+def test_help_layout_uses_exact_fixed_width():
+    _assert_fixed_terminal(bot.HELP_TEXT)
 
 
-def test_signal_layout_uses_terminal_labels_and_fixed_width():
+def test_signal_layout_uses_terminal_labels_and_exact_fixed_width():
     rendered = bot._format_signal(
         {
             'signal': 'HOLD',
@@ -81,9 +99,10 @@ def test_signal_layout_uses_terminal_labels_and_fixed_width():
         }
     )
     lines = _visible_lines(rendered)
-    assert lines[0] == '[ NEURAL STRIKES ]'
-    assert any(line.startswith('SIGNAL : HOLD') for line in lines)
-    assert any(line.startswith('ENTRY  :') for line in lines)
-    assert any(line.startswith('TP1') for line in lines)
-    assert any(line.startswith('STOP   :') for line in lines)
-    assert all(len(line) <= bot.TERMINAL_WIDTH for line in lines)
+    inner = [line[1:-1].rstrip() for line in lines[1:-1]]
+    assert inner[0] == '[ NEURAL STRIKES ]'
+    assert any(line == 'SIGNAL : HOLD' for line in inner)
+    assert any(line.startswith('ENTRY  :') for line in inner)
+    assert any(line.startswith('TP1') for line in inner)
+    assert any(line.startswith('STOP   :') for line in inner)
+    _assert_fixed_terminal(rendered)
