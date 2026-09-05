@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
@@ -102,54 +103,59 @@ def _main_menu_text() -> str:
         'STATUS : ONLINE',
         'BOT    : MEMBER BONUS',
         '',
-        'Premium Channel is the primary',
-        'Neural Gold product. This bot is',
-        'a bonus utility for channel members.',
+        'Select a terminal view below.',
+        'Market Feed : live market state',
+        'Neural Signal : actionable output',
+        'Market Analysis : market context',
+        'System Setting : status & information',
     ])
 
 
-HELP_TEXT = _terminal([
-    '[ NEURAL GOLD / HOW IT WORKS ]',
-    '',
-    '01 PAYMENT : Neural Gold on Whop',
-    '02 ACCESS  : Premium Channel',
-    '03 CONTENT : Neural Strikes',
-    '04 BONUS   : Telegram bot',
-    '',
-    '[ BOT BONUS ]',
-    'The bot is not the purchase gate.',
-    'Premium Channel membership gives',
-    'the bot its member-only context.',
-    '',
-    '[ STATUS ]',
-    'LONG      : bullish',
-    'SHORT     : bearish',
-    'HOLD      : setup not confirmed',
-    'DATA GAP  : insufficient data',
-    '',
-    'Education only. Trading involves risk.',
-])
+def _system_info_text(access_active: bool) -> str:
+    access_status = 'ACTIVE' if access_active else 'INACTIVE'
+    channel_status = 'VERIFIED' if access_active else 'MEMBER ACCESS REQUIRED'
+    return _terminal([
+        '[ SYSTEM SETTING ]',
+        '',
+        '[ SYSTEM ]',
+        'BOT STATUS     : ONLINE',
+        'SERVICE        : NEURAL GOLD',
+        'MARKET         : XAU/USD',
+        'TIMEFRAME      : M5',
+        '',
+        '[ ACCESS ]',
+        f'ACCESS STATUS  : {access_status}',
+        f'PREMIUM CHANNEL: {channel_status}',
+        '',
+        '[ HOW IT WORKS ]',
+        '01 PAYMENT : Neural Gold on Whop',
+        '02 ACCESS  : Premium Channel',
+        '03 CONTENT : Neural Strikes',
+        '04 BONUS   : Telegram bot',
+        '',
+        'The bot is a bonus utility, not the',
+        'purchase gate. Premium membership',
+        'provides member-only bot context.',
+        '',
+        '[ INFORMATION ]',
+        'Use Market Feed for live conditions.',
+        'Use Neural Signal for the current',
+        'actionable setup when access is active.',
+        'Use Market Analysis for indicators',
+        'and the current market interpretation.',
+        '',
+        'Education only. Trading involves risk.',
+    ])
 
-BONUS_TEXT = _terminal([
-    '[ NEURAL GOLD / BOT BONUS ]',
-    '',
-    'PRODUCT : PREMIUM CHANNEL',
-    'BOT     : BONUS',
-    '',
-    'This Telegram bot is a bonus',
-    'for Premium Channel members.',
-    '',
-    'Join the Premium Channel through',
-    'your active Whop membership first.',
-    '',
-    'Then use this bot for signal lookup,',
-    'access status and market information.',
-])
+
+HELP_TEXT = _system_info_text(False)
+BONUS_TEXT = _system_info_text(False)
 
 ACCESS_INACTIVE_TEXT = _terminal([
-    '[ BOT BONUS / INACTIVE ]',
+    '[ SYSTEM / ACCESS ]',
     '',
-    'CHANNEL : MEMBER ACCESS REQUIRED',
+    'ACCESS STATUS  : INACTIVE',
+    'PREMIUM CHANNEL: MEMBER ACCESS REQUIRED',
     '',
     'The Telegram bot is a bonus for',
     'members of the Premium Channel.',
@@ -160,10 +166,11 @@ ACCESS_INACTIVE_TEXT = _terminal([
 ])
 
 ACCESS_ACTIVE_TEXT = _terminal([
-    '[ BOT BONUS / ACTIVE ]',
+    '[ SYSTEM / ACCESS ]',
     '',
-    'CHANNEL : MEMBER',
-    'BOT     : BONUS ACTIVE',
+    'ACCESS STATUS  : ACTIVE',
+    'PREMIUM CHANNEL: VERIFIED',
+    'BOT            : BONUS ACTIVE',
     '',
     'Your Premium Channel membership is',
     'confirmed by Telegram.',
@@ -176,13 +183,12 @@ UNKNOWN_INPUT_TEXT = _terminal([
     '',
     "I didn't recognize that input.",
     '',
-    'Use the menu below to continue.',
+    'Use the four terminal views below.',
     '',
-    'Available:',
-    'LATEST SIGNAL',
-    'ACCESS STATUS',
-    'BOT BONUS',
-    'HOW IT WORKS',
+    'LIVE MARKET FEED',
+    'NEURAL SIGNAL',
+    'MARKET ANALYSIS',
+    'SYSTEM SETTING',
 ])
 
 ERROR_TEXT = _terminal([
@@ -199,12 +205,12 @@ ERROR_TEXT = _terminal([
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton('📡 LATEST SIGNAL', callback_data='signal'),
-            InlineKeyboardButton('📊 ACCESS STATUS', callback_data='status'),
+            InlineKeyboardButton('📡 LIVE MARKET FEED', callback_data='market'),
+            InlineKeyboardButton('⚡ NEURAL SIGNAL', callback_data='signal'),
         ],
         [
-            InlineKeyboardButton('🎁 BOT BONUS', callback_data='bonus'),
-            InlineKeyboardButton('ℹ️ HOW IT WORKS', callback_data='help'),
+            InlineKeyboardButton('📊 MARKET ANALYSIS', callback_data='analysis'),
+            InlineKeyboardButton('⚙️ SYSTEM SETTING', callback_data='system'),
         ],
     ])
 
@@ -254,6 +260,67 @@ async def signal_text() -> str:
     return _format_signal(signal_engine.analyze(samples))
 
 
+async def market_feed_text() -> str:
+    samples = await asyncio.to_thread(database.recent_samples)
+    if not samples:
+        return _terminal([
+            '[ LIVE MARKET FEED ]',
+            '',
+            'PRICE  : UNAVAILABLE',
+            'CHANGE : UNAVAILABLE',
+            'DATA   : 0 samples',
+            'STATE  : DATA_GAP',
+            '',
+            'Waiting for the market data feed.',
+        ])
+    latest = samples[-1]
+    timestamp = latest.get('ts')
+    if isinstance(timestamp, datetime):
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        updated = timestamp.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+    else:
+        try:
+            updated = datetime.fromtimestamp(float(timestamp), tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        except (TypeError, ValueError, OverflowError, OSError):
+            updated = 'UNKNOWN'
+    return _terminal([
+        '[ LIVE MARKET FEED ]',
+        '',
+        f'XAU/USD : {latest.get("price", "UNAVAILABLE")}',
+        f'CHANGE  : {latest.get("change_pct", "UNAVAILABLE")}',
+        f'DATA    : {len(samples)} samples',
+        f'UPDATED : {updated}',
+        'SOURCE  : GOLD API',
+        '',
+        'Live market state only.',
+        'Use Neural Signal for the current',
+        'actionable setup.',
+    ])
+
+
+async def analysis_text() -> str:
+    samples = await asyncio.to_thread(database.recent_samples)
+    result = signal_engine.analyze(samples)
+    return _terminal([
+        '[ MARKET ANALYSIS ]',
+        '',
+        f'TREND  : {result.get("trend", "NEUTRAL")}',
+        f'RSI    : {result.get("rsi") if result.get("rsi") is not None else "UNAVAILABLE"}',
+        f'STR    : {result.get("setup_strength", 0)}/100',
+        f'SIGNAL : {result.get("signal", "HOLD")}',
+        f'STATE  : {result.get("reason", "UNKNOWN")}',
+        f'DATA   : {result.get("samples", len(samples))} samples',
+        f'TF     : {result.get("timeframe", "M5")}',
+        '',
+        'Analysis is derived from the same',
+        'validated market data used by the',
+        'Neural Signal engine.',
+        '',
+        'Education only. Trading involves risk.',
+    ])
+
+
 async def _send_signal(target, uid: int, bot) -> None:
     if not await access.has_access(bot, uid):
         if hasattr(target, 'edit_message_text'):
@@ -288,18 +355,27 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == 'home':
         await _edit_message(query, _main_menu_text())
         return
-    if query.data == 'help':
-        await _edit_message(query, HELP_TEXT)
+    if query.data == 'market':
+        await _edit_message(query, await market_feed_text())
         return
-    if query.data == 'bonus':
-        await _edit_message(query, BONUS_TEXT)
+    if query.data == 'signal':
+        await _send_signal(query, query.from_user.id, context.bot)
+        return
+    if query.data == 'analysis':
+        await _edit_message(query, await analysis_text())
+        return
+    if query.data == 'system':
+        active = await access.has_access(context.bot, query.from_user.id)
+        await _edit_message(query, _system_info_text(active))
+        return
+    # Keep legacy callbacks harmless for previously-rendered messages.
+    if query.data == 'help' or query.data == 'bonus':
+        active = await access.has_access(context.bot, query.from_user.id)
+        await _edit_message(query, _system_info_text(active))
         return
     if query.data == 'status':
         text, _ = await _status_text(query.from_user.id, context.bot)
         await _edit_message(query, text)
-        return
-    if query.data == 'signal':
-        await _send_signal(query, query.from_user.id, context.bot)
         return
     await _edit_message(query, UNKNOWN_INPUT_TEXT)
 
