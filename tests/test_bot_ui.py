@@ -17,9 +17,11 @@ import bot
 
 
 def _visible_lines(rendered: str) -> list[str]:
-    assert rendered.startswith('<pre>')
-    assert rendered.endswith('</pre>')
-    return rendered[5:-6].splitlines()
+    prefix = f'{bot.TERMINAL_HEADER}\n\n<pre>'
+    suffix = f'</pre>\n\n{bot.TERMINAL_FOOTER}'
+    assert rendered.startswith(prefix)
+    assert rendered.endswith(suffix)
+    return rendered[len(prefix):-len(suffix)].splitlines()
 
 
 def _assert_fixed_terminal(rendered: str) -> None:
@@ -34,6 +36,12 @@ def _assert_fixed_terminal(rendered: str) -> None:
 def test_terminal_layout_uses_mobile_optimized_width():
     assert bot.TERMINAL_WIDTH == 52
     _assert_fixed_terminal(bot._main_menu_text())
+
+
+def test_terminal_has_unified_header_and_footer():
+    rendered = bot._main_menu_text()
+    assert rendered.startswith('NEURAL GOLD [SIGNALS]\n\n<pre>')
+    assert rendered.endswith('</pre>\n\nXAU/USD • MEMBER BONUS')
 
 
 def test_all_bot_panels_share_exact_same_terminal_width():
@@ -51,6 +59,24 @@ def test_all_bot_panels_share_exact_same_terminal_width():
     ]
     for panel in panels:
         _assert_fixed_terminal(panel)
+
+
+def test_all_bot_panels_share_the_same_header_and_footer():
+    panels = [
+        bot._main_menu_text(),
+        bot.HELP_TEXT,
+        bot.BONUS_TEXT,
+        bot.ACCESS_INACTIVE_TEXT,
+        bot.ACCESS_ACTIVE_TEXT,
+        bot.UNKNOWN_INPUT_TEXT,
+        bot.ERROR_TEXT,
+        bot._system_info_text(False),
+        bot._system_info_text(True),
+        bot._format_signal({'signal': 'HOLD', 'reason': 'test'}),
+    ]
+    for panel in panels:
+        assert panel.startswith(f'{bot.TERMINAL_HEADER}\n\n<pre>')
+        assert panel.endswith(f'</pre>\n\n{bot.TERMINAL_FOOTER}')
 
 
 def test_main_menu_is_exactly_four_actions_in_two_columns():
