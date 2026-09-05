@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 # Establish deterministic test configuration before any application module is
-# imported.  Several modules intentionally snapshot environment values at
+# imported. Several modules intentionally snapshot environment values at
 # import time, so setting these only inside an individual test module is too
 # late when pytest collects modules in a different order.
 TEST_ENV = {
@@ -12,7 +12,6 @@ TEST_ENV = {
     'TELEGRAM_WEBHOOK_SECRET': 'telegram-secret',
     'BELMO_PUBLIC_URL': 'https://example.test',
     'DATABASE_URL': 'sqlite:///./test.sqlite',
-    'GOLDAPI_API_KEY': 'gold-test-key',
     'WHOP_COMPANY_ID': 'biz_neural_gold',
     'WHOP_PRODUCT_ID': 'prod_neural_gold',
     'WHOP_WEBHOOK_SECRET': 'whsec_test',
