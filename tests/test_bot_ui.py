@@ -50,6 +50,16 @@ def test_bonus_panel_does_not_offer_oauth():
     assert 'HUBUNGKAN WHOP' not in bot.BONUS_TEXT
 
 
+def test_message_not_modified_error_is_treated_as_idempotent_noop():
+    from telegram.error import BadRequest
+
+    assert bot._is_message_not_modified(BadRequest('Message is not modified'))
+    assert bot._is_message_not_modified(
+        BadRequest('Bad Request: message is not modified')
+    )
+    assert not bot._is_message_not_modified(BadRequest('Bad Request: message not found'))
+
+
 def test_help_layout_uses_fixed_width():
     lines = _visible_lines(bot.HELP_TEXT)
     assert lines
