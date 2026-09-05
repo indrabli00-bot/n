@@ -22,9 +22,6 @@ from config import TELEGRAM_BOT_TOKEN
 
 log = logging.getLogger('bot')
 
-# Telegram does not expose the user's viewport width to bot messages. Keep a
-# mobile-optimized terminal width that fills the message bubble without
-# forcing horizontal overflow on common phone layouts.
 TERMINAL_WIDTH = 52
 TERMINAL_INNER_WIDTH = TERMINAL_WIDTH - 2
 
@@ -127,6 +124,10 @@ def _system_info_text(access_active: bool) -> str:
         f'ACCESS STATUS  : {access_status}',
         f'PREMIUM CHANNEL: {channel_status}',
         '',
+        '[ BOT BONUS ]',
+        'BOT ROLE       : MEMBER BONUS',
+        'PURCHASE GATE  : PREMIUM CHANNEL',
+        '',
         '[ HOW IT WORKS ]',
         '01 PAYMENT : Neural Gold on Whop',
         '02 ACCESS  : Premium Channel',
@@ -216,12 +217,10 @@ def main_menu() -> InlineKeyboardMarkup:
 
 
 def _is_message_not_modified(exc: BadRequest) -> bool:
-    """Return True when Telegram reports an idempotent edit as a no-op."""
     return 'message is not modified' in str(exc).lower()
 
 
 async def _edit_message(target, text: str) -> None:
-    """Edit a callback message without turning Telegram no-ops into errors."""
     try:
         await target.edit_message_text(text, parse_mode='HTML', reply_markup=main_menu())
     except BadRequest as exc:
@@ -344,7 +343,6 @@ async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Give every unsupported command or text input a useful English fallback."""
     if update.message is not None:
         await update.message.reply_text(UNKNOWN_INPUT_TEXT, parse_mode='HTML', reply_markup=main_menu())
 
@@ -381,7 +379,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    """Log internal errors and return a safe user-facing fallback when possible."""
     log.error('telegram handler failed', exc_info=context.error)
     try:
         if isinstance(update, Update) and update.callback_query is not None:
