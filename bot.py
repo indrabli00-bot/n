@@ -58,7 +58,8 @@ def _terminal(lines: list[str]) -> str:
             body.append(current)
     border = '+' + '-' * TERMINAL_INNER_WIDTH + '+'
     framed = [border] + [f'|{line:<{TERMINAL_INNER_WIDTH}}|' for line in body] + [border]
-    return f'{TERMINAL_HEADER}\n\n<pre>{"\n".join(framed)}</pre>\n\n{TERMINAL_FOOTER}'
+    terminal = '\n'.join(framed)
+    return f'{TERMINAL_HEADER}\n\n<pre>{terminal}</pre>\n\n{TERMINAL_FOOTER}'
 
 
 def _terminal_signal_lines(result: dict) -> list[str]:
