@@ -24,10 +24,12 @@ log = logging.getLogger('bot')
 
 TERMINAL_WIDTH = 52
 TERMINAL_INNER_WIDTH = TERMINAL_WIDTH - 2
+TERMINAL_HEADER = 'NEURAL GOLD [SIGNALS]'
+TERMINAL_FOOTER = 'XAU/USD • MEMBER BONUS'
 
 
 def _terminal(lines: list[str]) -> str:
-    """Render every bot panel inside one consistent mobile-width terminal."""
+    """Render every bot panel with one consistent header, terminal, and footer."""
     body: list[str] = []
     for line in lines:
         text = str(line).replace('<', '&lt;').replace('>', '&gt;')
@@ -56,7 +58,7 @@ def _terminal(lines: list[str]) -> str:
             body.append(current)
     border = '+' + '-' * TERMINAL_INNER_WIDTH + '+'
     framed = [border] + [f'|{line:<{TERMINAL_INNER_WIDTH}}|' for line in body] + [border]
-    return '<pre>' + '\n'.join(framed) + '</pre>'
+    return f'{TERMINAL_HEADER}\n\n<pre>{"\n".join(framed)}</pre>\n\n{TERMINAL_FOOTER}'
 
 
 def _terminal_signal_lines(result: dict) -> list[str]:
