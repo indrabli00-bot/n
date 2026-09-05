@@ -5,7 +5,14 @@ import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 import access
 import database
@@ -150,6 +157,30 @@ ACCESS_ACTIVE_TEXT = _terminal([
     'Member-only bot features are active.',
 ])
 
+UNKNOWN_INPUT_TEXT = _terminal([
+    '[ NEURAL GOLD / INPUT ]',
+    '',
+    "I didn't recognize that input.",
+    '',
+    'Use the menu below to continue.',
+    '',
+    'Available:',
+    'LATEST SIGNAL',
+    'ACCESS STATUS',
+    'BOT BONUS',
+    'HOW IT WORKS',
+])
+
+ERROR_TEXT = _terminal([
+    '[ NEURAL GOLD / ERROR ]',
+    '',
+    'A temporary error occurred.',
+    '',
+    'Your request was not completed.',
+    'Please use the menu below and',
+    'try again.',
+])
+
 
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -231,6 +262,13 @@ async def link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(BONUS_TEXT, parse_mode='HTML', reply_markup=main_menu())
 
 
+async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Give every unsupported command or text input a useful English fallback."""
+    target = update.message
+    if target is not None:
+        await target.reply_text(UNKNOWN_INPUT_TEXT, parse_mode='HTML', reply_markup=main_menu())
+
+
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -245,16 +283,24 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if query.data == 'status':
         text, markup = await _status_text(query.from_user.id, context.bot)
-        try:
-            await query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
-        except BadRequest as exc:
-            if _is_message_not_modified(exc):
-                log.debug('telegram status edit was already up to date')
-                return
-            raise
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
         return
     if query.data == 'signal':
         await _send_signal(query, query.from_user.id, context.bot)
+        return
+    await _edit_message(query, UNKNOWN_INPUT_TEXT)
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Log internal errors and return a safe user-facing fallback when possible."""
+    log.error('telegram handler failed', exc_info=context.error)
+    try:
+        if isinstance(update, Update) and update.callback_query is not None:
+            await _edit_message(update.callback_query, ERROR_TEXT)
+        elif isinstance(update, Update) and update.message is not None:
+            await update.message.reply_text(ERROR_TEXT, parse_mode='HTML', reply_markup=main_menu())
+    except Exception:
+        log.exception('failed to send telegram error fallback')
 
 
 def build_application() -> Application:
@@ -269,5 +315,8 @@ def build_application() -> Application:
     }
     for command, handler in handlers.items():
         app.add_handler(CommandHandler(command, handler))
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_input))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_input))
     app.add_handler(CallbackQueryHandler(callbacks))
+    app.add_error_handler(error_handler)
     return app
