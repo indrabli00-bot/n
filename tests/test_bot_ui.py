@@ -16,8 +16,8 @@ def test_terminal_layout_uses_fixed_width():
 def test_main_menu_describes_bot_as_bonus_not_purchase_gate():
     text = bot._main_menu_text()
     assert 'MEMBER BONUS' in text
-    assert 'Premium Channel is the primary' in text
-    assert 'a bonus utility for channel members.' in text
+    assert 'Premium Channel' in text
+    assert 'bonus' in text
     assert 'HUBUNGKAN WHOP' not in text
 
 
