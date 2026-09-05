@@ -10,7 +10,8 @@ Production service for premium XAU/USD market information distributed through Te
 - PostgreSQL persistence
 - Conservative signal engine with explicit HOLD/DATA_GAP states
 - Automatic Premium Channel publication for actionable LONG/SHORT signals
-- Premium access requires an ACTIVE Whop membership and Telegram channel membership
+- Premium Channel is the primary customer product
+- Telegram bot is a bonus utility for existing Premium Channel members
 - Telegram bot does not process purchases or sell subscription packages
 
 ## Start
@@ -25,19 +26,19 @@ Production service for premium XAU/USD market information distributed through Te
 ## Signal flows
 
 ### Premium Channel
-`GoldAPI → Market Samples → Signal Engine → automatic LONG/SHORT publication → Premium Channel`
+`Whop purchase → active membership → Premium Channel access → Neural Strikes`
 
-There is no human approval command and no `/approve` gate. `HOLD` and `DATA_GAP` are not published. Repeated signals in the same direction are suppressed to prevent channel spam; a new direction can be published when the engine changes direction.
+The Premium Channel is the purchased destination. Automatic LONG/SHORT signals are published there. `HOLD` and `DATA_GAP` are not published. Repeated signals in the same direction are suppressed to prevent channel spam; a new direction can be published when the engine changes direction.
 
-### Premium Bot
-`Active access → on-demand signal calculation → Telegram Bot`
+### Telegram Bot Bonus
+`Premium Channel member → Telegram Bot bonus → on-demand signal / status / market information`
 
-The bot may calculate and show the current signal independently to an entitled user. This is separate from automatic Premium Channel publication.
+The bot is not the purchase gate, payment processor, or required Whop OAuth step. Normal member access to the bot is determined from Premium Channel membership. A member should not be asked to connect a Whop account just to use the bonus bot.
 
-## Access
-`ACTIVE Whop membership AND Telegram premium-channel membership → PREMIUM ACCESS`
+## Access model
+`Whop ACTIVE membership → Premium Channel → Telegram bot bonus`
 
-Whop is the payment and entitlement authority. The database only mirrors Whop membership events and does not create entitlement independently.
+Whop is the payment and entitlement authority. Premium Channel access is the primary customer benefit. The bot is an additional member utility and does not replace the channel.
 
 ## Environment
 Copy `.env.example` to `.env` locally or configure the same variables in the hosting service. Never commit real credentials.
