@@ -42,6 +42,8 @@ def test_all_bot_panels_share_exact_same_terminal_width():
         bot.BONUS_TEXT,
         bot.ACCESS_INACTIVE_TEXT,
         bot.ACCESS_ACTIVE_TEXT,
+        bot.UNKNOWN_INPUT_TEXT,
+        bot.ERROR_TEXT,
         bot._format_signal({'signal': 'HOLD', 'reason': 'test'}),
     ]
     for panel in panels:
@@ -67,6 +69,18 @@ def test_bonus_panel_does_not_offer_oauth():
     assert 'BOT     : BONUS' in bot.BONUS_TEXT
     assert 'OAuth' not in bot.BONUS_TEXT
     assert 'HUBUNGKAN WHOP' not in bot.BONUS_TEXT
+
+
+def test_unknown_input_panel_is_english_and_actionable():
+    assert "I didn't recognize that input." in bot.UNKNOWN_INPUT_TEXT
+    assert 'Use the menu below to continue.' in bot.UNKNOWN_INPUT_TEXT
+    assert 'Available:' in bot.UNKNOWN_INPUT_TEXT
+
+
+def test_error_panel_is_safe_and_actionable():
+    assert 'A temporary error occurred.' in bot.ERROR_TEXT
+    assert 'Your request was not completed.' in bot.ERROR_TEXT
+    assert 'try again.' in bot.ERROR_TEXT
 
 
 def test_message_not_modified_error_is_treated_as_idempotent_noop():
