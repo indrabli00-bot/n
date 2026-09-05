@@ -36,15 +36,19 @@ def validate_price(price: float) -> float:
 
 
 def _response_timestamp(value: object) -> datetime:
+    now = datetime.now(timezone.utc)
     if not isinstance(value, str) or not value.strip():
-        return datetime.now(timezone.utc)
+        return now
     try:
         parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
     except ValueError:
-        return datetime.now(timezone.utc)
+        return now
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    # Never persist a sample timestamp from the future. Upstream clock skew
+    # must not make readiness report a negative sample age or break sampling
+    # order in the signal engine.
+    return min(parsed.astimezone(timezone.utc), now)
 
 
 async def fetch_spot(session: aiohttp.ClientSession) -> dict:

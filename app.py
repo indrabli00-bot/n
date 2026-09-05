@@ -125,18 +125,24 @@ async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
 
     telegram_app = build_application()
-    await telegram_app.initialize()
-    await telegram_app.start()
-    await telegram_app.bot.set_webhook(
-        url=f'{BELMO_PUBLIC_URL}/telegram/webhook',
-        secret_token=TELEGRAM_WEBHOOK_SECRET,
-        drop_pending_updates=False,
-    )
-
-    market_task = asyncio.create_task(
-        market.run_poller(stop_event, on_tick=evaluate_signal)
-    )
+    initialized = False
+    started = False
+    webhook_set = False
     try:
+        await telegram_app.initialize()
+        initialized = True
+        await telegram_app.start()
+        started = True
+        await telegram_app.bot.set_webhook(
+            url=f'{BELMO_PUBLIC_URL}/telegram/webhook',
+            secret_token=TELEGRAM_WEBHOOK_SECRET,
+            drop_pending_updates=False,
+        )
+        webhook_set = True
+
+        market_task = asyncio.create_task(
+            market.run_poller(stop_event, on_tick=evaluate_signal)
+        )
         yield
     finally:
         stop_event.set()
@@ -147,10 +153,24 @@ async def lifespan(app: FastAPI):
                 log.warning('market poller did not stop cleanly; cancelling')
                 market_task.cancel()
                 await asyncio.gather(market_task, return_exceptions=True)
+
         if telegram_app is not None:
-            await telegram_app.bot.delete_webhook(drop_pending_updates=False)
-            await telegram_app.stop()
-            await telegram_app.shutdown()
+            if webhook_set:
+                try:
+                    await telegram_app.bot.delete_webhook(drop_pending_updates=False)
+                except Exception:
+                    log.exception('telegram webhook cleanup failed')
+            if started:
+                try:
+                    await telegram_app.stop()
+                except Exception:
+                    log.exception('telegram application stop failed')
+            if initialized:
+                try:
+                    await telegram_app.shutdown()
+                except Exception:
+                    log.exception('telegram application shutdown failed')
+
         market_task = None
         telegram_app = None
 

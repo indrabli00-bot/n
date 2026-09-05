@@ -348,47 +348,68 @@ def apply_membership_event(
     source_updated_at: datetime | None = None,
 ) -> bool:
     incoming_at = _normalise_dt(source_updated_at)
-    with SessionLocal() as s:
-        if s.get(WebhookEvent, event_id):
-            return False
 
-        membership = s.scalar(
-            select(WhopMembership).where(
-                WhopMembership.membership_id == membership_id
-            )
-        )
-        existing_at = _normalise_dt(membership.source_updated_at) if membership else None
-        if membership and incoming_at and existing_at and incoming_at < existing_at:
-            s.add(WebhookEvent(event_id=event_id, event_type=event_type))
-            s.commit()
-            return False
-
-        if membership is None:
-            membership = WhopMembership(
-                membership_id=membership_id,
-                whop_user_id=whop_user_id,
-                status=status,
-            )
-
-        membership.whop_user_id = whop_user_id
-        membership.status = status
-        membership.renewal_period_start = renewal_start
-        membership.renewal_period_end = renewal_end
-        membership.product_id = product_id
-        if incoming_at is not None:
-            membership.source_updated_at = incoming_at
-        membership.updated_at = datetime.now(timezone.utc)
-        s.add(membership)
-        s.add(WebhookEvent(event_id=event_id, event_type=event_type))
-
-        try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
+    # Different webhook deliveries for the same membership can arrive
+    # concurrently. Lock the membership row before comparing source_updated_at
+    # so an older event cannot commit after a newer event. If the row does not
+    # exist yet, a unique-key race is retried against the row created by the
+    # winning transaction.
+    for attempt in range(2):
+        with SessionLocal() as s:
             if s.get(WebhookEvent, event_id):
                 return False
-            raise
-        return True
+
+            membership = s.scalar(
+                select(WhopMembership)
+                .where(WhopMembership.membership_id == membership_id)
+                .with_for_update()
+            )
+            existing_at = (
+                _normalise_dt(membership.source_updated_at) if membership else None
+            )
+            if membership and incoming_at and existing_at and incoming_at < existing_at:
+                s.add(WebhookEvent(event_id=event_id, event_type=event_type))
+                try:
+                    s.commit()
+                except IntegrityError:
+                    s.rollback()
+                    if s.get(WebhookEvent, event_id):
+                        return False
+                    if attempt == 0:
+                        continue
+                    raise
+                return False
+
+            if membership is None:
+                membership = WhopMembership(
+                    membership_id=membership_id,
+                    whop_user_id=whop_user_id,
+                    status=status,
+                )
+
+            membership.whop_user_id = whop_user_id
+            membership.status = status
+            membership.renewal_period_start = renewal_start
+            membership.renewal_period_end = renewal_end
+            membership.product_id = product_id
+            if incoming_at is not None:
+                membership.source_updated_at = incoming_at
+            membership.updated_at = datetime.now(timezone.utc)
+            s.add(membership)
+            s.add(WebhookEvent(event_id=event_id, event_type=event_type))
+
+            try:
+                s.commit()
+            except IntegrityError:
+                s.rollback()
+                if s.get(WebhookEvent, event_id):
+                    return False
+                if attempt == 0:
+                    continue
+                raise
+            return True
+
+    raise RuntimeError('membership_event_retry_exhausted')
 
 
 def get_membership_for_telegram(telegram_id: int) -> WhopMembership | None:

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -14,8 +12,6 @@ import signal_engine
 
 log = logging.getLogger('publisher')
 STATE_TABLE = 'signal_publication_state'
-MARK_RETRIES = 3
-MARK_RETRY_DELAY_SECONDS = 0.5
 PUBLISH_LEASE_SECONDS = 120
 _publish_lock = asyncio.Lock()
 
@@ -49,43 +45,6 @@ def init_state() -> None:
                 'VALUES (1, NULL, NULL, NULL, NULL, NULL) '
                 'ON CONFLICT (id) DO NOTHING'
             )
-        )
-
-
-def fingerprint(candidate: dict) -> str:
-    payload = {'signal': candidate.get('signal')}
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
-    ).hexdigest()
-
-
-def last_published_fingerprint() -> str | None:
-    with database.engine.connect() as conn:
-        row = conn.execute(
-            text(f'SELECT last_direction FROM {STATE_TABLE} WHERE id = 1')
-        ).first()
-    if not row or not row[0]:
-        return None
-    return fingerprint({'signal': row[0]})
-
-
-def should_publish(candidate: dict) -> bool:
-    direction = candidate.get('signal')
-    if direction not in {'LONG', 'SHORT'}:
-        return False
-    return fingerprint(candidate) != last_published_fingerprint()
-
-
-def mark_published(candidate: dict) -> None:
-    direction = candidate['signal']
-    with database.engine.begin() as conn:
-        conn.execute(
-            text(
-                f'UPDATE {STATE_TABLE} SET last_direction = :direction, '
-                'updated_at = CURRENT_TIMESTAMP, claim_direction = NULL, '
-                'claim_token = NULL, claimed_at = NULL WHERE id = 1'
-            ),
-            {'direction': direction},
         )
 
 
@@ -135,28 +94,6 @@ def _complete_publication(direction: str, token: str) -> None:
         )
     if result.rowcount != 1:
         raise RuntimeError('publication_claim_lost')
-
-
-async def _mark_published_with_retry(candidate: dict) -> bool:
-    for attempt in range(1, MARK_RETRIES + 1):
-        try:
-            await asyncio.to_thread(mark_published, candidate)
-            return True
-        except Exception:
-            if attempt == MARK_RETRIES:
-                log.exception(
-                    'publication state persistence failed after %s attempts',
-                    MARK_RETRIES,
-                )
-                return False
-            log.warning(
-                'publication state persistence failed; retrying (%s/%s)',
-                attempt,
-                MARK_RETRIES,
-                exc_info=True,
-            )
-            await asyncio.sleep(MARK_RETRY_DELAY_SECONDS)
-    return False
 
 
 async def evaluate_and_publish(bot, chat_id: int, formatter) -> dict:
