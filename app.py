@@ -241,13 +241,12 @@ async def whop_oauth_callback(
         if telegram_app is not None:
             await telegram_app.bot.send_message(
                 telegram_id,
-                '✅ Akun Whop berhasil terhubung. Jika membership Anda ACTIVE '
-                'dan Anda sudah menjadi member channel premium, akses Neural Gold '
-                'akan tersedia otomatis.',
+                'Whop account linked. If your membership is ACTIVE and you are already '
+                'a Premium Channel member, Neural Gold access will become available automatically.',
             )
         return HTMLResponse(
             '<h2>Whop account linked.</h2>'
-            '<p>You can return to Telegram and check Status Akses.</p>'
+            '<p>You can return to Telegram and check Access Status.</p>'
         )
     except ValueError:
         return HTMLResponse(
