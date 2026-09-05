@@ -101,10 +101,10 @@ def _main_menu_text() -> str:
         'BOT    : MEMBER BONUS',
         '',
         'Select a terminal view below.',
-        'Market Feed : live market state',
-        'Neural Signal : actionable output',
-        'Market Analysis : market context',
-        'System Setting : status & information',
+        'LIVE MARKET FEED',
+        'NEURAL SIGNAL',
+        'MARKET ANALYSIS',
+        'SYSTEM SETTING',
     ])
 
 
@@ -366,7 +366,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         active = await access.has_access(context.bot, query.from_user.id)
         await _edit_message(query, _system_info_text(active))
         return
-    # Keep legacy callbacks harmless for previously-rendered messages.
     if query.data == 'help' or query.data == 'bonus':
         active = await access.has_access(context.bot, query.from_user.id)
         await _edit_message(query, _system_info_text(active))
