@@ -72,7 +72,7 @@ def _terminal_signal_lines(result: dict) -> list[str]:
         f'M A R K E T  : {result.get("trend", "NEUTRAL")}',
     ]
     if result.get('rsi') is not None:
-        lines.append(f'RSI       : {result["rsi"]}')
+        lines.append(f'TEMPORAL MOMENTUM RESONANCE : {result["rsi"]}')
     if result.get('entry') is not None:
         lines.append(f'ENTRY     : {result["entry"]}')
     for index, target in enumerate((result.get('tp') or [])[:3], start=1):
@@ -80,7 +80,7 @@ def _terminal_signal_lines(result: dict) -> list[str]:
     if result.get('stop') is not None:
         lines.append(f'STOP LOSS : {result["stop"]}')
     if result.get('risk_reward'):
-        lines.append(f'R:R RATIO : {result["risk_reward"]}')
+        lines.append(f'RISK REWARD VECTOR : {result["risk_reward"]}')
     
     lines.extend([
         '',
@@ -105,7 +105,7 @@ def _main_menu_text() -> str:
         '',
         'Select a module to initialize data stream.',
         '',
-        '📡 MARKET PULSE',
+        '📡 LIQUIDITY KINETIC FLOW-STATE',
         '⚡️ NEURAL STRIKES',
         '📐 MARKET BLUEPRINT',
         '⚙️ SYSTEM SYNC',
@@ -135,9 +135,9 @@ def _system_info_text(access_active: bool) -> str:
         'Whop ➔ Channel ➔ Neural Strikes ➔ Terminal',
         '',
         '[ MODULE COMMANDS ]',
-        '📡 FEED    : Real-time market pulse.',
+        '📡 FLOW    : Real-time Liquidity Kinetic Flow-State.',
         '⚡️ SIGNAL  : Algorithmic entry points.',
-        '📐 ANALYSIS: Institutional structure.',
+        '📐 BLUEPRINT: Structural Price Equilibrium Anchors.',
         '',
         'Risk Warning: Volatility is absolute.',
     ])
@@ -175,7 +175,7 @@ UNKNOWN_INPUT_TEXT = _terminal([
     '',
     'Please initialize one of the following:',
     '',
-    '📡 MARKET PULSE',
+    '📡 LIQUIDITY KINETIC FLOW-STATE',
     '⚡️ NEURAL STRIKES',
     '📐 MARKET BLUEPRINT',
     '⚙️ SYSTEM SYNC',
@@ -268,9 +268,9 @@ async def market_feed_text() -> str:
         f'CHANGE  : {latest.get("change_pct", "UNAVAILABLE")}',
         f'DATA    : {len(samples)} samples',
         f'UPDATED : {updated}',
-        'SOURCE  : GOLD API',
+        'SOURCE  : GOLD DATA NETWORK',
         '',
-        'Live market state only.',
+        'Real-time Liquidity Kinetic Flow-State only.',
         'Execute based on Neural Strikes.',
     ])
 
@@ -281,15 +281,15 @@ async def analysis_text() -> str:
         '[ MARKET BLUEPRINT ]',
         '',
         f'TREND  : {result.get("trend", "NEUTRAL")}',
-        f'RSI    : {result.get("rsi") if result.get("rsi") is not None else "UNAVAILABLE"}',
+        f'TEMPORAL MOMENTUM RESONANCE : {result.get("rsi") if result.get("rsi") is not None else "UNAVAILABLE"}',
         f'STR    : {result.get("setup_strength", 0)}/100',
         f'SIGNAL : {result.get("signal", "HOLD")}',
         f'STATE  : {result.get("reason", "UNKNOWN")}',
         f'DATA   : {result.get("samples", len(samples))} samples',
         f'TF     : {result.get("timeframe", "M5")}',
         '',
-        'Analysis derived from institutional',
-        'data mapping and neural validation.',
+        'Blueprint derived from institutional',
+        'data mapping and neural validation architecture.',
         '',
         'Education only. Trade with precision.',
     ])
