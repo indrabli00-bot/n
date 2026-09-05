@@ -31,7 +31,8 @@ def _assert_fixed_terminal(rendered: str) -> None:
     assert all(line.startswith('|') and line.endswith('|') for line in lines[1:-1])
 
 
-def test_terminal_layout_uses_exact_fixed_width():
+def test_terminal_layout_uses_mobile_optimized_width():
+    assert bot.TERMINAL_WIDTH == 52
     _assert_fixed_terminal(bot._main_menu_text())
 
 
@@ -48,6 +49,20 @@ def test_all_bot_panels_share_exact_same_terminal_width():
     ]
     for panel in panels:
         _assert_fixed_terminal(panel)
+
+
+def test_main_menu_uses_full_two_column_action_layout():
+    markup = bot.main_menu()
+    assert len(markup.inline_keyboard) == 2
+    assert all(len(row) == 2 for row in markup.inline_keyboard)
+    assert [button.text for button in markup.inline_keyboard[0]] == [
+        '📡 LATEST SIGNAL',
+        '📊 ACCESS STATUS',
+    ]
+    assert [button.text for button in markup.inline_keyboard[1]] == [
+        '🎁 BOT BONUS',
+        'ℹ️ HOW IT WORKS',
+    ]
 
 
 def test_main_menu_describes_bot_as_bonus_not_purchase_gate():
@@ -83,6 +98,30 @@ def test_error_panel_is_safe_and_actionable():
     assert 'try again.' in bot.ERROR_TEXT
 
 
+def test_all_user_facing_bot_panels_are_english():
+    panels = [
+        bot._main_menu_text(),
+        bot.HELP_TEXT,
+        bot.BONUS_TEXT,
+        bot.ACCESS_INACTIVE_TEXT,
+        bot.ACCESS_ACTIVE_TEXT,
+        bot.UNKNOWN_INPUT_TEXT,
+        bot.ERROR_TEXT,
+    ]
+    forbidden_legacy_terms = (
+        'AKSES',
+        'GAGAL',
+        'BELUM',
+        'SILAKAN',
+        'HUBUNGKAN',
+        'PEMBAYARAN',
+        'CARA KERJA',
+    )
+    for panel in panels:
+        upper = panel.upper()
+        assert not any(term in upper for term in forbidden_legacy_terms)
+
+
 def test_message_not_modified_error_is_treated_as_idempotent_noop():
     from telegram.error import BadRequest
 
@@ -91,10 +130,6 @@ def test_message_not_modified_error_is_treated_as_idempotent_noop():
         BadRequest('Bad Request: message is not modified')
     )
     assert not bot._is_message_not_modified(BadRequest('Bad Request: message not found'))
-
-
-def test_help_layout_uses_exact_fixed_width():
-    _assert_fixed_terminal(bot.HELP_TEXT)
 
 
 def test_signal_layout_uses_terminal_labels_and_exact_fixed_width():
