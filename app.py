@@ -158,6 +158,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title='Neural Gold', version='2.0.0', lifespan=lifespan)
 
 
+@app.get('/')
+async def root():
+    """Provide a lightweight 200 endpoint for platform and proxy probes."""
+    return {'ok': True, 'service': 'neural-gold'}
+
+
 async def _service_checks(require_market: bool) -> dict[str, bool]:
     checks = {'database': False, 'telegram': False}
     if require_market:
