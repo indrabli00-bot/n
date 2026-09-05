@@ -8,14 +8,15 @@ from datetime import datetime, timezone
 import aiohttp
 
 import database
-from config import GOLDAPI_API_KEY, MARKET_POLL_SECONDS
+from config import MARKET_POLL_SECONDS
 
 log = logging.getLogger('market')
-URL = 'https://www.goldapi.io/api/price/XAU/USD'
+URL = 'https://api.gold-api.com/price/XAU/USD'
 MIN_PRICE = 1000.0
 MAX_PRICE = 10000.0
 REQUEST_TIMEOUT_SECONDS = 15
 MAX_BACKOFF_SECONDS = max(300, MARKET_POLL_SECONDS * 5)
+CACHE_SECONDS = 30
 
 
 def _finite_float(value: object, error: str) -> float:
@@ -34,21 +35,41 @@ def validate_price(price: float) -> float:
     return price
 
 
+def _response_timestamp(value: object) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        return datetime.now(timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+    except ValueError:
+        return datetime.now(timezone.utc)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 async def fetch_spot(session: aiohttp.ClientSession) -> dict:
-    headers = {
-        'x-access-token': GOLDAPI_API_KEY,
-        'Content-Type': 'application/json',
-    }
-    async with session.get(URL, headers=headers) as response:
+    # Real-time prices are public and explicitly do not require an API key.
+    # The upstream service asks clients to cache responses for 30 seconds.
+    headers = {'Accept': 'application/json'}
+    async with session.get(
+        URL,
+        headers=headers,
+        params=None,
+    ) as response:
         response.raise_for_status()
         data = await response.json()
 
+    if not isinstance(data, dict):
+        raise ValueError('goldapi_response_invalid')
+
     price = validate_price(_finite_float(data.get('price'), 'goldapi_price_invalid'))
+    # The new API does not expose the legacy `chp` field. Preserve a safe
+    # default because the signal engine does not depend on this value.
     change_pct = _finite_float(data.get('chp') or 0, 'goldapi_change_pct_invalid')
     return {
         'price': price,
         'change_pct': change_pct,
-        'ts': datetime.now(timezone.utc),
+        'ts': _response_timestamp(data.get('updatedAt')),
     }
 
 
@@ -74,12 +95,12 @@ async def poll_once(session: aiohttp.ClientSession | None = None) -> dict:
 
 async def run_poller(stop_event, on_tick=None) -> None:
     timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
-    backoff = max(1, MARKET_POLL_SECONDS)
+    backoff = max(CACHE_SECONDS, MARKET_POLL_SECONDS)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         while not stop_event.is_set():
             try:
                 await poll_once(session)
-                backoff = max(1, MARKET_POLL_SECONDS)
+                backoff = max(CACHE_SECONDS, MARKET_POLL_SECONDS)
                 if on_tick is not None:
                     try:
                         await on_tick()
@@ -88,7 +109,7 @@ async def run_poller(stop_event, on_tick=None) -> None:
             except Exception:
                 log.exception('market poll failed')
                 backoff = min(
-                    max(MARKET_POLL_SECONDS, backoff * 2),
+                    max(CACHE_SECONDS, backoff * 2),
                     MAX_BACKOFF_SECONDS,
                 )
 
