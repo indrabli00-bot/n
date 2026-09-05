@@ -14,31 +14,65 @@ from config import TELEGRAM_BOT_TOKEN
 
 log = logging.getLogger('bot')
 
+# One physical terminal width for every bot response. The borders are included
+# in this width so Telegram renders every panel at the same visual width.
 TERMINAL_WIDTH = 34
+_TERMINAL_INNER_WIDTH = TERMINAL_WIDTH - 2
 DISCLAIMER = 'Market information & education only. Not personal financial advice. Trading involves risk.'
 
 
-def _terminal(lines: list[str]) -> str:
-    """Render every bot panel in one predictable monospace terminal width."""
-    body = []
-    for line in lines:
-        text = str(line).replace('<', '&lt;').replace('>', '&gt;')
-        if len(text) <= TERMINAL_WIDTH:
-            body.append(text)
+def _wrap_terminal_line(line: str) -> list[str]:
+    """Wrap one logical line without ever exceeding the terminal inner width."""
+    text = str(line).replace('<', '&lt;').replace('>', '&gt;')
+    if not text:
+        return ['']
+    if len(text) <= _TERMINAL_INNER_WIDTH:
+        return [text]
+
+    words = text.split()
+    if len(words) == 1:
+        return [
+            text[index:index + _TERMINAL_INNER_WIDTH]
+            for index in range(0, len(text), _TERMINAL_INNER_WIDTH)
+        ]
+
+    wrapped: list[str] = []
+    current = ''
+    for word in words:
+        if len(word) > _TERMINAL_INNER_WIDTH:
+            if current:
+                wrapped.append(current)
+                current = ''
+            wrapped.extend(
+                word[index:index + _TERMINAL_INNER_WIDTH]
+                for index in range(0, len(word), _TERMINAL_INNER_WIDTH)
+            )
             continue
-        words = text.split()
-        current = ''
-        for word in words:
-            candidate = word if not current else f'{current} {word}'
-            if len(candidate) <= TERMINAL_WIDTH:
-                current = candidate
-            else:
-                if current:
-                    body.append(current)
-                current = word
-        if current:
-            body.append(current)
-    return '<pre>' + '\n'.join(body) + '</pre>'
+
+        candidate = word if not current else f'{current} {word}'
+        if len(candidate) <= _TERMINAL_INNER_WIDTH:
+            current = candidate
+        else:
+            wrapped.append(current)
+            current = word
+
+    if current:
+        wrapped.append(current)
+    return wrapped
+
+
+def _terminal(lines: list[str]) -> str:
+    """Render every bot panel inside the exact same fixed-width terminal frame."""
+    body: list[str] = []
+    for line in lines:
+        for wrapped in _wrap_terminal_line(line):
+            body.append(wrapped.ljust(_TERMINAL_INNER_WIDTH))
+
+    border = '+' + ('-' * _TERMINAL_INNER_WIDTH) + '+'
+    framed = [border]
+    framed.extend(f'|{line}|' for line in body)
+    framed.append(border)
+    return '<pre>' + '\n'.join(framed) + '</pre>'
 
 
 def _terminal_signal_lines(result: dict) -> list[str]:
