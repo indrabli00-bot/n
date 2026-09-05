@@ -333,8 +333,6 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _edit_message(query, await analysis_text())
         return
     if query.data == 'system':
-        active
-    if query.data == 'system':
         active = await access.has_access(context.bot, query.from_user.id)
         await _edit_message(query, _system_info_text(active))
         return
