@@ -45,51 +45,105 @@ def test_all_bot_panels_share_exact_same_terminal_width():
         bot.ACCESS_ACTIVE_TEXT,
         bot.UNKNOWN_INPUT_TEXT,
         bot.ERROR_TEXT,
+        bot._system_info_text(False),
+        bot._system_info_text(True),
         bot._format_signal({'signal': 'HOLD', 'reason': 'test'}),
     ]
     for panel in panels:
         _assert_fixed_terminal(panel)
 
 
-def test_main_menu_uses_full_two_column_action_layout():
+def test_main_menu_is_exactly_four_actions_in_two_columns():
     markup = bot.main_menu()
     assert len(markup.inline_keyboard) == 2
     assert all(len(row) == 2 for row in markup.inline_keyboard)
     assert [button.text for button in markup.inline_keyboard[0]] == [
-        '📡 LATEST SIGNAL',
-        '📊 ACCESS STATUS',
+        '📡 LIVE MARKET FEED',
+        '⚡ NEURAL SIGNAL',
     ]
     assert [button.text for button in markup.inline_keyboard[1]] == [
-        '🎁 BOT BONUS',
-        'ℹ️ HOW IT WORKS',
+        '📊 MARKET ANALYSIS',
+        '⚙️ SYSTEM SETTING',
+    ]
+    assert [button.callback_data for row in markup.inline_keyboard for button in row] == [
+        'market',
+        'signal',
+        'analysis',
+        'system',
     ]
 
 
-def test_main_menu_describes_bot_as_bonus_not_purchase_gate():
+def test_main_menu_has_no_legacy_primary_actions():
+    markup = bot.main_menu()
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+    assert not any('LATEST SIGNAL' in label for label in labels)
+    assert not any('ACCESS STATUS' in label for label in labels)
+    assert not any('BOT BONUS' in label for label in labels)
+    assert not any('HOW IT WORKS' in label for label in labels)
+
+
+def test_main_menu_describes_the_four_terminal_views():
     text = bot._main_menu_text()
+    assert 'LIVE MARKET FEED' in text
+    assert 'NEURAL SIGNAL' in text
+    assert 'MARKET ANALYSIS' in text
+    assert 'SYSTEM SETTING' in text
     assert 'MEMBER BONUS' in text
     assert 'Premium Channel' in text
-    assert 'bonus' in text
     assert 'HUBUNGKAN WHOP' not in text
 
 
-def test_help_describes_channel_as_primary_product():
-    assert 'PAYMENT : Neural Gold on Whop' in bot.HELP_TEXT
-    assert 'ACCESS  : Premium Channel' in bot.HELP_TEXT
-    assert 'BONUS   : Telegram bot' in bot.HELP_TEXT
-    assert 'Connect your Whop account' not in bot.HELP_TEXT
+def test_system_setting_is_single_information_panel():
+    inactive = bot._system_info_text(False)
+    active = bot._system_info_text(True)
+    for panel, access_status, channel_status in (
+        (inactive, 'ACCESS STATUS  : INACTIVE', 'PREMIUM CHANNEL: MEMBER ACCESS REQUIRED'),
+        (active, 'ACCESS STATUS  : ACTIVE', 'PREMIUM CHANNEL: VERIFIED'),
+    ):
+        assert access_status in panel
+        assert channel_status in panel
+        assert '[ HOW IT WORKS ]' in panel
+        assert '01 PAYMENT : Neural Gold on Whop' in panel
+        assert '02 ACCESS  : Premium Channel' in panel
+        assert '03 CONTENT : Neural Strikes' in panel
+        assert '04 BONUS   : Telegram bot' in panel
+        _assert_fixed_terminal(panel)
+
+
+def test_system_setting_contains_no_submenu_actions():
+    panel = bot._system_info_text(True)
+    assert 'ACCESS STATUS' in panel
+    assert 'HOW IT WORKS' in panel
+    assert 'BOT BONUS' in panel
+    assert 'PREMIUM CHANNEL' in panel
+    assert 'Select a terminal view below.' not in panel
+
+
+def test_help_and_bonus_commands_are_compatible_without_restoring_primary_menu_items():
+    assert bot.HELP_TEXT == bot._system_info_text(False)
+    assert bot.BONUS_TEXT == bot._system_info_text(False)
+    markup = bot.main_menu()
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+    assert labels == [
+        '📡 LIVE MARKET FEED',
+        '⚡ NEURAL SIGNAL',
+        '📊 MARKET ANALYSIS',
+        '⚙️ SYSTEM SETTING',
+    ]
 
 
 def test_bonus_panel_does_not_offer_oauth():
-    assert 'BOT     : BONUS' in bot.BONUS_TEXT
     assert 'OAuth' not in bot.BONUS_TEXT
     assert 'HUBUNGKAN WHOP' not in bot.BONUS_TEXT
 
 
 def test_unknown_input_panel_is_english_and_actionable():
     assert "I didn't recognize that input." in bot.UNKNOWN_INPUT_TEXT
-    assert 'Use the menu below to continue.' in bot.UNKNOWN_INPUT_TEXT
-    assert 'Available:' in bot.UNKNOWN_INPUT_TEXT
+    assert 'Use the four terminal views below.' in bot.UNKNOWN_INPUT_TEXT
+    assert 'LIVE MARKET FEED' in bot.UNKNOWN_INPUT_TEXT
+    assert 'NEURAL SIGNAL' in bot.UNKNOWN_INPUT_TEXT
+    assert 'MARKET ANALYSIS' in bot.UNKNOWN_INPUT_TEXT
+    assert 'SYSTEM SETTING' in bot.UNKNOWN_INPUT_TEXT
 
 
 def test_error_panel_is_safe_and_actionable():
