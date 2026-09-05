@@ -30,7 +30,10 @@ def init_state() -> None:
                 'claim_token VARCHAR(64), claimed_at TIMESTAMP)'
             )
         )
-        columns = {column['name'] for column in inspect(database.engine).get_columns(STATE_TABLE)}
+        # Inspect through the same connection/transaction. Inspecting the engine
+        # here would open a second connection and, on PostgreSQL, cannot see the
+        # CREATE TABLE until this transaction commits.
+        columns = {column['name'] for column in inspect(conn).get_columns(STATE_TABLE)}
         migrations = {
             'claim_direction': 'VARCHAR(20)',
             'claim_token': 'VARCHAR(64)',
