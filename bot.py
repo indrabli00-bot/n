@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 import access
@@ -181,6 +182,26 @@ def main_menu() -> InlineKeyboardMarkup:
     )
 
 
+def _is_message_not_modified(exc: BadRequest) -> bool:
+    """Return True when Telegram reports an idempotent edit as a no-op."""
+    return 'message is not modified' in str(exc).lower()
+
+
+async def _edit_message(target, text: str) -> None:
+    """Edit a callback message without turning Telegram no-ops into errors."""
+    try:
+        await target.edit_message_text(
+            text,
+            parse_mode='HTML',
+            reply_markup=main_menu(),
+        )
+    except BadRequest as exc:
+        if _is_message_not_modified(exc):
+            log.debug('telegram message edit was already up to date')
+            return
+        raise
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await asyncio.to_thread(database.ensure_user, update.effective_user.id)
     await update.message.reply_text(
@@ -219,11 +240,7 @@ async def signal_text() -> str:
 async def _send_signal(target, uid: int, bot) -> None:
     if not await access.has_access(bot, uid):
         if hasattr(target, 'edit_message_text'):
-            await target.edit_message_text(
-                ACCESS_INACTIVE_TEXT,
-                parse_mode='HTML',
-                reply_markup=main_menu(),
-            )
+            await _edit_message(target, ACCESS_INACTIVE_TEXT)
         else:
             await target.reply_text(
                 ACCESS_INACTIVE_TEXT,
@@ -234,7 +251,7 @@ async def _send_signal(target, uid: int, bot) -> None:
 
     text = await signal_text()
     if hasattr(target, 'edit_message_text'):
-        await target.edit_message_text(text, parse_mode='HTML', reply_markup=main_menu())
+        await _edit_message(target, text)
     else:
         await target.reply_text(text, parse_mode='HTML', reply_markup=main_menu())
 
@@ -254,23 +271,27 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == 'home':
-        await query.edit_message_text(
-            _main_menu_text(), parse_mode='HTML', reply_markup=main_menu()
-        )
+        await _edit_message(query, _main_menu_text())
         return
     if query.data == 'help':
-        await query.edit_message_text(
-            HELP_TEXT, parse_mode='HTML', reply_markup=main_menu()
-        )
+        await _edit_message(query, HELP_TEXT)
         return
     if query.data == 'bonus':
-        await query.edit_message_text(
-            BONUS_TEXT, parse_mode='HTML', reply_markup=main_menu()
-        )
+        await _edit_message(query, BONUS_TEXT)
         return
     if query.data == 'status':
         text, markup = await _status_text(query.from_user.id, context.bot)
-        await query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode='HTML',
+                reply_markup=markup,
+            )
+        except BadRequest as exc:
+            if _is_message_not_modified(exc):
+                log.debug('telegram status edit was already up to date')
+                return
+            raise
         return
     if query.data == 'signal':
         await _send_signal(query, query.from_user.id, context.bot)
