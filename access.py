@@ -32,10 +32,16 @@ def _prune_cache(now: float) -> None:
         _cache.popitem(last=False)
 
 
-async def channel_member(bot: Bot, telegram_id: int) -> bool:
+async def channel_member(
+    bot: Bot,
+    telegram_id: int,
+    *,
+    force_refresh: bool = False,
+) -> bool:
+    """Check Premium Channel membership, optionally bypassing the cache."""
     now = time.monotonic()
     cached = _cache.get(telegram_id)
-    if cached and cached[0] > now:
+    if not force_refresh and cached and cached[0] > now:
         _cache.move_to_end(telegram_id)
         return cached[1]
     if cached:
@@ -52,6 +58,11 @@ async def channel_member(bot: Bot, telegram_id: int) -> bool:
     _cache.move_to_end(telegram_id)
     _prune_cache(time.monotonic())
     return ok
+
+
+async def activate_member(bot: Bot, telegram_id: int) -> bool:
+    """Perform a fresh Premium Channel check for member activation."""
+    return await channel_member(bot, telegram_id, force_refresh=True)
 
 
 async def has_access(bot: Bot, telegram_id: int) -> bool:
