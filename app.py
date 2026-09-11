@@ -50,6 +50,11 @@ def _dt(value: str | None) -> datetime | None:
 
 
 async def process_whop(data: dict) -> None:
+    # Dashboard connectivity probes are intentionally never processed as
+    # membership state changes because they are unsigned.
+    if data.get('_unsigned_test') is True:
+        return
+
     event_type = str(data.get('type') or '').strip().lower()
     if event_type not in SUPPORTED_MEMBERSHIP_EVENTS:
         return
