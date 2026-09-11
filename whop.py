@@ -27,9 +27,15 @@ OAUTH_STATE_TTL_SECONDS = 600
 
 
 def _decode_webhook_secret() -> bytes:
-    if not WHOP_WEBHOOK_SECRET.startswith('whsec_'):
+    # Whop webhook secrets are currently shown with either the newer ws_
+    # prefix or the API whsec_ prefix. Both carry the same base64-encoded
+    # signing key after the prefix.
+    if WHOP_WEBHOOK_SECRET.startswith('whsec_'):
+        encoded = WHOP_WEBHOOK_SECRET[6:]
+    elif WHOP_WEBHOOK_SECRET.startswith('ws_'):
+        encoded = WHOP_WEBHOOK_SECRET[3:]
+    else:
         raise ValueError('invalid_webhook_secret')
-    encoded = WHOP_WEBHOOK_SECRET[6:]
     try:
         return base64.b64decode(
             encoded + '=' * ((4 - len(encoded) % 4) % 4),
