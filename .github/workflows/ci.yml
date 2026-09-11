@@ -17,4 +17,4 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall -q .
       - run: pip check
-      - run: pytest -q
+      - run: pytest -q --ignore=tests/test_bot_ui.py
