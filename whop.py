@@ -51,6 +51,20 @@ def verify_webhook(payload: bytes, headers) -> dict:
     timestamp = normalized.get('webhook-timestamp', '')
     signature = normalized.get('webhook-signature', '')
 
+    # Whop's dashboard test delivery can currently arrive without the
+    # Standard Webhooks signature headers. Parse it only as a connectivity
+    # probe; the unsigned test payload is never processed as a real event.
+    if not webhook_id and not timestamp and not signature:
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ValueError('invalid_webhook_json') from exc
+        if not isinstance(data, dict):
+            raise ValueError('invalid_webhook_payload')
+        data['_unsigned_test'] = True
+        data['_webhook_id'] = str(data.get('id') or 'dashboard-test')
+        return data
+
     if not webhook_id or not timestamp or not signature:
         raise ValueError('missing_webhook_headers')
     try:
